@@ -1,0 +1,27 @@
+# Meridian Autonomy Policy
+# Allows the orchestrator to manage its own metadata without manual confirmation.
+
+[[auto_approve]]
+tool = "write_file"
+arguments = { file_path = ".*\\.meridian/.*" }
+
+[[auto_approve]]
+tool = "replace"
+arguments = { file_path = ".*\\.meridian/.*" }
+
+[[auto_approve]]
+tool = "run_shell_command"
+arguments = { command = ".*mkdir -p .meridian/.*" }
+
+[[auto_approve]]
+tool = "run_shell_command"
+arguments = { command = ".*mv .* .meridian/.*" }
+
+[[auto_approve]]
+tool = "run_shell_command"
+arguments = { command = ".*rm -rf .meridian/tracks/.*" }
+
+[[auto_approve]]
+tool = "run_shell_command"
+arguments = { command = ".*ls( -[a-zA-Z]+)? .meridian/.*" }
+
