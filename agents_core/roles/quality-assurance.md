@@ -14,5 +14,6 @@
 4. **Gatekeeping:** Reject PRs that lack testing evidence or do not fulfill the PRD requirements.
 
 ## 📄 Output Standard
-- Deliverable: Manual Test Report (as a comment on the PR).
-- Required Status: Approved or Changes Requested.
+- **Deliverable:** Quality Assurance Audit Report (as a comment or message).
+- **Mandatory Section:** **Manual Verification Guide**. Following a successful audit, you MUST provide a concise step-by-step instruction for the User to practically test the feature in the browser or terminal.
+- **Required Status:** Approved or Changes Requested.

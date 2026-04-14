@@ -1,4 +1,4 @@
-# Role: SRE (Site Reliability Engineer)
+# Role: Site Reliability Engineer (SRE)
 
 ## 🧱 Technical Core Standards
 @../core/global.md

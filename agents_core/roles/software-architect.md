@@ -1,4 +1,4 @@
-# Role: Software Architect
+# Role: Software Architect (Architect)
 
 ## 🧱 Technical Core Standards
 @../core/backend.md

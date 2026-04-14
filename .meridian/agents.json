@@ -1,1 +1,142 @@
-[]
+[
+  {
+    "id": "architect",
+    "name": "software-architect",
+    "role": "Expert in designing scalable and secure software architectures.",
+    "instruction": "Bootstrap loaded from filesystem.",
+    "color": "#00c3ff"
+  },
+  {
+    "id": "devsecops",
+    "name": "devsecops",
+    "role": "Expert in security, CI/CD, and infrastructure automation.",
+    "instruction": "Bootstrap loaded from filesystem.",
+    "color": "#00c3ff"
+  },
+  {
+    "id": "elixir-expert",
+    "name": "elixir-expert",
+    "role": "Advanced specialist in Elixir and Phoenix development.",
+    "instruction": "Bootstrap loaded from filesystem.",
+    "color": "#00c3ff"
+  },
+  {
+    "id": "em",
+    "name": "engineering-manager",
+    "role": "Engineering Manager focused on orchestrating project teams.",
+    "instruction": "Bootstrap loaded from filesystem.",
+    "color": "#00c3ff"
+  },
+  {
+    "id": "engineer",
+    "name": "software-engineer",
+    "role": "Senior engineer for implementation and technical execution.",
+    "instruction": "Bootstrap loaded from filesystem.",
+    "color": "#00c3ff"
+  },
+  {
+    "id": "engineering-manager",
+    "name": "engineering-manager",
+    "role": "Engineering Manager focused on orchestrating project teams.",
+    "instruction": "Bootstrap loaded from filesystem.",
+    "color": "#00c3ff"
+  },
+  {
+    "id": "go-expert",
+    "name": "go-expert",
+    "role": "Advanced specialist in Go (Golang) development.",
+    "instruction": "Bootstrap loaded from filesystem.",
+    "color": "#00c3ff"
+  },
+  {
+    "id": "node-expert",
+    "name": "node-expert",
+    "role": "Advanced specialist in Node.js and TypeScript backend.",
+    "instruction": "Bootstrap loaded from filesystem.",
+    "color": "#00c3ff"
+  },
+  {
+    "id": "nosql-expert",
+    "name": "nosql-expert",
+    "role": "Expert in NoSQL database design and implementation.",
+    "instruction": "Bootstrap loaded from filesystem.",
+    "color": "#00c3ff"
+  },
+  {
+    "id": "pm",
+    "name": "product-manager",
+    "role": "Product Manager focused on requirements and business value.",
+    "instruction": "Bootstrap loaded from filesystem.",
+    "color": "#00c3ff"
+  },
+  {
+    "id": "product-manager",
+    "name": "product-manager",
+    "role": "Product Manager focused on requirements and business value.",
+    "instruction": "Bootstrap loaded from filesystem.",
+    "color": "#00c3ff"
+  },
+  {
+    "id": "python-expert",
+    "name": "python-expert",
+    "role": "Advanced specialist in Python development and patterns.",
+    "instruction": "Bootstrap loaded from filesystem.",
+    "color": "#00c3ff"
+  },
+  {
+    "id": "qa",
+    "name": "qa",
+    "role": "Quality Assurance expert for testing and verification.",
+    "instruction": "Bootstrap loaded from filesystem.",
+    "color": "#00c3ff"
+  },
+  {
+    "id": "react-expert",
+    "name": "react-expert",
+    "role": "Advanced specialist in React and modern frontend development.",
+    "instruction": "Bootstrap loaded from filesystem.",
+    "color": "#00c3ff"
+  },
+  {
+    "id": "ronaldo",
+    "name": "ronaldo gaucho",
+    "role": "jogador",
+    "instruction": "New agent.",
+    "color": "#6600ff"
+  },
+  {
+    "id": "software-architect",
+    "name": "software-architect",
+    "role": "Expert in designing scalable and secure software architectures.",
+    "instruction": "Bootstrap loaded from filesystem.",
+    "color": "#00c3ff"
+  },
+  {
+    "id": "software-engineer",
+    "name": "software-engineer",
+    "role": "Senior engineer for implementation and technical execution.",
+    "instruction": "Bootstrap loaded from filesystem.",
+    "color": "#00c3ff"
+  },
+  {
+    "id": "sql-expert",
+    "name": "sql-expert",
+    "role": "Expert in SQL database design and query optimization.",
+    "instruction": "Bootstrap loaded from filesystem.",
+    "color": "#00c3ff"
+  },
+  {
+    "id": "sre",
+    "name": "sre",
+    "role": "Site Reliability Engineer focused on availability and performance.",
+    "instruction": "Bootstrap loaded from filesystem.",
+    "color": "#00c3ff"
+  },
+  {
+    "id": "staff-engineer",
+    "name": "staff-engineer",
+    "role": "Technical leader focused on complex cross-cutting problems.",
+    "instruction": "Bootstrap loaded from filesystem.",
+    "color": "#00c3ff"
+  }
+]

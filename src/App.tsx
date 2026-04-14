@@ -1,7 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
 import './App.css';
+import './components/TrackNavigator.css';
+import './components/AgentsTable.css';
 import { MarkdownViewer } from './components/MarkdownViewer/MarkdownViewer';
+import { TelemetryDashboard } from './components/TelemetryDashboard/TelemetryDashboard';
+import { TelemetrySummary, SDSCompliance, SyncConflict } from './services/IPCSchemas';
 
 const socket = io();
 
@@ -17,6 +21,11 @@ interface Track {
   id: string;
   name: string;
   files: string[];
+  metadata: any;
+  activeSession?: {
+    status: string;
+    activeAgentId?: string;
+  };
 }
 
 function App() {
@@ -26,25 +35,23 @@ function App() {
   const [input, setInput] = useState('');
   const [isReady, setIsReady] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
-  const [sessionStarted, setSessionStarted] = useState(false);
   const [settings, setSettings] = useState({ rootDir: '' });
   const [agents, setAgents] = useState<Agent[]>([]);
   const [flashes, setFlashes] = useState<{ id: number; text: string }[]>([]);
+  const [telemetry, setTelemetry] = useState<TelemetrySummary | null>(null);
+  const [compliance, setCompliance] = useState<SDSCompliance[]>([]);
+  const [conflicts, setConflicts] = useState<SyncConflict[]>([]);
   
   // Track Navigator States
   const [tracks, setTracks] = useState<Track[]>([]);
   const [selectedTrack, setSelectedTrack] = useState<Track | null>(null);
   const [selectedFile, setSelectedFile] = useState<{ name: string; content: string } | null>(null);
 
-  // AI Generation States
-  const [aiInput, setAiInput] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
-  
-  // New Agent "Draft" State
+  // Agent Management States
   const [isAdding, setIsAdding] = useState(false);
-  const [newAgent, setNewAgent] = useState<Agent>({
-    id: '', name: '', role: '', instruction: '', color: '#ffffff'
-  });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [newAgent, setNewAgent] = useState<Partial<Agent>>({ name: '', role: '', color: '#00c3ff', instruction: '' });
+  const [editAgent, setEditAgent] = useState<Partial<Agent>>({});
 
   const chatRef = useRef<HTMLDivElement>(null);
   const currentAiMsgRef = useRef<string>('');
@@ -58,20 +65,24 @@ function App() {
     socket.on('agents', (a) => setAgents(a));
     socket.on('tracks', (t) => setTracks(t));
     
+    socket.on('telemetry-update', (data) => setTelemetry(data));
+    socket.on('compliance-update', (data) => setCompliance(data));
+    socket.on('sync-conflict', (data) => {
+      setConflicts(prev => [data, ...prev].slice(0, 5));
+    });
+
     socket.on('file-content', (data) => {
       setSelectedFile({ name: data.fileName, content: data.content });
     });
 
     socket.on('status', (msg) => {
       setStatus(msg);
-      setMessages(prev => [...prev, { text: `[SYSTEM]: ${msg}`, type: 'system' }]);
       setIsTyping(true);
     });
 
     socket.on('ready', () => {
       setIsReady(true);
       setIsTyping(false);
-      setMessages(prev => [...prev, { text: `[SYSTEM]: Meridian Engine active and synchronized.`, type: 'system' }]);
     });
 
     socket.on('chunk', (text) => {
@@ -94,39 +105,16 @@ function App() {
 
     socket.on('directory-picked', (path) => setSettings(prev => ({ ...prev, rootDir: path })));
     
-    socket.on('settings-saved', () => {
-      showFlash('Settings saved successfully.');
-      setSessionStarted(false);
-      setMessages([]);
-    });
-
-    socket.on('agents-saved', () => {
-      showFlash('Agents configuration updated.');
-      setSessionStarted(false);
-      setMessages([]);
-    });
-
-    socket.on('agent-generated', (data) => {
-      setIsGenerating(false);
-      setAiInput('');
-      setNewAgent(prev => ({
-        ...prev,
-        role: data.role || prev.role,
-        instruction: data.instruction || prev.instruction,
-        color: data.color || prev.color
-      }));
-      showFlash('AI suggested content for the fields!');
-    });
-
-    socket.on('agent-generation-error', (err) => {
-      setIsGenerating(false);
-      showFlash('Error: ' + err);
-    });
+    socket.on('settings-saved', () => showFlash('Settings saved.'));
+    socket.on('agents-saved', () => showFlash('Squad updated.'));
 
     return () => {
       socket.off('settings');
       socket.off('agents');
       socket.off('tracks');
+      socket.off('telemetry-update');
+      socket.off('compliance-update');
+      socket.off('sync-conflict');
       socket.off('file-content');
       socket.off('status');
       socket.off('ready');
@@ -135,8 +123,6 @@ function App() {
       socket.off('directory-picked');
       socket.off('settings-saved');
       socket.off('agents-saved');
-      socket.off('agent-generated');
-      socket.off('agent-generation-error');
     };
   }, []);
 
@@ -152,12 +138,12 @@ function App() {
 
   const handleViewChange = (newView: typeof view) => {
     setView(newView);
-    if (newView === 'warroom' && !sessionStarted) {
-      setSessionStarted(true);
+    if (newView === 'warroom') {
+      setMessages([]); // Reset messages when entering War Room for now
       socket.emit('start-session');
     }
-    if (newView === 'tracks') {
-      socket.emit('get-tracks');
+    if (newView === 'tracks' || newView === 'agents') {
+      socket.emit(`get-${newView}`);
     }
   };
 
@@ -170,6 +156,14 @@ function App() {
     socket.emit('get-file-content', { trackId, fileName });
   };
 
+  const handleNavigate = (path: string) => {
+    if (!selectedTrack) return;
+    // Resolve relative links (e.g., ./plan.md or ../track-x/plan.md)
+    // Simple implementation for now: just strip leading ./ or ../ and use current track
+    const fileName = path.replace(/^(\.\/|\.\.\/)+/, '');
+    handleSelectFile(selectedTrack.id, fileName);
+  };
+
   const handleSend = () => {
     if (!input.trim()) return;
     setMessages(prev => [...prev, { text: input, type: 'user' }]);
@@ -179,29 +173,38 @@ function App() {
     setIsTyping(true);
   };
 
-  const handleUpdateAgent = (id: string, field: keyof Agent, value: string) => {
-    setAgents(prev => prev.map(a => a.id === id ? { ...a, [field]: value } : a));
+  const handleDeleteAgent = (id: string) => {
+    if (!window.confirm('Delete this agent profile?')) return;
+    const updated = agents.filter(a => a.id !== id);
+    socket.emit('save-agents', updated);
   };
 
-  const handleStartAdding = () => {
-    setNewAgent({ id: Date.now().toString(), name: '', role: '', instruction: '', color: '#ffffff' });
-    setIsAdding(true);
-  };
-
-  const handleConfirmAdd = () => {
-    if (!newAgent.name.trim()) return showFlash('Please enter a name.');
-    setAgents(prev => [...prev, newAgent]);
+  const handleAddAgent = () => {
+    if (!newAgent.name || !newAgent.role) return showFlash('Name and Role are required.');
+    const id = newAgent.name.toLowerCase().replace(/\s+/g, '-');
+    const agent: Agent = {
+      id,
+      name: newAgent.name,
+      role: newAgent.role,
+      color: newAgent.color || '#00c3ff',
+      instruction: newAgent.instruction || 'New agent.'
+    };
+    const updated = [...agents, agent];
+    socket.emit('save-agents', updated);
     setIsAdding(false);
+    setNewAgent({ name: '', role: '', color: '#00c3ff', instruction: '' });
   };
 
-  const handleRemoveAgent = (id: string) => {
-    setAgents(prev => prev.filter(a => a.id !== id));
+  const startEditing = (agent: Agent) => {
+    setEditingId(agent.id);
+    setEditAgent({ ...agent });
   };
 
-  const handleGenerateAI = () => {
-    if (!aiInput.trim()) return;
-    setIsGenerating(true);
-    socket.emit('generate-agent', aiInput);
+  const handleSaveEdit = () => {
+    if (!editAgent.name || !editAgent.role) return showFlash('Name and Role are required.');
+    const updated = agents.map(a => a.id === editingId ? (editAgent as Agent) : a);
+    socket.emit('save-agents', updated);
+    setEditingId(null);
   };
 
   const formatText = (text: string) => {
@@ -237,13 +240,12 @@ function App() {
       <main>
         {view === 'dashboard' && (
           <div className="view">
-            <header><h1>Dashboard</h1></header>
-            <div className="dashboard-content">
-                <p>Welcome to Meridian. Select a track to begin.</p>
-                <div className="stats-placeholder">
-                    {agents.length} Agents Active | {tracks.length} Tracks Found
-                </div>
-            </div>
+            <header><h1>Governance Dashboard</h1></header>
+            <TelemetryDashboard 
+              telemetry={telemetry} 
+              compliance={compliance} 
+              conflicts={conflicts} 
+            />
           </div>
         )}
 
@@ -256,7 +258,12 @@ function App() {
                 <ul>
                   {tracks.map(t => (
                     <li key={t.id} className={selectedTrack?.id === t.id ? 'active' : ''} onClick={() => handleSelectTrack(t)}>
-                      📁 {t.name}
+                      <span>📁 {t.name}</span>
+                      <span className={`status-badge ${t.activeSession?.status}`}>
+                        {t.activeSession?.status === 'Working' ? '⏳ ' : ''}
+                        {t.activeSession?.status === 'Idle' ? '💤 ' : ''}
+                        {t.activeSession?.status}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -279,7 +286,10 @@ function App() {
                 {selectedFile ? (
                   <div className="viewer-wrapper">
                     <h2>{selectedFile.name}</h2>
-                    <MarkdownViewer content={selectedFile.content} />
+                    <MarkdownViewer 
+                      content={selectedFile.content} 
+                      onNavigate={handleNavigate}
+                    />
                   </div>
                 ) : (
                   <div className="viewer-placeholder">Select a file to preview documentation.</div>
@@ -314,69 +324,65 @@ function App() {
 
         {view === 'agents' && (
           <div className="view">
-            <header><h1>Agents Configuration</h1></header>
+            <header><h1>Active Squad</h1></header>
             <div className="agents-content">
+              <div className="table-actions">
+                <button className="add-btn" onClick={() => setIsAdding(true)}>+ New Agent Profile</button>
+              </div>
+
               {isAdding && (
-                <div className="agent-card new-agent-card">
-                  <h3>New Agent Profile</h3>
-                  <div className="agent-header">
-                    <div className="form-group-inline">
-                      <label>Name</label>
-                      <input value={newAgent.name} onChange={(e) => setNewAgent(prev => ({ ...prev, name: e.target.value }))} placeholder="Agent Name" />
-                    </div>
-                    <div className="form-group-inline color-group">
-                      <label>Color</label>
-                      <input type="color" value={newAgent.color} onChange={(e) => setNewAgent(prev => ({ ...prev, color: e.target.value }))} />
-                    </div>
-                  </div>
-                  <div className="form-group">
-                    <label>Role</label>
-                    <input value={newAgent.role} onChange={(e) => setNewAgent(prev => ({ ...prev, role: e.target.value }))} placeholder="e.g. Frontend Engineer" />
-                  </div>
-                  <div className="form-group">
-                    <label>System Instruction</label>
-                    <textarea value={newAgent.instruction} onChange={(e) => setNewAgent(prev => ({ ...prev, instruction: e.target.value }))} placeholder="What should this agent focus on?" />
-                  </div>
-                  <div className="ai-generation-box">
-                    <label>Magic Fill with AI ✨</label>
-                    <div className="input-group">
-                      <input type="text" placeholder="Describe the agent profile..." value={aiInput} onChange={(e) => setAiInput(e.target.value)} disabled={isGenerating} />
-                      <button onClick={handleGenerateAI} disabled={isGenerating || !aiInput.trim()}>{isGenerating ? 'Analyzing...' : 'Auto Fill'}</button>
-                    </div>
-                  </div>
-                  <div className="agent-actions">
-                    <button className="save-btn" onClick={handleConfirmAdd}>Add Agent</button>
-                    <button className="cancel-btn" onClick={() => setIsAdding(false)}>Cancel</button>
-                  </div>
+                <div className="quick-add-form">
+                  <input type="text" placeholder="Name" value={newAgent.name} onChange={e => setNewAgent({...newAgent, name: e.target.value})} />
+                  <input type="text" placeholder="Role" value={newAgent.role} onChange={e => setNewAgent({...newAgent, role: e.target.value})} />
+                  <input type="color" value={newAgent.color} onChange={e => setNewAgent({...newAgent, color: e.target.value})} />
+                  <button className="save-btn" onClick={handleAddAgent}>Save</button>
+                  <button className="cancel-btn" onClick={() => setIsAdding(false)}>Cancel</button>
                 </div>
               )}
-              {agents.map(agent => (
-                <div key={agent.id} className="agent-card">
-                  <div className="agent-header">
-                    <div className="form-group-inline">
-                      <label>Name</label>
-                      <input value={agent.name} onChange={(e) => handleUpdateAgent(agent.id, 'name', e.target.value)} />
-                    </div>
-                    <div className="form-group-inline color-group">
-                      <label>Color</label>
-                      <input type="color" value={agent.color} onChange={(e) => handleUpdateAgent(agent.id, 'color', e.target.value)} />
-                    </div>
-                    <button className="remove-btn" onClick={() => handleRemoveAgent(agent.id)}>×</button>
-                  </div>
-                  <div className="form-group">
-                    <label>Role</label>
-                    <input value={agent.role} onChange={(e) => handleUpdateAgent(agent.id, 'role', e.target.value)} />
-                  </div>
-                  <div className="form-group">
-                    <label>System Instruction</label>
-                    <textarea value={agent.instruction} onChange={(e) => handleUpdateAgent(agent.id, 'instruction', e.target.value)} />
-                  </div>
-                </div>
-              ))}
-              <div className="agent-actions">
-                <button className="add-btn" onClick={handleStartAdding} disabled={isAdding}>+ Add Agent</button>
-                <button className="save-btn" onClick={() => socket.emit('save-agents', agents)}>Apply Changes</button>
-              </div>
+
+              <table className="agents-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Role / Specialization</th>
+                    <th>Color</th>
+                    <th style={{ width: '100px' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {agents.map(agent => (
+                    <tr key={agent.id}>
+                      {editingId === agent.id ? (
+                        <>
+                          <td><input className="table-input" type="text" value={editAgent.name} onChange={e => setEditAgent({...editAgent, name: e.target.value})} /></td>
+                          <td><input className="table-input" type="text" value={editAgent.role} onChange={e => setEditAgent({...editAgent, role: e.target.value})} /></td>
+                          <td><input type="color" value={editAgent.color} onChange={e => setEditAgent({...editAgent, color: e.target.value})} /></td>
+                          <td className="row-actions">
+                            <button className="save-row-btn" onClick={handleSaveEdit}>✅</button>
+                            <button className="cancel-row-btn" onClick={() => setEditingId(null)}>❌</button>
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="agent-name-cell">{agent.name}</td>
+                          <td className="agent-role-cell">{agent.role}</td>
+                          <td className="agent-color-cell">
+                            <div className="color-swatch" style={{ backgroundColor: agent.color }}></div>
+                            <code>{agent.color}</code>
+                          </td>
+                          <td className="row-actions">
+                            <button className="edit-row-btn" onClick={() => startEditing(agent)}>✏️</button>
+                            <button className="delete-row-btn" onClick={() => handleDeleteAgent(agent.id)}>🗑️</button>
+                          </td>
+                        </>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <footer className="table-footer">
+                <p>Profiles are automatically discovered and synchronized with <code>.gemini/agents/</code></p>
+              </footer>
             </div>
           </div>
         )}
