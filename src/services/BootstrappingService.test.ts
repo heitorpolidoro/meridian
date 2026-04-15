@@ -13,14 +13,14 @@ describe('BootstrappingService', () => {
     service = new BootstrappingService(mockFs, rootDir);
 
     // Setup basic hierarchy
-    mockFs.mkdir(path.join(rootDir, 'agents_core/core'));
-    mockFs.mkdir(path.join(rootDir, 'agents_core/roles'));
+    mockFs.mkdir(path.join(rootDir, '.meridian/core'));
+    mockFs.mkdir(path.join(rootDir, '.meridian/roles'));
     mockFs.mkdir(path.join(rootDir, '.gemini/agents'));
 
-    mockFs.writeFile(path.join(rootDir, 'agents_core/core/global.md'), '# Global Standards');
-    mockFs.writeFile(path.join(rootDir, 'agents_core/core/backend.md'), '# Backend Standards');
+    mockFs.writeFile(path.join(rootDir, '.meridian/core/global.md'), '# Global Standards');
+    mockFs.writeFile(path.join(rootDir, '.meridian/core/backend.md'), '# Backend Standards');
     
-    mockFs.writeFile(path.join(rootDir, 'agents_core/roles/architect.md'), 
+    mockFs.writeFile(path.join(rootDir, '.meridian/roles/architect.md'), 
 `# Role: Architect
 @../core/backend.md
 Some instructions.`);
@@ -30,7 +30,7 @@ Some instructions.`);
 name: architect
 ---
 # Stub
-@../../agents_core/roles/architect.md`);
+@../../.meridian/roles/architect.md`);
   });
 
   it('should resolve full hierarchy with global standards first', () => {
@@ -53,12 +53,12 @@ name: architect
   });
 
   it('should throw error if global standards file is missing in resolve()', () => {
-    mockFs.deleteFile(path.join(rootDir, 'agents_core/core/global.md'));
+    mockFs.deleteFile(path.join(rootDir, '.meridian/core/global.md'));
     expect(() => service.resolve('architect')).toThrow('Global standards file not found');
   });
 
   it('should still resolve agent if global standards file is missing in resolveAgent()', () => {
-    mockFs.deleteFile(path.join(rootDir, 'agents_core/core/global.md'));
+    mockFs.deleteFile(path.join(rootDir, '.meridian/core/global.md'));
     const result = service.resolveAgent('architect');
     expect(result).toContain('# Role: Architect');
     expect(result).not.toContain('# Global Standards');
@@ -66,7 +66,7 @@ name: architect
 
   it('should prevent double inclusion of global standards', () => {
     // Modify architect.md to also link to global.md
-    mockFs.writeFile(path.join(rootDir, 'agents_core/roles/architect.md'), 
+    mockFs.writeFile(path.join(rootDir, '.meridian/roles/architect.md'), 
 `@../core/global.md
 # Role: Architect`);
 
@@ -77,8 +77,8 @@ name: architect
   });
 
   it('should handle missing linked files gracefully by including error message in content', () => {
-    mockFs.writeFile(path.join(rootDir, 'agents_core/roles/missing.md'), '@../core/notfound.md');
-    mockFs.writeFile(path.join(rootDir, '.gemini/agents/missing.md'), '@../../agents_core/roles/missing.md');
+    mockFs.writeFile(path.join(rootDir, '.meridian/roles/missing.md'), '@../core/notfound.md');
+    mockFs.writeFile(path.join(rootDir, '.gemini/agents/missing.md'), '@../../.meridian/roles/missing.md');
 
     const result = service.resolve('missing');
     expect(result).toContain('[Error: File not found:');
@@ -89,8 +89,8 @@ name: architect
   });
 
   it('should resolve deep recursion', () => {
-    mockFs.writeFile(path.join(rootDir, 'agents_core/core/base.md'), '# Base Standards');
-    mockFs.writeFile(path.join(rootDir, 'agents_core/core/backend.md'), 
+    mockFs.writeFile(path.join(rootDir, '.meridian/core/base.md'), '# Base Standards');
+    mockFs.writeFile(path.join(rootDir, '.meridian/core/backend.md'), 
 `# Backend Standards
 @./base.md`);
     

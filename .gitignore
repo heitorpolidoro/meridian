@@ -21,6 +21,7 @@ error.log
 *.log
 
 # --- Local Configurations & Secrets ---
+.meridian/settings.json
 .settings.json
 .env
 .env.local
@@ -28,6 +29,11 @@ error.log
 .env.test.local
 .env.production.local
 .env*.local
+
+# --- Gemini CLI Infrastructure (CRITICAL) ---
+.gemini/
+conductor/
+
 
 # --- IDEs & System ---
 .idea/

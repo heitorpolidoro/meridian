@@ -85,7 +85,14 @@
   },
   {
     "id": "qa",
-    "name": "qa",
+    "name": "quality-assurance",
+    "role": "Quality Assurance expert for testing and verification.",
+    "instruction": "Bootstrap loaded from filesystem.",
+    "color": "#00c3ff"
+  },
+  {
+    "id": "quality-assurance",
+    "name": "quality-assurance",
     "role": "Quality Assurance expert for testing and verification.",
     "instruction": "Bootstrap loaded from filesystem.",
     "color": "#00c3ff"
@@ -103,6 +110,13 @@
     "role": "jogador",
     "instruction": "New agent.",
     "color": "#6600ff"
+  },
+  {
+    "id": "site-reliability-engineer",
+    "name": "site-reliability-engineer",
+    "role": "Site Reliability Engineer focused on availability and performance.",
+    "instruction": "Bootstrap loaded from filesystem.",
+    "color": "#00c3ff"
   },
   {
     "id": "software-architect",
@@ -127,7 +141,7 @@
   },
   {
     "id": "sre",
-    "name": "sre",
+    "name": "site-reliability-engineer",
     "role": "Site Reliability Engineer focused on availability and performance.",
     "instruction": "Bootstrap loaded from filesystem.",
     "color": "#00c3ff"

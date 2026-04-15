@@ -113,7 +113,7 @@ description: "${agent.role}"
 # Agent Bootstrapping
 
 Your complete identity and roles are defined at:
-@../../agents_core/roles/${agent.id}.md
+@../../.meridian/roles/${agent.id}.md
 
 **Critical Instruction:** 
 Before performing anything, you MUST read and fully load the file above to understand your responsibility and global standards.

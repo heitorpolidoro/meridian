@@ -11,7 +11,7 @@ export class BootstrappingService {
    * Ensures Global Standards come first.
    */
   public resolve(agentId: string): string {
-    const globalPath = path.join(this.rootDir, 'agents_core/core/global.md');
+    const globalPath = path.join(this.rootDir, '.meridian/core/global.md');
     if (!this.fs.exists(globalPath)) {
       throw new Error(`Global standards file not found at: ${globalPath}`);
     }
@@ -27,7 +27,7 @@ export class BootstrappingService {
    */
   public resolveAgent(agentId: string): string {
     const stubPath = path.join(this.rootDir, '.gemini/agents', `${agentId}.md`);
-    const globalPath = path.join(this.rootDir, 'agents_core/core/global.md');
+    const globalPath = path.join(this.rootDir, '.meridian/core/global.md');
 
     if (!this.fs.exists(stubPath)) {
       throw new Error(`Stub file not found for agent: ${agentId}`);

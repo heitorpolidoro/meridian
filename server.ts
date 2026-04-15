@@ -168,7 +168,7 @@ io.on('connection', (socket) => {
         const agents = agentRegistry.getAgents();
 
         // 1. Load Global Standards
-        const globalPath = path.join(__dirname, 'agents_core/core/global.md');
+        const globalPath = path.join(__dirname, '.meridian/core/global.md');
         const globalContent = fs.existsSync(globalPath) ? fs.readFileSync(globalPath, 'utf8') : '';
 
         // 2. Resolve each agent's full hierarchy
