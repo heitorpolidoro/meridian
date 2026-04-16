@@ -57,7 +57,7 @@ watcher.watch(SETTINGS_DIR, (event, filename) => {
         message: `Manual change detected in ${filename}`,
         timestamp: new Date().toISOString()
     });
-    const trackIds = trackMetadataService.listTracks().map(t => t.id);
+    const trackIds = trackMetadataService.listTracksWithMetadata().map(t => t.id);
     io.emit('compliance-update', complianceScorer.getAllCompliance(trackIds));
 });
 
