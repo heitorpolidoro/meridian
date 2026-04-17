@@ -1,5 +1,11 @@
 # Meridian AI Manager
 
+[![CI](https://github.com/heitorpolidoro/meridian/actions/workflows/nodejs-test.yml/badge.svg)](https://github.com/heitorpolidoro/meridian/actions/workflows/nodejs-test.yml)
+[![DeepSource](https://static.deepsource.io/deepsource-badge-light-mini.svg)](https://deepsource.io/gh/heitorpolidoro/meridian/)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_meridian&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=heitorpolidoro_meridian)
+[![Node.js Version](https://img.shields.io/badge/node-v22%20%7C%20v24-blue)](https://nodejs.org/)
+[![GitHub Sponsors](https://img.shields.io/github/sponsors/heitorpolidoro?color=ea4aaa)](https://github.com/sponsors/heitorpolidoro)
+
 Meridian: Intelligent Project Manager with Multi-Agent Orchestration
 
 ## Overview
