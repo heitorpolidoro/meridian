@@ -52,4 +52,19 @@ describe('NodeFilesystemWatcher', () => {
 
     expect(callback).toHaveBeenCalledWith('change', 'test.md');
   });
+
+  it('handles errors when starting watcher', () => {
+    const error = new Error('Test error');
+    (fs.watch as any).mockImplementation(() => {
+      throw error;
+    });
+
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    watcher.watch('/test/path', vi.fn());
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith('Error starting watcher:', error);
+
+    consoleErrorSpy.mockRestore();
+  });
 });
