@@ -139,7 +139,7 @@ io.on('connection', (socket) => {
         const tracksDir = path.resolve(SETTINGS_DIR, 'tracks');
         const resolvedPath = path.resolve(tracksDir, trackId, fileName);
         
-        // Ensure the resolved path is within the tracks directory
+        // Ensure the initial resolved path is within the tracks directory
         const relative = path.relative(tracksDir, resolvedPath);
         const isSafe = relative && !relative.startsWith('..') && !path.isAbsolute(relative);
 
@@ -149,8 +149,18 @@ io.on('connection', (socket) => {
         }
 
         try {
-            if (fs.existsSync(resolvedPath) && fs.lstatSync(resolvedPath).isFile()) {
-                const content = fs.readFileSync(resolvedPath, 'utf8');
+            const realPath = fs.realpathSync(resolvedPath);
+            const safetyCheck = path.relative(tracksDir, realPath);
+            const isRealPathSafe = safetyCheck && !safetyCheck.startsWith('..') && !path.isAbsolute(safetyCheck);
+            
+            if (!isRealPathSafe) {
+                log(`Blocked potential path traversal attempt: trackId=${trackId}, fileName=${fileName}`, 'ERROR');
+                return;
+            }
+            
+            const stats = fs.statSync(realPath);
+            if (stats.isFile()) {
+                const content = fs.readFileSync(realPath, 'utf8');
                 socket.emit('file-content', { trackId, fileName, content });
             }
         } catch (err) {
