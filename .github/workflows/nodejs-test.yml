@@ -17,6 +17,8 @@ jobs:
         node-version: [22.x, 24.x]
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
       - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
@@ -31,7 +33,14 @@ jobs:
             ${{ runner.os }}-node-${{ matrix.node-version }}-
       - name: Install dependencies
         run: npm ci
-      - name: Run tests
-        run: npm test -- --run --reporter=dot
+      - name: Run tests with coverage
+        run: npm test -- --run --coverage.enabled --coverage.reporter=lcov --reporter=dot
         env:
           CI: true
+
+      - name: Report coverage to DeepSource
+        run: |
+          curl https://deepsource.io/cli | sh
+          ./bin/deepsource report --analyzer test-coverage --key javascript --value-file ./coverage/lcov.info
+        env:
+          DEEPSOURCE_DSN: ${{ secrets.DEEPSOURCE_DSN }}
