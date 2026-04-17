@@ -1,3 +1,5 @@
+import { TelemetrySummary } from '../IPCSchemas';
+
 export interface IFileSystem {
   readFile(path: string): string;
   writeFile(path: string, content: string): void;
@@ -19,7 +21,7 @@ export interface IContextInjectionService {
 
 export interface ITelemetryCollector {
   recordMetric(type: 'latency' | 'tokens' | 'errors', value: number, metadata?: any): void;
-  getSummary(): any;
+  getSummary(): TelemetrySummary;
 }
 
 export interface IFilesystemWatcher {
