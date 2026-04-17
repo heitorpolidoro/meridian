@@ -136,16 +136,38 @@ io.on('connection', (socket) => {
         const { trackId, fileName } = data || {};
         if (typeof trackId !== 'string' || typeof fileName !== 'string') return;
 
-        const safeTrackId = trackId.replace(/\.\./g, '');
-        const safeFileName = fileName.replace(/\.\./g, '');
-        const filePath = path.join(SETTINGS_DIR, 'tracks', safeTrackId, safeFileName);
+        const tracksDir = path.resolve(SETTINGS_DIR, 'tracks');
+        const resolvedPath = path.resolve(tracksDir, trackId, fileName);
         
+        // Ensure the initial resolved path is within the tracks directory
+        const relative = path.relative(tracksDir, resolvedPath);
+        const isSafe = relative && !relative.startsWith('..') && !path.isAbsolute(relative);
+
+        if (!isSafe) {
+            log(`Blocked potential path traversal attempt: trackId=${trackId}, fileName=${fileName}`, 'ERROR');
+            return;
+        }
+
         try {
-            if (fs.existsSync(filePath)) {
-                const content = fs.readFileSync(filePath, 'utf8');
+            const realPath = fs.realpathSync(resolvedPath);
+            const safetyCheck = path.relative(tracksDir, realPath);
+            const isRealPathSafe = safetyCheck && !safetyCheck.startsWith('..') && !path.isAbsolute(safetyCheck);
+            
+            if (!isRealPathSafe) {
+                log(`Blocked potential path traversal attempt: trackId=${trackId}, fileName=${fileName}`, 'ERROR');
+                return;
+            }
+            
+            const stats = fs.statSync(realPath);
+            if (stats.isFile()) {
+                const content = fs.readFileSync(realPath, 'utf8');
                 socket.emit('file-content', { trackId, fileName, content });
             }
-        } catch {}
+        } catch (err) {
+            if ((err as any).code !== 'ENOENT') {
+                log(`Error reading file: ${err}`, 'ERROR');
+            }
+        }
     });
 
     // --- Core Session Management (Task 1.4) ---
