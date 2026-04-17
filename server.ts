@@ -149,7 +149,12 @@ io.on('connection', (socket) => {
         }
 
         try {
-            if (fs.existsSync(resolvedPath) && fs.lstatSync(resolvedPath).isFile()) {
+            const realPath = fs.realpathSync(resolvedPath);
+            const safetyCheck = path.relative(tracksDir, realPath);
+            const isRealPathSafe = safetyCheck && !safetyCheck.startsWith('..') && !path.isAbsolute(safetyCheck);
+            
+            if (fs.existsSync(realPath) && isRealPathSafe && fs.statSync(realPath).isFile()) {
+                const content = fs.readFileSync(realPath, 'utf8');
                 const content = fs.readFileSync(resolvedPath, 'utf8');
                 socket.emit('file-content', { trackId, fileName, content });
             }
