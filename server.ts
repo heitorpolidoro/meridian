@@ -145,23 +145,18 @@ io.on('connection', (socket) => {
 
         if (!isSafe) {
             log(`Blocked potential path traversal attempt: trackId=${trackId}, fileName=${fileName}`, 'ERROR');
+            return;
+        }
+
         try {
-            const realPath = fs.realpathSync(resolvedPath);
-            const safetyCheck = path.relative(tracksDir, realPath);
-            const isRealPathSafe = safetyCheck && !safetyCheck.startsWith('..') && !path.isAbsolute(safetyCheck);
-            
-            if (!isRealPathSafe) {
-                log(`Blocked potential path traversal attempt: trackId=${trackId}, fileName=${fileName}`, 'ERROR');
-                return;
-            }
-            
-            const stats = fs.statSync(realPath);
-            if (stats.isFile()) {
-                const content = fs.readFileSync(realPath, 'utf8');
+            if (fs.existsSync(resolvedPath) && fs.lstatSync(resolvedPath).isFile()) {
+                const content = fs.readFileSync(resolvedPath, 'utf8');
                 socket.emit('file-content', { trackId, fileName, content });
             }
         } catch (err) {
-            log(`Error reading file: ${err}`, 'ERROR');
+            if ((err as any).code !== 'ENOENT') {
+                log(`Error reading file: ${err}`, 'ERROR');
+            }
         }
     });
 
