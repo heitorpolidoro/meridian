@@ -20,7 +20,7 @@ export interface IContextInjectionService {
 }
 
 export interface ITelemetryCollector {
-  recordMetric(type: 'latency' | 'tokens' | 'errors', value: number, metadata?: Record<string, any>): void;
+  recordMetric(type: 'latency' | 'tokens' | 'errors', value: number, metadata?: Record<string, unknown>): void;
   getSummary(): TelemetrySummary;
 }
 
