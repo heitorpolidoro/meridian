@@ -136,23 +136,30 @@ Before performing anything, you MUST read and fully load the file above to under
             f.write(agent_content)
 
     # 2. Generate Skill (.gemini/skills/[name]/SKILL.md)
+    # Use 'call-' prefix for skill name to avoid collision with agent names
+    skill_name = f"call-{name}"
     skill_dir = os.path.join(target_dir, ".gemini/skills", name)
     os.makedirs(skill_dir, exist_ok=True)
     skill_file = os.path.join(skill_dir, "SKILL.md")
     
     skill_title = name.replace('-', ' ').title()
-    skill_content = f"""# {skill_title} Skill
+    skill_content = f"""---
+name: {skill_name}
+description: Call the {skill_title} expertise and standards into the current session.
+---
 
-{role_desc}
+# Call {skill_title} Expertise
+
+This skill injects the specialized knowledge, workflows, and standards of a {skill_title} directly into your current context.
 
 @../../../.meridian/roles/{name}.md
 """
     with open(skill_file, 'w') as f:
         f.write(skill_content)
 
-    # 3. Clean Log: Role (id1, id2) - agent + skill created/synced
+    # 3. Clean Log: Role (id1, id2) - agent + call-skill created/synced
     ids_str = ", ".join(ids)
-    print(f"  ✅ {skill_title} ({ids_str}) - agent + skill created/synced")
+    print(f"  ✅ {skill_title} ({ids_str}) - agent + {skill_name} created/synced")
 
 print(f"\n\033[0;32mSuccessfully synced {len(roles_map)} roles ({len(agents)} triggers) based on local agents.json.\033[0m")
 EOF
