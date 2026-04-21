@@ -449,6 +449,7 @@ function App() {
     </div>
   );
 
+  /** Renders the form inputs for the application settings. */
   const renderSettingsForm = () => (
     <div className="form-group">
       <label>Root Directory</label>
