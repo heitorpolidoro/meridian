@@ -44,6 +44,16 @@ footer button:hover:not(:disabled) { background: #1d4ed8; transform: translateY(
 footer button:active:not(:disabled) { transform: translateY(0); }
 footer button:disabled { background: #334155; color: #64748b; cursor: not-allowed; }
 
+/* Confirm Dialog */
+.confirm-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(4px); }
+.confirm-dialog { background: #1e293b; padding: 2rem; border-radius: 12px; border: 1px solid #334155; width: 100%; max-width: 400px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); text-align: center; }
+.confirm-dialog p { font-size: 1.1rem; color: #f8fafc; margin-bottom: 2rem; }
+.confirm-actions { display: flex; gap: 1rem; justify-content: center; }
+.confirm-actions button { padding: 0.6rem 1.5rem; border-radius: 8px; cursor: pointer; font-weight: 600; transition: all 0.2s; border: 1px solid #334155; background: transparent; color: #94a3b8; }
+.confirm-actions button:hover { background: #334155; color: white; }
+.confirm-actions .confirm-btn { background: #38bdf8; border-color: #38bdf8; color: #0f172a; }
+.confirm-actions .confirm-btn:hover { background: #7dd3fc; border-color: #7dd3fc; }
+
 /* Dashboard */
 .dashboard-content { padding: 2rem; text-align: center; color: #888; }
 .stats-placeholder { font-size: 2rem; margin-top: 2rem; color: #00c3ff; font-weight: bold; }

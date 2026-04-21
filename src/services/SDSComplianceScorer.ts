@@ -5,6 +5,7 @@ import path from 'node:path';
 export class SDSComplianceScorer implements ISDSComplianceScorer {
   constructor(private fileSystem: IFileSystem, private tracksDir: string) {}
 
+  // skipcq: JS-0105
   calculateScore(trackId: string): number {
     const compliance = this.getCompliance(trackId);
     return compliance.score;

@@ -157,16 +157,22 @@ function App() {
     }
   };
 
+  const [confirmDialog, setConfirmDialog] = useState<{ show: boolean; message: string; onConfirm: () => void } | null>(null);
+
   const handleSelectProject = (project: Project) => {
-    if (globalThis.confirm(`Switch to project "${project.name}"?`)) {
-      socket.emit('save-settings', { ...settings, rootDir: project.path });
-      setTimeout(() => {
-        socket.emit('get-agents');
-        socket.emit('get-tracks');
-        showFlash(`Switched to project ${project.name}`);
-        // If we are in tracks or agents view, they will be refreshed by the emits above
-      }, 500);
-    }
+    setConfirmDialog({
+      show: true,
+      message: `Switch to project "${project.name}"?`,
+      onConfirm: () => {
+        socket.emit('save-settings', { ...settings, rootDir: project.path });
+        setTimeout(() => {
+          socket.emit('get-agents');
+          socket.emit('get-tracks');
+          showFlash(`Switched to project ${project.name}`);
+        }, 500);
+        setConfirmDialog(null);
+      }
+    });
   };
 
   const handleSelectTrack = (track: Track) => {
@@ -194,9 +200,15 @@ function App() {
   };
 
   const handleDeleteAgent = (id: string) => {
-    if (!globalThis.confirm('Delete this agent profile?')) return;
-    const updated = agents.filter(a => a.id !== id);
-    socket.emit('save-agents', updated);
+    setConfirmDialog({
+      show: true,
+      message: 'Delete this agent profile?',
+      onConfirm: () => {
+        const updated = agents.filter(a => a.id !== id);
+        socket.emit('save-agents', updated);
+        setConfirmDialog(null);
+      }
+    });
   };
 
   const handleAddAgent = () => {
@@ -253,6 +265,18 @@ function App() {
       <div id="flash-container">
         {flashes.map(f => <div key={f.id} className="flash-msg">{f.text}</div>)}
       </div>
+
+      {confirmDialog?.show && (
+        <div className="confirm-overlay">
+          <div className="confirm-dialog">
+            <p>{confirmDialog.message}</p>
+            <div className="confirm-actions">
+              <button type="button" onClick={() => setConfirmDialog(null)}>Cancel</button>
+              <button type="button" className="confirm-btn" onClick={confirmDialog.onConfirm}>Confirm</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <aside>
         <div className="sidebar-header">

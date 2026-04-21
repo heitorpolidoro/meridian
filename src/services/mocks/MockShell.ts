@@ -3,6 +3,7 @@ import { IShell } from '../IShell.ts';
 export class MockShell implements IShell {
   private mockResponses: Map<string, { stdout: string; stderr: string }> = new Map();
 
+  // skipcq: JS-0105
   exec(command: string, options?: { cwd?: string; env?: NodeJS.ProcessEnv }): Promise<{ stdout: string; stderr: string }> {
     if (this.mockResponses.has(command)) {
       return Promise.resolve(this.mockResponses.get(command)!);
