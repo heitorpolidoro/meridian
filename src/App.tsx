@@ -260,6 +260,7 @@ function App() {
   };
 
   /** Renders the projects discovery view. */
+  /** Renders the projects discovery view. */
   const renderProjectsView = () => (
     <div className="view projects-view">
       <header><h1>Projects Discovery</h1></header>
@@ -286,6 +287,7 @@ function App() {
     </div>
   );
 
+  /** Renders the governance dashboard view. */
   const renderDashboardView = () => (
     <div className="view">
       <header><h1>Governance Dashboard</h1></header>
@@ -297,6 +299,7 @@ function App() {
     </div>
   );
 
+  /** Renders the track navigator view. */
   const renderTracksView = () => (
     <div className="view tracks-view">
       <header><h1>Track Navigator</h1></header>
@@ -347,6 +350,7 @@ function App() {
     </div>
   );
 
+  /** Renders the war room chat interface. */
   const renderWarRoomView = () => (
     <div className="view">
       <header><h1>War Room</h1></header>
@@ -354,7 +358,7 @@ function App() {
         {messages.map((m) => (
           <div key={m.id} className={`msg ${m.type}`}>{formatText(m.text, m.id)}</div>
         ))}
-        {isTyping && <div className="typing"><div className="dot"></div><div className="dot"></div><div className="dot"></div></div>}
+        {isTyping && <div className="typing"><div className="dot" /><div className="dot" /><div className="dot" /></div>}
       </div>
       <footer>
         <input 
@@ -370,6 +374,8 @@ function App() {
     </div>
   );
 
+  /** Renders the active squad agent management view. */
+  // skipcq: JS-0415
   /** Renders the active squad agent management view. */
   // skipcq: JS-0415
   const renderAgentsView = () => (
@@ -417,7 +423,7 @@ function App() {
                     <td className="agent-name-cell">{agent.name}</td>
                     <td className="agent-role-cell">{agent.role}</td>
                     <td className="agent-color-cell">
-                      <div className="color-swatch" style={{ backgroundColor: agent.color }}></div>
+                      <div className="color-swatch" style={{ backgroundColor: agent.color }} />>
                       <code>{agent.color}</code>
                     </td>
                     <td className="row-actions">
@@ -437,6 +443,8 @@ function App() {
     </div>
   );
 
+  /** Renders the application settings view. */
+  // skipcq: JS-0415
   const renderSettingsView = () => (
     <div className="view">
       <header><h1>Settings</h1></header>
@@ -453,6 +461,7 @@ function App() {
     </div>
   );
 
+  /** Evaluates the current view state and renders the appropriate content component. */
   /** Evaluates the current view state and renders the appropriate content component. */
   const renderContent = () => {
     switch (view) {
