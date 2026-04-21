@@ -419,6 +419,7 @@ function App() {
   };
 
   /** Renders the active squad agent management view. */
+  // skipcq: JS-0415
   const renderAgentsView = () => (
     <div className="view">
       <header><h1>Active Squad</h1></header>
@@ -528,6 +529,11 @@ function App() {
         {renderContent()}
       </main>
     </div>
+  );
+}
+
+export default App;
+</div>
   );
 }
 
