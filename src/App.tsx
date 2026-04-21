@@ -423,7 +423,7 @@ function App() {
                     <td className="agent-name-cell">{agent.name}</td>
                     <td className="agent-role-cell">{agent.role}</td>
                     <td className="agent-color-cell">
-                      <div className="color-swatch" style={{ backgroundColor: agent.color }} />>
+                      <div className="color-swatch" style={{ backgroundColor: agent.color }} />
                       <code>{agent.color}</code>
                     </td>
                     <td className="row-actions">
