@@ -16,7 +16,7 @@ export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({ content = '', on
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          code({ node, inline, className, children, ...props }: any) {
+          code({ node, inline, className, children, ...props }: any) { // skipcq: JS-0323
             const match = /language-(\w+)/.exec(className || '');
             const lang = match ? match[1] : '';
             // Basic language support list, fallback to text
@@ -37,7 +37,7 @@ export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({ content = '', on
               </code>
             );
           },
-          a({ node, href, children, ...props }: any) {
+          a({ node, href, children, ...props }: any) { // skipcq: JS-0323
             const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
               if (!href) return;
               

@@ -4,7 +4,7 @@ export const TelemetryMetricSchema = z.object({
   type: z.enum(['latency', 'tokens', 'errors']),
   value: z.number(),
   timestamp: z.string(),
-  metadata: z.record(z.any()).optional(),
+  metadata: z.record(z.unknown()).optional(),
 });
 
 export const TelemetrySummarySchema = z.object({

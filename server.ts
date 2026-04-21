@@ -1,7 +1,7 @@
 import express from 'express';
 import { createServer } from 'node:http';
 import { Server } from 'socket.io';
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
@@ -39,7 +39,7 @@ function getSettings() {
     try { return JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')); } catch { return DEFAULT_SETTINGS; }
 }
 
-function saveSettings(settings: any) { fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2)); }
+function saveSettings(settings: { rootDir: string }) { fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2)); }
 
 // Helper to get services for the CURRENT rootDir
 function getContextServices() {
@@ -85,7 +85,7 @@ if (process.env.NODE_ENV === 'production') {
 io.on('connection', (socket) => {
     log('New client connected', 'INFO');
     
-    let gemini: any = null;
+    let gemini: ChildProcess | null = null;
     let sessionId: string | null = null;
     let requestId = 3;
     let promptStartTime: number | null = null;
@@ -207,7 +207,7 @@ io.on('connection', (socket) => {
         const globalPath = path.join(meridianDir, 'core/global.md');
         const globalContent = fs.existsSync(globalPath) ? fs.readFileSync(globalPath, 'utf8') : '';
 
-        const agentInstructions = agents.map((a: any) => {
+        const agentInstructions = agents.map((a: { id: string; name: string; role: string; instruction: string }) => {
             try {
                 const resolved = bootstrappingService.resolveAgent(a.id);
                 return `${a.name.toUpperCase()} (${a.role}):\n${resolved}`;
@@ -231,12 +231,17 @@ Whenever I send a directive, simulate a brief debate and end with [VERDICT].`;
             env: { ...process.env, PYTHONUNBUFFERED: '1' }
         });
 
-        gemini.on('error', (err: any) => {
+        gemini.on('error', (err: Error & { code?: string }) => {
             telemetryCollector.recordMetric('errors', 1);
             log(`Gemini process error: ${err}`, 'ERROR');
         });
 
-        const sendACP = (msg: any) => { gemini.stdin.write(`${JSON.stringify(msg)}\n`); log(JSON.stringify(msg), 'OUT'); };
+        const sendACP = (msg: unknown) => { 
+            if (gemini?.stdin) {
+                gemini.stdin.write(`${JSON.stringify(msg)}\n`); 
+                log(JSON.stringify(msg), 'OUT'); 
+            }
+        };
 
         socket.emit('status', 'Initializing...');
         sendACP({
@@ -244,7 +249,7 @@ Whenever I send a directive, simulate a brief debate and end with [VERDICT].`;
             params: { protocolVersion: 0, clientInfo: { name: "meridian-ai", version: "1.0" }, capabilities: {} }
         });
 
-        gemini.stdout.on('data', (data: any) => {
+        gemini.stdout?.on('data', (data: Buffer) => {
             const lines = data.toString().split('\n');
             for (const line of lines) {
                 const trimmed = line.trim();
@@ -286,8 +291,8 @@ Whenever I send a directive, simulate a brief debate and end with [VERDICT].`;
         });
     });
 
-    socket.on('diretriz', (text) => {
-        if (!sessionId || !gemini) return;
+    socket.on('diretriz', (text: string) => {
+        if (!sessionId || !gemini?.stdin) return;
         promptStartTime = Date.now();
         const promptMsg = { 
             jsonrpc: "2.0", id: requestId++, method: "session/prompt", 

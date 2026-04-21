@@ -21,7 +21,7 @@ interface Track {
   id: string;
   name: string;
   files: string[];
-  metadata: any;
+  metadata: unknown;
   activeSession?: {
     status: string;
     activeAgentId?: string;
@@ -36,7 +36,7 @@ interface Project {
 
 function App() {
   const [view, setView] = useState<'dashboard' | 'warroom' | 'tracks' | 'agents' | 'settings' | 'projects'>('dashboard');
-  const [messages, setMessages] = useState<{ text: string; type: string }[]>([]);
+  const [messages, setMessages] = useState<{ id: string; text: string; type: string }[]>([]);
   const [status, setStatus] = useState('Initializing...');
   const [input, setInput] = useState('');
   const [isReady, setIsReady] = useState(false);
@@ -100,9 +100,9 @@ function App() {
       setMessages(prev => {
         const last = prev[prev.length - 1];
         if (last && last.type === 'ai') {
-          return [...prev.slice(0, -1), { text: currentAiMsgRef.current, type: 'ai' }];
+          return [...prev.slice(0, -1), { id: last.id, text: currentAiMsgRef.current, type: 'ai' }];
         }
-        return [...prev, { text: currentAiMsgRef.current, type: 'ai' }];
+        return [...prev, { id: `ai-${Date.now()}`, text: currentAiMsgRef.current, type: 'ai' }];
       });
     });
 
@@ -192,7 +192,7 @@ function App() {
 
   const handleSend = () => {
     if (!input.trim()) return;
-    setMessages(prev => [...prev, { text: input, type: 'user' }]);
+    setMessages(prev => [...prev, { id: `user-${Date.now()}`, text: input, type: 'user' }]);
     socket.emit('diretriz', input);
     setInput('');
     setIsReady(false);
@@ -245,15 +245,16 @@ function App() {
     setEditingId(null);
   };
 
-  const formatText = (text: string) => {
+  const formatText = (text: string, messageId: string) => {
     const agentNames = agents.map(a => a.name.toUpperCase());
     const regex = new RegExp(`(\\[(?:${agentNames.join('|')}|VERDICT)\\])`, 'g');
     const parts = text.split(regex);
     return parts.map((part, i) => {
       const name = part.replace(/[\[\]]/g, '');
       const agent = agents.find(a => a.name.toUpperCase() === name);
-      if (agent) return <span key={i} style={{ color: agent.color, fontWeight: 'bold' }}>{part}</span>;
-      if (part === '[VERDICT]') return <span key={i} className="verdict">{part}</span>;
+      const key = `${messageId}-${i}`;
+      if (agent) return <span key={key} style={{ color: agent.color, fontWeight: 'bold' }}>{part}</span>;
+      if (part === '[VERDICT]') return <span key={key} className="verdict">{part}</span>;
       return part;
     });
   };
@@ -349,8 +350,8 @@ function App() {
     <div className="view">
       <header><h1>War Room</h1></header>
       <div id="chat" ref={chatRef}>
-        {messages.map((m, i) => (
-          <div key={i} className={`msg ${m.type}`}>{formatText(m.text)}</div>
+        {messages.map((m) => (
+          <div key={m.id} className={`msg ${m.type}`}>{formatText(m.text, m.id)}</div>
         ))}
         {isTyping && <div className="typing"><div className="dot"></div><div className="dot"></div><div className="dot"></div></div>}
       </div>

@@ -5,8 +5,9 @@ export class MockFileSystem implements IFileSystem {
   private directories: Set<string> = new Set();
 
   readFile(path: string): string {
-    if (this.files.has(path)) {
-      return this.files.get(path)!;
+    const content = this.files.get(path);
+    if (content !== undefined) {
+      return content;
     }
     throw new Error(`File not found: ${path}`);
   }
