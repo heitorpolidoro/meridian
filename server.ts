@@ -182,9 +182,9 @@ io.on('connection', (socket) => {
                 const content = fs.readFileSync(realPath, 'utf8');
                 socket.emit('file-content', { trackId, fileName, content });
             }
-        } catch (err: any) {
-            if (err.code !== 'ENOENT') {
-                log(`Error reading file: ${err}`, 'ERROR');
+        } catch (err: unknown) {
+            if (err instanceof Error && (err as any).code !== 'ENOENT') {
+                log(`Error reading file: ${err.message}`, 'ERROR');
             }
         }
     });

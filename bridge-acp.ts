@@ -28,6 +28,10 @@ function log(msg: string, level: 'OUT' | 'IN' | 'INFO' | 'ERROR' = 'INFO') {
     console.error(`${colors[level]}[${timestamp}] [${level}] ${msg}\x1b[0m`);
 }
 
+/**
+ * Inicia o monitoramento FULL ACP conectando com o processo Gemini
+ * e lidando com o handshake e mensagens de sessão.
+ */
 function runBridge() {
     log('Iniciando Monitoramento FULL ACP (Odin & Mimir)...');
 

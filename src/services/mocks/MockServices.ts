@@ -17,7 +17,7 @@ export class MockFileSystem implements IFileSystem {
 
   // skipcq: JS-0105
   deleteFile(path: string): void {
-    (this.files as any)[path] = undefined;
+    delete this.files[path];
   }
 
   // skipcq: JS-0105

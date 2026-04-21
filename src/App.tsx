@@ -258,6 +258,209 @@ function App() {
     });
   };
 
+  const renderProjectsView = () => (
+    <div className="view projects-view">
+      <header><h1>Projects Discovery</h1></header>
+      <div className="projects-grid">
+        {projects.length > 0 ? projects.map(project => (
+          <button 
+            key={project.id} 
+            type="button"
+            aria-current={settings.rootDir === project.path ? 'true' : undefined}
+            className={`project-card ${settings.rootDir === project.path ? 'active' : ''}`} 
+            onClick={() => handleSelectProject(project)}
+          >
+            <div className="project-icon">📂</div>
+            <div className="project-info">
+              <span className="project-title">{project.name}</span>
+              <span className="project-path">{project.path}</span>
+            </div>
+            {settings.rootDir === project.path && <div className="current-badge">Current</div>}
+          </button>
+        )) : (
+          <div className="no-projects">No projects found with .meridian directory in the workspace.</div>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderDashboardView = () => (
+    <div className="view">
+      <header><h1>Governance Dashboard</h1></header>
+      <TelemetryDashboard 
+        telemetry={telemetry} 
+        compliance={compliance} 
+        conflicts={conflicts} 
+      />
+    </div>
+  );
+
+  const renderTracksView = () => (
+    <div className="view tracks-view">
+      <header><h1>Track Navigator</h1></header>
+      <div className="tracks-container">
+        <div className="tracks-sidebar">
+          <h3>Tracks</h3>
+          <ul>
+            {tracks.map(t => (
+              <li key={t.id} className={selectedTrack?.id === t.id ? 'active' : ''} onClick={() => handleSelectTrack(t)}>
+                <span>📁 {t.name}</span>
+                <span className={`status-badge ${t.activeSession?.status}`}>
+                  {t.activeSession?.status === 'Working' ? '⏳ ' : ''}
+                  {t.activeSession?.status === 'Idle' ? '💤 ' : ''}
+                  {t.activeSession?.status}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        
+        {selectedTrack && (
+          <div className="files-sidebar">
+            <h3>Files</h3>
+            <ul>
+              {selectedTrack.files.map(f => (
+                <li key={f} className={selectedFile?.name === f ? 'active' : ''} onClick={() => handleSelectFile(selectedTrack.id, f)}>
+                  📄 {f}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <div className="content-viewer">
+          {selectedFile ? (
+            <div className="viewer-wrapper">
+              <h2>{selectedFile.name}</h2>
+              <MarkdownViewer 
+                content={selectedFile.content} 
+                onNavigate={handleNavigate}
+              />
+            </div>
+          ) : (
+            <div className="viewer-placeholder">Select a file to preview documentation.</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderWarRoomView = () => (
+    <div className="view">
+      <header><h1>War Room</h1></header>
+      <div id="chat" ref={chatRef}>
+        {messages.map((m, i) => (
+          <div key={i} className={`msg ${m.type}`}>{formatText(m.text)}</div>
+        ))}
+        {isTyping && <div className="typing"><div className="dot"></div><div className="dot"></div><div className="dot"></div></div>}
+      </div>
+      <footer>
+        <input 
+          type="text" 
+          value={input} 
+          onChange={(e) => setInput(e.target.value)}
+          onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+          placeholder={isReady ? "Enter your directive..." : status} 
+          disabled={!isReady} 
+        />
+        <button onClick={handleSend} disabled={!isReady}>Send</button>
+      </footer>
+    </div>
+  );
+
+  const renderAgentsView = () => (
+    <div className="view">
+      <header><h1>Active Squad</h1></header>
+      <div className="agents-content">
+        <div className="table-actions">
+          <button className="add-btn" onClick={() => setIsAdding(true)}>+ New Agent Profile</button>
+        </div>
+
+        {isAdding && (
+          <div className="quick-add-form">
+            <input type="text" placeholder="Name" value={newAgent.name} onChange={e => setNewAgent({...newAgent, name: e.target.value})} />
+            <input type="text" placeholder="Role" value={newAgent.role} onChange={e => setNewAgent({...newAgent, role: e.target.value})} />
+            <input type="color" value={newAgent.color} onChange={e => setNewAgent({...newAgent, color: e.target.value})} />
+            <button className="save-btn" onClick={handleAddAgent}>Save</button>
+            <button className="cancel-btn" onClick={() => setIsAdding(false)}>Cancel</button>
+          </div>
+        )}
+
+        <table className="agents-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Role / Specialization</th>
+              <th>Color</th>
+              <th style={{ width: '100px' }}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {agents.map(agent => (
+              <tr key={agent.id}>
+                {editingId === agent.id ? (
+                  <>
+                    <td><input className="table-input" type="text" value={editAgent.name} onChange={e => setEditAgent({...editAgent, name: e.target.value})} /></td>
+                    <td><input className="table-input" type="text" value={editAgent.role} onChange={e => setEditAgent({...editAgent, role: e.target.value})} /></td>
+                    <td><input type="color" value={editAgent.color} onChange={e => setEditAgent({...editAgent, color: e.target.value})} /></td>
+                    <td className="row-actions">
+                      <button className="save-row-btn" onClick={handleSaveEdit}>✅</button>
+                      <button className="cancel-row-btn" onClick={() => setEditingId(null)}>❌</button>
+                    </td>
+                  </>
+                ) : (
+                  <>
+                    <td className="agent-name-cell">{agent.name}</td>
+                    <td className="agent-role-cell">{agent.role}</td>
+                    <td className="agent-color-cell">
+                      <div className="color-swatch" style={{ backgroundColor: agent.color }}></div>
+                      <code>{agent.color}</code>
+                    </td>
+                    <td className="row-actions">
+                      <button className="edit-row-btn" onClick={() => startEditing(agent)}>✏️</button>
+                      <button className="delete-row-btn" onClick={() => handleDeleteAgent(agent.id)}>🗑️</button>
+                    </td>
+                  </>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <footer className="table-footer">
+          <p>Profiles are automatically discovered and synchronized with <code>.gemini/agents/</code></p>
+        </footer>
+      </div>
+    </div>
+  );
+
+  const renderSettingsView = () => (
+    <div className="view">
+      <header><h1>Settings</h1></header>
+      <div className="settings-content">
+        <div className="form-group">
+          <label>Root Directory</label>
+          <div className="input-group">
+            <input type="text" value={settings.rootDir} readOnly />
+            <button className="browse-btn" onClick={() => socket.emit('pick-directory')}>Browse...</button>
+          </div>
+        </div>
+        <button className="save-btn" onClick={() => socket.emit('save-settings', settings)}>Save Settings</button>
+      </div>
+    </div>
+  );
+
+  const renderContent = () => {
+    switch (view) {
+      case 'dashboard': return renderDashboardView();
+      case 'projects': return renderProjectsView();
+      case 'tracks': return renderTracksView();
+      case 'warroom': return renderWarRoomView();
+      case 'agents': return renderAgentsView();
+      case 'settings': return renderSettingsView();
+      default: return renderDashboardView();
+    }
+  };
+
   const activeProject = projects.find(p => p.path === settings.rootDir);
 
   return (
@@ -299,196 +502,7 @@ function App() {
       </aside>
 
       <main>
-        {view === 'projects' && (
-          <div className="view projects-view">
-            <header><h1>Projects Discovery</h1></header>
-            <div className="projects-grid">
-              {projects.length > 0 ? projects.map(project => (
-                <button 
-                  key={project.id} 
-                  type="button"
-                  aria-current={settings.rootDir === project.path ? 'true' : undefined}
-                  className={`project-card ${settings.rootDir === project.path ? 'active' : ''}`} 
-                  onClick={() => handleSelectProject(project)}
-                >
-                  <div className="project-icon">📂</div>
-                  <div className="project-info">
-                    <span className="project-title">{project.name}</span>
-                    <span className="project-path">{project.path}</span>
-                  </div>
-                  {settings.rootDir === project.path && <div className="current-badge">Current</div>}
-                </button>
-              )) : (
-                <div className="no-projects">No projects found with .meridian directory in the workspace.</div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {view === 'dashboard' && (
-          <div className="view">
-            <header><h1>Governance Dashboard</h1></header>
-            <TelemetryDashboard 
-              telemetry={telemetry} 
-              compliance={compliance} 
-              conflicts={conflicts} 
-            />
-          </div>
-        )}
-
-        {view === 'tracks' && (
-          <div className="view tracks-view">
-            <header><h1>Track Navigator</h1></header>
-            <div className="tracks-container">
-              <div className="tracks-sidebar">
-                <h3>Tracks</h3>
-                <ul>
-                  {tracks.map(t => (
-                    <li key={t.id} className={selectedTrack?.id === t.id ? 'active' : ''} onClick={() => handleSelectTrack(t)}>
-                      <span>📁 {t.name}</span>
-                      <span className={`status-badge ${t.activeSession?.status}`}>
-                        {t.activeSession?.status === 'Working' ? '⏳ ' : ''}
-                        {t.activeSession?.status === 'Idle' ? '💤 ' : ''}
-                        {t.activeSession?.status}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              
-              {selectedTrack && (
-                <div className="files-sidebar">
-                  <h3>Files</h3>
-                  <ul>
-                    {selectedTrack.files.map(f => (
-                      <li key={f} className={selectedFile?.name === f ? 'active' : ''} onClick={() => handleSelectFile(selectedTrack.id, f)}>
-                        📄 {f}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              <div className="content-viewer">
-                {selectedFile ? (
-                  <div className="viewer-wrapper">
-                    <h2>{selectedFile.name}</h2>
-                    <MarkdownViewer 
-                      content={selectedFile.content} 
-                      onNavigate={handleNavigate}
-                    />
-                  </div>
-                ) : (
-                  <div className="viewer-placeholder">Select a file to preview documentation.</div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {view === 'warroom' && (
-          <div className="view">
-            <header><h1>War Room</h1></header>
-            <div id="chat" ref={chatRef}>
-              {messages.map((m, i) => (
-                <div key={i} className={`msg ${m.type}`}>{formatText(m.text)}</div>
-              ))}
-              {isTyping && <div className="typing"><div className="dot"></div><div className="dot"></div><div className="dot"></div></div>}
-            </div>
-            <footer>
-              <input 
-                type="text" 
-                value={input} 
-                onChange={(e) => setInput(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-                placeholder={isReady ? "Enter your directive..." : status} 
-                disabled={!isReady} 
-              />
-              <button onClick={handleSend} disabled={!isReady}>Send</button>
-            </footer>
-          </div>
-        )}
-
-        {view === 'agents' && (
-          <div className="view">
-            <header><h1>Active Squad</h1></header>
-            <div className="agents-content">
-              <div className="table-actions">
-                <button className="add-btn" onClick={() => setIsAdding(true)}>+ New Agent Profile</button>
-              </div>
-
-              {isAdding && (
-                <div className="quick-add-form">
-                  <input type="text" placeholder="Name" value={newAgent.name} onChange={e => setNewAgent({...newAgent, name: e.target.value})} />
-                  <input type="text" placeholder="Role" value={newAgent.role} onChange={e => setNewAgent({...newAgent, role: e.target.value})} />
-                  <input type="color" value={newAgent.color} onChange={e => setNewAgent({...newAgent, color: e.target.value})} />
-                  <button className="save-btn" onClick={handleAddAgent}>Save</button>
-                  <button className="cancel-btn" onClick={() => setIsAdding(false)}>Cancel</button>
-                </div>
-              )}
-
-              <table className="agents-table">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Role / Specialization</th>
-                    <th>Color</th>
-                    <th style={{ width: '100px' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {agents.map(agent => (
-                    <tr key={agent.id}>
-                      {editingId === agent.id ? (
-                        <>
-                          <td><input className="table-input" type="text" value={editAgent.name} onChange={e => setEditAgent({...editAgent, name: e.target.value})} /></td>
-                          <td><input className="table-input" type="text" value={editAgent.role} onChange={e => setEditAgent({...editAgent, role: e.target.value})} /></td>
-                          <td><input type="color" value={editAgent.color} onChange={e => setEditAgent({...editAgent, color: e.target.value})} /></td>
-                          <td className="row-actions">
-                            <button className="save-row-btn" onClick={handleSaveEdit}>✅</button>
-                            <button className="cancel-row-btn" onClick={() => setEditingId(null)}>❌</button>
-                          </td>
-                        </>
-                      ) : (
-                        <>
-                          <td className="agent-name-cell">{agent.name}</td>
-                          <td className="agent-role-cell">{agent.role}</td>
-                          <td className="agent-color-cell">
-                            <div className="color-swatch" style={{ backgroundColor: agent.color }}></div>
-                            <code>{agent.color}</code>
-                          </td>
-                          <td className="row-actions">
-                            <button className="edit-row-btn" onClick={() => startEditing(agent)}>✏️</button>
-                            <button className="delete-row-btn" onClick={() => handleDeleteAgent(agent.id)}>🗑️</button>
-                          </td>
-                        </>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <footer className="table-footer">
-                <p>Profiles are automatically discovered and synchronized with <code>.gemini/agents/</code></p>
-              </footer>
-            </div>
-          </div>
-        )}
-
-        {view === 'settings' && (
-          <div className="view">
-            <header><h1>Settings</h1></header>
-            <div className="settings-content">
-              <div className="form-group">
-                <label>Root Directory</label>
-                <div className="input-group">
-                  <input type="text" value={settings.rootDir} readOnly />
-                  <button className="browse-btn" onClick={() => socket.emit('pick-directory')}>Browse...</button>
-                </div>
-              </div>
-              <button className="save-btn" onClick={() => socket.emit('save-settings', settings)}>Save Settings</button>
-            </div>
-          </div>
-        )}
+        {renderContent()}
       </main>
     </div>
   );
