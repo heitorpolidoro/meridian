@@ -1,22 +1,35 @@
 # Meridian AI Manager
 
 <div>
-<!-- GitHub CI -->
+<!-- GitHub CI & Sponsors -->
 <a href="https://github.com/heitorpolidoro/meridian/actions/workflows/nodejs-test.yml"><img src="https://github.com/heitorpolidoro/meridian/actions/workflows/nodejs-test.yml/badge.svg" alt="CI Status"></a>
-<!-- GitHub Sponsors -->
 <a href="https://github.com/sponsors/heitorpolidoro"><img src="https://img.shields.io/github/sponsors/heitorpolidoro?color=ea4aaa" alt="GitHub Sponsors"></a>
-</div>
+<br>
 
-<div>
+<!-- GitHub Stats -->
+<a href="https://github.com/heitorpolidoro/meridian/releases/latest"><img src="https://img.shields.io/github/v/release/heitorpolidoro/meridian?label=Latest%20Version" alt="Latest Version"></a>
+<img src="https://img.shields.io/github/release-date/heitorpolidoro/meridian" alt="GitHub Release Date">
+<img src="https://img.shields.io/github/commits-since/heitorpolidoro/meridian/latest" alt="GitHub commits since latest release">
+<img src="https://img.shields.io/github/last-commit/heitorpolidoro/meridian" alt="GitHub last commit">
+<br>
+
+<!-- GitHub Activity -->
+<a href="https://github.com/heitorpolidoro/meridian/issues"><img src="https://img.shields.io/github/issues/heitorpolidoro/meridian" alt="GitHub issues"></a>
+<a href="https://github.com/heitorpolidoro/meridian/pulls"><img src="https://img.shields.io/github/issues-pr/heitorpolidoro/meridian" alt="GitHub pull requests"></a>
+<br>
+
 <!-- DeepSource -->
 <a href="https://app.deepsource.com/gh/heitorpolidoro/meridian/" target="_blank"><img alt="DeepSource" title="DeepSource" src="https://app.deepsource.com/gh/heitorpolidoro/meridian.svg/?label=code+coverage&show_trend=true&token=TbnUO25wUZwE2xbpNccxDYAZ"/></a>
 <a href="https://app.deepsource.io/gh/heitorpolidoro/meridian/"><img src="https://app.deepsource.com/gh/heitorpolidoro/meridian.svg/?label=coverage" alt="DeepSource Meridian Coverage"></a>
-</div>
+<br>
 
-<div>
-<!-- SonarCloud -->
+<!-- SonarCloud Overview -->
 <a href="https://sonarcloud.io/summary/new_code?id=heitorpolidoro_meridian"><img src="https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_meridian&metric=alert_status" alt="SonarCloud Quality Gate"></a>
 <a href="https://sonarcloud.io/summary/new_code?id=heitorpolidoro_meridian"><img src="https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_meridian&metric=coverage" alt="SonarCloud Coverage"></a>
+<a href="https://sonarcloud.io/summary/new_code?id=heitorpolidoro_meridian"><img src="https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_meridian&metric=security_rating" alt="SonarCloud Security Rating"></a>
+<br>
+
+<!-- SonarCloud Details -->
 <a href="https://sonarcloud.io/summary/new_code?id=heitorpolidoro_meridian"><img src="https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_meridian&metric=bugs" alt="SonarCloud Bugs"></a>
 <a href="https://sonarcloud.io/summary/new_code?id=heitorpolidoro_meridian"><img src="https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_meridian&metric=vulnerabilities" alt="SonarCloud Vulnerabilities"></a>
 <a href="https://sonarcloud.io/summary/new_code?id=heitorpolidoro_meridian"><img src="https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_meridian&metric=code_smells" alt="SonarCloud Code Smells"></a>
