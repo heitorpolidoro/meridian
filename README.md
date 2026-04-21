@@ -23,13 +23,11 @@
 <a href="https://app.deepsource.io/gh/heitorpolidoro/meridian/"><img src="https://app.deepsource.com/gh/heitorpolidoro/meridian.svg/?label=coverage" alt="DeepSource Meridian Coverage"></a>
 <br>
 
-<!-- SonarCloud Overview -->
+<!-- SonarCloud -->
 <a href="https://sonarcloud.io/summary/new_code?id=heitorpolidoro_meridian"><img src="https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_meridian&metric=alert_status" alt="SonarCloud Quality Gate"></a>
 <a href="https://sonarcloud.io/summary/new_code?id=heitorpolidoro_meridian"><img src="https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_meridian&metric=coverage" alt="SonarCloud Coverage"></a>
 <a href="https://sonarcloud.io/summary/new_code?id=heitorpolidoro_meridian"><img src="https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_meridian&metric=security_rating" alt="SonarCloud Security Rating"></a>
 <br>
-
-<!-- SonarCloud Details -->
 <a href="https://sonarcloud.io/summary/new_code?id=heitorpolidoro_meridian"><img src="https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_meridian&metric=bugs" alt="SonarCloud Bugs"></a>
 <a href="https://sonarcloud.io/summary/new_code?id=heitorpolidoro_meridian"><img src="https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_meridian&metric=vulnerabilities" alt="SonarCloud Vulnerabilities"></a>
 <a href="https://sonarcloud.io/summary/new_code?id=heitorpolidoro_meridian"><img src="https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_meridian&metric=code_smells" alt="SonarCloud Code Smells"></a>
