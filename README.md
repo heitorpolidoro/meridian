@@ -9,7 +9,7 @@
 
 <div>
 <!-- DeepSource -->
-<a href="https://deepsource.io/gh/heitorpolidoro/meridian/"><img src="https://app.deepsource.com/gh/heitorpolidoro/meridian.svg/?label=active+issues&show_all=true" alt="DeepSource Meridian Active Issues"></a>
+<a href="https://app.deepsource.com/gh/heitorpolidoro/meridian/" target="_blank"><img alt="DeepSource" title="DeepSource" src="https://app.deepsource.com/gh/heitorpolidoro/meridian.svg/?label=code+coverage&show_trend=true&token=TbnUO25wUZwE2xbpNccxDYAZ"/></a>
 <a href="https://app.deepsource.io/gh/heitorpolidoro/meridian/"><img src="https://app.deepsource.com/gh/heitorpolidoro/meridian.svg/?label=coverage" alt="DeepSource Meridian Coverage"></a>
 </div>
 
