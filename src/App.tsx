@@ -404,6 +404,20 @@ function App() {
     );
   };
 
+  /** Renders the form to add a new agent. */
+  const renderAddAgentForm = () => {
+    if (!isAdding) return null;
+    return (
+      <div className="quick-add-form">
+        <input type="text" placeholder="Name" value={newAgent.name} onChange={e => setNewAgent({...newAgent, name: e.target.value})} />
+        <input type="text" placeholder="Role" value={newAgent.role} onChange={e => setNewAgent({...newAgent, role: e.target.value})} />
+        <input type="color" value={newAgent.color} onChange={e => setNewAgent({...newAgent, color: e.target.value})} />
+        <button className="save-btn" onClick={handleAddAgent}>Save</button>
+        <button className="cancel-btn" onClick={() => setIsAdding(false)}>Cancel</button>
+      </div>
+    );
+  };
+
   /** Renders the active squad agent management view. */
   const renderAgentsView = () => (
     <div className="view">
@@ -413,15 +427,7 @@ function App() {
           <button className="add-btn" onClick={() => setIsAdding(true)}>+ New Agent Profile</button>
         </div>
 
-        {isAdding && (
-          <div className="quick-add-form">
-            <input type="text" placeholder="Name" value={newAgent.name} onChange={e => setNewAgent({...newAgent, name: e.target.value})} />
-            <input type="text" placeholder="Role" value={newAgent.role} onChange={e => setNewAgent({...newAgent, role: e.target.value})} />
-            <input type="color" value={newAgent.color} onChange={e => setNewAgent({...newAgent, color: e.target.value})} />
-            <button className="save-btn" onClick={handleAddAgent}>Save</button>
-            <button className="cancel-btn" onClick={() => setIsAdding(false)}>Cancel</button>
-          </div>
-        )}
+        {renderAddAgentForm()}
 
         <table className="agents-table">
           <thead>
