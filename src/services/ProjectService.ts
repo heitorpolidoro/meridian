@@ -12,7 +12,7 @@ export const ProjectSchema = z.object({
 export type Project = z.infer<typeof ProjectSchema>;
 
 export class ProjectService {
-  constructor(private fs: IFileSystem) {}
+  constructor(private readonly fs: IFileSystem) {}
 
   listProjects(searchPath: string): Project[] {
     if (!this.fs.exists(searchPath) || !this.fs.isDirectory(searchPath)) {

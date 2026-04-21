@@ -81,5 +81,15 @@ describe('TrackMetadataService', () => {
       expect(result[0].id).toBe('track-1');
       expect(result[1].id).toBe('track-2');
     });
+    it('returns existing metadata for tracks', () => {
+      const tracksPath = path.join(meridianDir, 'tracks');
+      fs.mkdir(tracksPath);
+      fs.mkdir(path.join(tracksPath, 'track-1'));
+      service.updateTrackMetadata('track-1', { name: 'Existing Track' });
+      
+      const result = service.listTracksWithMetadata();
+      expect(result).toHaveLength(1);
+      expect(result[0].name).toBe('Existing Track');
+    });
   });
 });

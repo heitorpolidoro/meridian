@@ -4,7 +4,7 @@ import { TelemetryMetric, TelemetrySummary } from './IPCSchemas';
 export class TelemetryCollectorService implements ITelemetryCollector {
   private metrics: TelemetryMetric[] = [];
 
-  recordMetric(type: 'latency' | 'tokens' | 'errors', value: number, metadata?: any): void {
+  recordMetric(type: 'latency' | 'tokens' | 'errors', value: number, metadata?: unknown): void {
     this.metrics.push({
       type,
       value,

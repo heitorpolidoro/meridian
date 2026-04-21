@@ -19,7 +19,7 @@ export class ContextInjectionService implements IContextInjectionService {
    * Prevents leaking secrets like .env or large dependencies.
    */
   public isForbidden(filePath: string): boolean {
-    const normalizedPath = filePath.replace(/\\/g, '/');
+    const normalizedPath = filePath.split('\\').join('/');
     const pathParts = normalizedPath.split('/');
 
     return pathParts.some(part => {

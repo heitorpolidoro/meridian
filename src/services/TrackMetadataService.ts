@@ -84,7 +84,8 @@ export class TrackMetadataService {
     if (updatedMetadata.status === 'Completed' && currentMetadata.status !== 'Completed') {
       updatedMetadata.dates.completed = new Date().toISOString();
     } else if (updatedMetadata.status !== 'Completed') {
-      delete updatedMetadata.dates.completed;
+      const { completed: _, ...remainingDates } = updatedMetadata.dates;
+      updatedMetadata.dates = remainingDates;
     }
 
     const parsed = TrackMetadataSchema.parse(updatedMetadata);
@@ -101,15 +102,19 @@ export class TrackMetadataService {
       return this.fs.isDirectory(path.join(tracksPath, file)) && !file.startsWith('.');
     });
 
-    return directories.map(trackId => {
+    return directories.reduce((acc: TrackMetadata[], trackId) => {
       const metadata = this.getTrackMetadata(trackId);
-      if (metadata) return metadata;
-
-      return this.updateTrackMetadata(trackId, {
-        name: trackId,
-        status: 'Draft',
-        progress: 0
-      });
-    });
+      if (metadata) {
+        acc.push(metadata);
+      } else {
+        const created = this.updateTrackMetadata(trackId, {
+          name: trackId,
+          status: 'Draft',
+          progress: 0
+        });
+        acc.push(created);
+      }
+      return acc;
+    }, []);
   }
 }
