@@ -374,6 +374,7 @@ function App() {
     </div>
   );
 
+  /** Renders a single agent row in the squad table. */
   const renderAgentRow = (agent: Agent) => {
     if (editingId === agent.id) {
       return (
