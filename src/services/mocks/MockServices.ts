@@ -14,11 +14,11 @@ export class MockFileSystem implements IFileSystem {
   }
 
   deleteFile(path: string): void {
-    delete this.files[path];
+    (this.files as any)[path] = undefined;
   }
 
   exists(path: string): boolean {
-    return !!this.files[path] || this.directories.has(path);
+    return this.files[path] !== undefined || this.directories.has(path);
   }
 
   readDirectory(path: string): string[] {

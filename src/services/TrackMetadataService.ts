@@ -84,7 +84,8 @@ export class TrackMetadataService {
     if (updatedMetadata.status === 'Completed' && currentMetadata.status !== 'Completed') {
       updatedMetadata.dates.completed = new Date().toISOString();
     } else if (updatedMetadata.status !== 'Completed') {
-      delete updatedMetadata.dates.completed;
+      const { completed, ...remainingDates } = updatedMetadata.dates;
+      updatedMetadata.dates = remainingDates;
     }
 
     const parsed = TrackMetadataSchema.parse(updatedMetadata);
