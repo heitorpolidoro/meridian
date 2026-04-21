@@ -1,10 +1,26 @@
 # Meridian AI Manager
 
-[![CI](https://github.com/heitorpolidoro/meridian/actions/workflows/nodejs-test.yml/badge.svg)](https://github.com/heitorpolidoro/meridian/actions/workflows/nodejs-test.yml)
-[![DeepSource](https://static.deepsource.io/deepsource-badge-light-mini.svg)](https://deepsource.io/gh/heitorpolidoro/meridian/)
-[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_meridian&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=heitorpolidoro_meridian)
-[![Node.js Version](https://img.shields.io/badge/node-v22%20%7C%20v24-blue)](https://nodejs.org/)
-[![GitHub Sponsors](https://img.shields.io/github/sponsors/heitorpolidoro?color=ea4aaa)](https://github.com/sponsors/heitorpolidoro)
+<div>
+<!-- GitHub CI -->
+<a href="https://github.com/heitorpolidoro/meridian/actions/workflows/nodejs-test.yml"><img src="https://github.com/heitorpolidoro/meridian/actions/workflows/nodejs-test.yml/badge.svg" alt="CI Status"></a>
+<!-- GitHub Sponsors -->
+<a href="https://github.com/sponsors/heitorpolidoro"><img src="https://img.shields.io/github/sponsors/heitorpolidoro?color=ea4aaa" alt="GitHub Sponsors"></a>
+</div>
+
+<div>
+<!-- DeepSource -->
+<a href="https://deepsource.io/gh/heitorpolidoro/meridian/"><img src="https://app.deepsource.com/gh/heitorpolidoro/meridian.svg/?label=active+issues&show_all=true" alt="DeepSource Meridian Active Issues"></a>
+</div>
+
+<div>
+<!-- SonarCloud -->
+<a href="https://sonarcloud.io/summary/new_code?id=heitorpolidoro_meridian"><img src="https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_meridian&metric=alert_status" alt="SonarCloud Quality Gate"></a>
+<a href="https://sonarcloud.io/summary/new_code?id=heitorpolidoro_meridian"><img src="https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_meridian&metric=coverage" alt="SonarCloud Coverage"></a>
+<a href="https://sonarcloud.io/summary/new_code?id=heitorpolidoro_meridian"><img src="https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_meridian&metric=bugs" alt="SonarCloud Bugs"></a>
+<a href="https://sonarcloud.io/summary/new_code?id=heitorpolidoro_meridian"><img src="https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_meridian&metric=vulnerabilities" alt="SonarCloud Vulnerabilities"></a>
+<a href="https://sonarcloud.io/summary/new_code?id=heitorpolidoro_meridian"><img src="https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_meridian&metric=code_smells" alt="SonarCloud Code Smells"></a>
+<a href="https://sonarcloud.io/summary/new_code?id=heitorpolidoro_meridian"><img src="https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_meridian&metric=sqale_rating" alt="SonarCloud Maintainability"></a>
+</div>
 
 Meridian: Intelligent Project Manager with Multi-Agent Orchestration
 
