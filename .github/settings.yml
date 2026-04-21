@@ -9,6 +9,7 @@ repository:
   allow_merge_commit: false
   allow_rebase_merge: false
   delete_branch_on_merge: true
+  allow_auto_merge: true
 
 branches:
   - name: master
@@ -28,6 +29,6 @@ branches:
           - "DeepSource: JavaScript"
           - "test (22.x)"
           - "test (24.x)"
-      enforce_admins: true
+      enforce_admins: false
       required_conversation_resolution: true
       restrictions: null
