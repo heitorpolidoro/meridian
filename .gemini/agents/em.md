@@ -1,5 +1,5 @@
 ---
-name: engineering-manager
+name: em
 description: "Engineering Manager focused on orchestrating project teams."
 ---
 

@@ -145,5 +145,19 @@
     "role": "Technical leader focused on complex cross-cutting problems.",
     "instruction": "Bootstrap loaded from filesystem.",
     "color": "#00c3ff"
+  },
+  {
+    "id": "phoenix-expert",
+    "name": "phoenix-expert",
+    "role": "Advanced specialist in Phoenix and LiveView development.",
+    "instruction": "Bootstrap loaded from filesystem.",
+    "color": "#00c3ff"
+  },
+  {
+    "id": "tailwind-expert",
+    "name": "tailwind-expert",
+    "role": "Advanced specialist in Tailwind CSS and modern styling.",
+    "instruction": "Bootstrap loaded from filesystem.",
+    "color": "#00c3ff"
   }
 ]

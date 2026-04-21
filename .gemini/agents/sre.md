@@ -1,5 +1,5 @@
 ---
-name: site-reliability-engineer
+name: sre
 description: "Site Reliability Engineer focused on availability and performance."
 ---
 

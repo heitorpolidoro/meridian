@@ -1,5 +1,5 @@
 ---
-name: quality-assurance
+name: qa
 description: "Quality Assurance expert for testing and verification."
 ---
 

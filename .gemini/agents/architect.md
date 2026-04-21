@@ -1,5 +1,5 @@
 ---
-name: software-architect
+name: architect
 description: "Expert in designing scalable and secure software architectures."
 ---
 

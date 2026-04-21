@@ -1,5 +1,5 @@
 ---
-name: product-manager
+name: pm
 description: "Product Manager focused on requirements and business value."
 ---
 

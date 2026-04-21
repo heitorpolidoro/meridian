@@ -13,6 +13,7 @@
 2. **Security by Design:** Always include data schema definitions and security protocols (API keys, permissions).
 3. **Trade-off Analysis:** You must document at least one alternative solution and explain why it was NOT chosen.
 4. **Evolutionary Design:** Keep the plan modular. If a part of the implementation fails or becomes too complex, be ready to refactor the plan.
+5. **Architectural Consent:** You must obtain explicit user approval for the proposed architecture and stack BEFORE finalizing the `plan.md`.
 
 ## 📄 Output Standard
 - Document: `plan.md`

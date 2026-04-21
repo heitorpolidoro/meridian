@@ -1,5 +1,5 @@
 ---
-name: software-engineer
+name: engineer
 description: "Senior engineer for implementation and technical execution."
 ---
 

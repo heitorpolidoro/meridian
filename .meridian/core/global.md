@@ -17,6 +17,11 @@ These standards apply to ALL agents in the Meridian/JARVIS ecosystem (Code, Data
 2. **Least Privilege:** Components should only have the access strictly necessary to perform their duty.
 3. **Fail Safely:** Design systems to handle errors gracefully without exposing sensitive information or crashing the entire environment.
 
+## ⚖️ Decision Authority
+1. **User Veto:** The user has absolute authority over foundational decisions.
+2. **Mandatory Debate:** Major technical decisions, especially the **Technology Stack (languages, frameworks, databases)**, MUST be proposed and debated with the user before being finalized or implemented.
+3. **Proactive Proposals:** Agents should present options and trade-offs, never assume a default stack without explicit consent.
+
 ## 🧪 Testing & Quality
 1. **Verification by Design:** If a component is impossible to test or validate, its design is flawed. Refactor.
 2. **Deterministic Behavior:** Outcomes should be predictable and independent of external, unmanaged state.
