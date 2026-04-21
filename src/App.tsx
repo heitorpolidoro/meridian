@@ -158,7 +158,7 @@ function App() {
   };
 
   const handleSelectProject = (project: Project) => {
-    if (window.confirm(`Switch to project "${project.name}"?`)) {
+    if (globalThis.confirm(`Switch to project "${project.name}"?`)) {
       socket.emit('save-settings', { ...settings, rootDir: project.path });
       setTimeout(() => {
         socket.emit('get-agents');
@@ -259,12 +259,12 @@ function App() {
           )}
         </div>
         <nav>
-          <div className={view === 'dashboard' ? 'active' : ''} onClick={() => handleViewChange('dashboard')}>Dashboard</div>
-          <div className={view === 'projects' ? 'active' : ''} onClick={() => handleViewChange('projects')}>Projects</div>
-          <div className={view === 'warroom' ? 'active' : ''} onClick={() => handleViewChange('warroom')}>War Room</div>
-          <div className={view === 'tracks' ? 'active' : ''} onClick={() => handleViewChange('tracks')}>Tracks</div>
-          <div className={view === 'agents' ? 'active' : ''} onClick={() => handleViewChange('agents')}>Agents</div>
-          <div className={view === 'settings' ? 'active' : ''} onClick={() => handleViewChange('settings')}>Settings</div>
+          <button type="button" className={view === 'dashboard' ? 'active' : ''} onClick={() => handleViewChange('dashboard')}>Dashboard</button>
+          <button type="button" className={view === 'projects' ? 'active' : ''} onClick={() => handleViewChange('projects')}>Projects</button>
+          <button type="button" className={view === 'warroom' ? 'active' : ''} onClick={() => handleViewChange('warroom')}>War Room</button>
+          <button type="button" className={view === 'tracks' ? 'active' : ''} onClick={() => handleViewChange('tracks')}>Tracks</button>
+          <button type="button" className={view === 'agents' ? 'active' : ''} onClick={() => handleViewChange('agents')}>Agents</button>
+          <button type="button" className={view === 'settings' ? 'active' : ''} onClick={() => handleViewChange('settings')}>Settings</button>
         </nav>
       </aside>
 
@@ -274,14 +274,19 @@ function App() {
             <header><h1>Projects Discovery</h1></header>
             <div className="projects-grid">
               {projects.length > 0 ? projects.map(project => (
-                <div key={project.id} className={`project-card ${settings.rootDir === project.path ? 'active' : ''}`} onClick={() => handleSelectProject(project)}>
+                <button 
+                  key={project.id} 
+                  type="button"
+                  className={`project-card ${settings.rootDir === project.path ? 'active' : ''}`} 
+                  onClick={() => handleSelectProject(project)}
+                >
                   <div className="project-icon">📂</div>
                   <div className="project-info">
                     <h3>{project.name}</h3>
                     <p className="project-path">{project.path}</p>
                   </div>
                   {settings.rootDir === project.path && <div className="current-badge">Current</div>}
-                </div>
+                </button>
               )) : (
                 <div className="no-projects">No projects found with .meridian directory in the workspace.</div>
               )}

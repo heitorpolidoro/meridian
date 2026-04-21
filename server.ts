@@ -180,7 +180,7 @@ io.on('connection', (socket) => {
                 socket.emit('file-content', { trackId, fileName, content });
             }
         } catch (err) {
-            if ((err as any).code !== 'ENOENT') {
+            if (err.code !== 'ENOENT') {
                 log(`Error reading file: ${err}`, 'ERROR');
             }
         }
