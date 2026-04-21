@@ -259,6 +259,7 @@ function App() {
     });
   };
 
+  /** Renders the projects discovery view. */
   const renderProjectsView = () => (
     <div className="view projects-view">
       <header><h1>Projects Discovery</h1></header>
@@ -369,6 +370,8 @@ function App() {
     </div>
   );
 
+  /** Renders the active squad agent management view. */
+  // skipcq: JS-0415
   const renderAgentsView = () => (
     <div className="view">
       <header><h1>Active Squad</h1></header>
@@ -450,6 +453,7 @@ function App() {
     </div>
   );
 
+  /** Evaluates the current view state and renders the appropriate content component. */
   const renderContent = () => {
     switch (view) {
       case 'dashboard': return renderDashboardView();

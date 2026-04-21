@@ -66,6 +66,9 @@ export class MockFileSystem implements IFileSystem {
 export class MockShell implements IShell {
   private responses: Map<string, { stdout: string; stderr: string; exitCode: number }> = new Map();
 
+  /**
+   * Executes a mock shell command and returns the predefined response.
+   */
   execute(command: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     const response = this.responses.get(command);
     if (response) {
