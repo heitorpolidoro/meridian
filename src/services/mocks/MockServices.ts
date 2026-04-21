@@ -46,8 +46,8 @@ export class MockFileSystem implements IFileSystem {
 export class MockShell implements IShell {
   private responses: Record<string, { stdout: string; stderr: string; exitCode: number }> = {};
 
-  async execute(command: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-    return this.responses[command] || { stdout: '', stderr: '', exitCode: 0 };
+  execute(command: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+    return Promise.resolve(this.responses[command] || { stdout: '', stderr: '', exitCode: 0 });
   }
 
   // Helper for tests

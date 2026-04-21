@@ -75,7 +75,7 @@ export class AgentRegistryService {
       
       return {
         id: fileId,
-        name: name,
+        name,
         role: existing?.role || role,
         instruction: existing?.instruction || 'Bootstrap loaded from filesystem.',
         color: existing?.color || '#00c3ff'

@@ -1,7 +1,7 @@
 import express from 'express';
 import { createServer } from 'node:http';
 import { Server } from 'socket.io';
-import { spawn, exec } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
@@ -88,6 +88,7 @@ io.on('connection', (socket) => {
     let gemini: any = null;
     let sessionId: string | null = null;
     let requestId = 3;
+    let promptStartTime: number | null = null;
 
     socket.on('get-settings', () => socket.emit('settings', getSettings()));
     socket.on('save-settings', (s) => { 
@@ -103,7 +104,7 @@ io.on('connection', (socket) => {
             const projects = projectService.listProjects(parentDir);
             socket.emit('projects', projects);
         } catch (err) {
-            log('Error listing projects: ' + err, 'ERROR');
+            log(`Error listing projects: ${err}`, 'ERROR');
             socket.emit('projects', []);
         }
     });
@@ -121,7 +122,7 @@ io.on('connection', (socket) => {
             socket.emit('agents-saved');
             socket.emit('agents', agentRegistry.getAgents());
         } catch (err) {
-            log('Error saving agents: ' + err, 'ERROR');
+            log(`Error saving agents: ${err}`, 'ERROR');
         }
     });
 
@@ -136,7 +137,9 @@ io.on('connection', (socket) => {
                 let files: string[] = [];
                 try {
                     files = fs.readdirSync(trackPath).filter(file => file.endsWith('.md'));
-                } catch {}
+                } catch {
+                    // Ignore missing track directories
+                }
                 
                 const session = sessionManager.getSession(metadata.id);
                 
@@ -151,7 +154,7 @@ io.on('connection', (socket) => {
 
             socket.emit('tracks', tracksWithFiles);
         } catch (err) {
-            log('Error scanning tracks: ' + err, 'ERROR');
+            log(`Error scanning tracks: ${err}`, 'ERROR');
             socket.emit('tracks', []);
         }
     });
@@ -179,7 +182,7 @@ io.on('connection', (socket) => {
                 const content = fs.readFileSync(realPath, 'utf8');
                 socket.emit('file-content', { trackId, fileName, content });
             }
-        } catch (err) {
+        } catch (err: any) {
             if (err.code !== 'ENOENT') {
                 log(`Error reading file: ${err}`, 'ERROR');
             }
@@ -233,7 +236,7 @@ Whenever I send a directive, simulate a brief debate and end with [VERDICT].`;
             log(`Gemini process error: ${err}`, 'ERROR');
         });
 
-        const sendACP = (msg: any) => { gemini.stdin.write(JSON.stringify(msg) + '\n'); log(JSON.stringify(msg), 'OUT'); };
+        const sendACP = (msg: any) => { gemini.stdin.write(`${JSON.stringify(msg)}\n`); log(JSON.stringify(msg), 'OUT'); };
 
         socket.emit('status', 'Initializing...');
         sendACP({
@@ -248,8 +251,19 @@ Whenever I send a directive, simulate a brief debate and end with [VERDICT].`;
                 if (!trimmed) continue;
                 try {
                     const parsed = JSON.parse(trimmed);
-                    if (parsed.id === 1) sendACP({ jsonrpc: "2.0", id: 2, method: "session/new", params: { cwd: rootDir, mcpServers: [], systemInstruction: { role: 'system', parts: [{ text: fullInstruction }] } } });
-                    if (parsed.id === 2 && parsed.result?.sessionId) { sessionId = parsed.result.sessionId; socket.emit('ready'); }
+                    if (parsed.id === 1) {
+                        sendACP({ 
+                            jsonrpc: "2.0", id: 2, method: "session/new", 
+                            params: { 
+                                cwd: rootDir, mcpServers: [], 
+                                systemInstruction: { role: 'system', parts: [{ text: fullInstruction }] } 
+                            } 
+                        });
+                    }
+                    if (parsed.id === 2 && parsed.result?.sessionId) { 
+                        sessionId = parsed.result.sessionId; 
+                        socket.emit('ready'); 
+                    }
                     if (parsed.method === 'session/update') {
                         const update = parsed.params?.update;
                         if (update?.sessionUpdate === 'agent_message_chunk') {
@@ -265,7 +279,9 @@ Whenever I send a directive, simulate a brief debate and end with [VERDICT].`;
                         }
                         socket.emit('done');
                     }
-                } catch {}
+                } catch {
+                    // Ignore malformed JSON from Gemini process
+                }
             }
         });
     });
@@ -273,8 +289,11 @@ Whenever I send a directive, simulate a brief debate and end with [VERDICT].`;
     socket.on('diretriz', (text) => {
         if (!sessionId || !gemini) return;
         promptStartTime = Date.now();
-        const promptMsg = { jsonrpc: "2.0", id: requestId++, method: "session/prompt", params: { sessionId, prompt: [{ type: "text", text: text.trim() }] } };
-        gemini.stdin.write(JSON.stringify(promptMsg) + '\n');
+        const promptMsg = { 
+            jsonrpc: "2.0", id: requestId++, method: "session/prompt", 
+            params: { sessionId, prompt: [{ type: "text", text: text.trim() }] } 
+        };
+        gemini.stdin.write(`${JSON.stringify(promptMsg)}\n`);
     });
 
     socket.on('disconnect', () => { if (gemini) gemini.kill(); });

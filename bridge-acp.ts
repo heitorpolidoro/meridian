@@ -28,7 +28,7 @@ function log(msg: string, level: 'OUT' | 'IN' | 'INFO' | 'ERROR' = 'INFO') {
     console.error(`${colors[level]}[${timestamp}] [${level}] ${msg}\x1b[0m`);
 }
 
-async function runBridge() {
+function runBridge() {
     log('Iniciando Monitoramento FULL ACP (Odin & Mimir)...');
 
     const gemini = spawn(GEMINI_CMD, GEMINI_ARGS, {
@@ -46,7 +46,7 @@ async function runBridge() {
         params: { protocolVersion: 0, clientInfo: { name: "asgard-council", version: "1.0" }, capabilities: {} }
     };
     log(JSON.stringify(initMsg), 'OUT');
-    gemini.stdin.write(JSON.stringify(initMsg) + '\n');
+    gemini.stdin.write(`${JSON.stringify(initMsg)}\n`);
 
     // 2. Handshake: New Session
     setTimeout(() => {
@@ -55,7 +55,7 @@ async function runBridge() {
             params: { cwd: process.cwd(), mcpServers: [] }
         };
         log(JSON.stringify(sessionMsg), 'OUT');
-        gemini.stdin.write(JSON.stringify(sessionMsg) + '\n');
+        gemini.stdin.write(`${JSON.stringify(sessionMsg)}\n`);
     }, 500);
 
     geminiOut.on('line', (line) => {
@@ -77,7 +77,7 @@ async function runBridge() {
                     params: { sessionId, prompt: [{ type: "text", text: SYSTEM_INSTRUCTION }] }
                 };
                 log(JSON.stringify(setupMsg), 'OUT');
-                gemini.stdin.write(JSON.stringify(setupMsg) + '\n');
+                gemini.stdin.write(`${JSON.stringify(setupMsg)}\n`);
                 
                 process.stdout.write('\n--- CONSELHO PRONTO ---\nDIRETRIZ > ');
             }
@@ -97,7 +97,9 @@ async function runBridge() {
             if (data.id >= 3 && data.result) {
                 process.stdout.write('\n\n[DELIBERAÇÃO CONCLUÍDA]\nDIRETRIZ > ');
             }
-        } catch (e) {}
+        } catch (e) {
+            // Ignore malformed JSON or other parsing errors
+        }
     });
 
     const terminalIn = readline.createInterface({ input: process.stdin });
@@ -109,13 +111,13 @@ async function runBridge() {
             id: requestId++,
             method: "session/prompt",
             params: {
-                sessionId: sessionId,
+                sessionId,
                 prompt: [{ type: "text", text: input.trim() }]
             }
         };
 
         log(JSON.stringify(promptMsg), 'OUT');
-        gemini.stdin.write(JSON.stringify(promptMsg) + '\n');
+        gemini.stdin.write(`${JSON.stringify(promptMsg)}\n`);
     });
 
     gemini.stderr.on('data', (d) => {

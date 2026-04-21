@@ -194,13 +194,16 @@ function App() {
   };
 
   const handleDeleteAgent = (id: string) => {
-    if (!window.confirm('Delete this agent profile?')) return;
+    if (!globalThis.confirm('Delete this agent profile?')) return;
     const updated = agents.filter(a => a.id !== id);
     socket.emit('save-agents', updated);
   };
 
   const handleAddAgent = () => {
-    if (!newAgent.name || !newAgent.role) return showFlash('Name and Role are required.');
+    if (!newAgent.name || !newAgent.role) {
+      showFlash('Name and Role are required.');
+      return;
+    }
     const id = newAgent.name.toLowerCase().replace(/\s+/g, '-');
     const agent: Agent = {
       id,
@@ -221,7 +224,10 @@ function App() {
   };
 
   const handleSaveEdit = () => {
-    if (!editAgent.name || !editAgent.role) return showFlash('Name and Role are required.');
+    if (!editAgent.name || !editAgent.role) {
+      showFlash('Name and Role are required.');
+      return;
+    }
     const updated = agents.map(a => a.id === editingId ? (editAgent as Agent) : a);
     socket.emit('save-agents', updated);
     setEditingId(null);
