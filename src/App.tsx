@@ -259,12 +259,12 @@ function App() {
           )}
         </div>
         <nav>
-          <button type="button" className={view === 'dashboard' ? 'active' : ''} onClick={() => handleViewChange('dashboard')}>Dashboard</button>
-          <button type="button" className={view === 'projects' ? 'active' : ''} onClick={() => handleViewChange('projects')}>Projects</button>
-          <button type="button" className={view === 'warroom' ? 'active' : ''} onClick={() => handleViewChange('warroom')}>War Room</button>
-          <button type="button" className={view === 'tracks' ? 'active' : ''} onClick={() => handleViewChange('tracks')}>Tracks</button>
-          <button type="button" className={view === 'agents' ? 'active' : ''} onClick={() => handleViewChange('agents')}>Agents</button>
-          <button type="button" className={view === 'settings' ? 'active' : ''} onClick={() => handleViewChange('settings')}>Settings</button>
+          <button type="button" aria-current={view === 'dashboard' ? 'page' : undefined} className={view === 'dashboard' ? 'active' : ''} onClick={() => handleViewChange('dashboard')}>Dashboard</button>
+          <button type="button" aria-current={view === 'projects' ? 'page' : undefined} className={view === 'projects' ? 'active' : ''} onClick={() => handleViewChange('projects')}>Projects</button>
+          <button type="button" aria-current={view === 'warroom' ? 'page' : undefined} className={view === 'warroom' ? 'active' : ''} onClick={() => handleViewChange('warroom')}>War Room</button>
+          <button type="button" aria-current={view === 'tracks' ? 'page' : undefined} className={view === 'tracks' ? 'active' : ''} onClick={() => handleViewChange('tracks')}>Tracks</button>
+          <button type="button" aria-current={view === 'agents' ? 'page' : undefined} className={view === 'agents' ? 'active' : ''} onClick={() => handleViewChange('agents')}>Agents</button>
+          <button type="button" aria-current={view === 'settings' ? 'page' : undefined} className={view === 'settings' ? 'active' : ''} onClick={() => handleViewChange('settings')}>Settings</button>
         </nav>
       </aside>
 
@@ -277,13 +277,14 @@ function App() {
                 <button 
                   key={project.id} 
                   type="button"
+                  aria-current={settings.rootDir === project.path ? 'true' : undefined}
                   className={`project-card ${settings.rootDir === project.path ? 'active' : ''}`} 
                   onClick={() => handleSelectProject(project)}
                 >
                   <div className="project-icon">📂</div>
                   <div className="project-info">
-                    <h3>{project.name}</h3>
-                    <p className="project-path">{project.path}</p>
+                    <span className="project-title">{project.name}</span>
+                    <span className="project-path">{project.path}</span>
                   </div>
                   {settings.rootDir === project.path && <div className="current-badge">Current</div>}
                 </button>

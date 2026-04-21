@@ -210,12 +210,37 @@ You act as the primary project orchestrator, ensuring that the SDS process is st
                     f.write(skill_content)
                 print_color(f"  ✅ {name.title()} - skill created", GREEN)
 
-            ids_str = ", ".join(ids)
-            if is_new_role:
-                print_color(f"  ✅ {name.title()} ({ids_str}) - agents added", GREEN)
-                new_count += 1
-            else:
-                existing_count += 1
+        # 3. Copy custom skills from .meridian/skills
+        source_custom_skills = source_dir / ".meridian" / "skills"
+        if source_custom_skills.exists():
+            for skill_item in source_custom_skills.iterdir():
+                if skill_item.is_dir():
+                    target_skill_path = target_dir / ".gemini" / "skills" / skill_item.name
+                    if target_skill_path.exists():
+                        shutil.rmtree(target_skill_path)
+                    shutil.copytree(skill_item, target_skill_path)
+                    print_color(f"  ✅ Custom skill '{skill_item.name}' synced.", GREEN)
+
+        # 4. Generate .skill packages for portability
+        for skill_item in (target_dir / ".gemini" / "skills").iterdir():
+            if skill_item.is_dir():
+                # Attempt to package if package_skill.cjs is available in the source_dir structure
+                # This is more for the factory itself to generate portable files
+                package_script = source_dir / "node_modules" / "@google" / "gemini-cli" / "bundle" / "builtin" / "skill-creator" / "scripts" / "package_skill.cjs"
+                # Fallback to a common global path or relative to source
+                if not package_script.exists():
+                    package_script = Path("/Users/heitor/.nvm/versions/node/v24.13.0/lib/node_modules/@google/gemini-cli/bundle/builtin/skill-creator/scripts/package_skill.cjs")
+                
+                if package_script.exists():
+                    os.system(f"node {package_script} {skill_item} {target_dir} > /dev/null 2>&1")
+                    print_color(f"  📦 Portable package '{skill_item.name}.skill' generated.", CYAN)
+
+        ids_str = ", ".join(ids)
+        if is_new_role:
+            print_color(f"  ✅ {name.title()} ({ids_str}) - agents added", GREEN)
+            new_count += 1
+        else:
+            existing_count += 1
 
         if existing_count > 0:
             print_color(f"  ℹ️  Refreshed {existing_count} existing roles.", NC)
