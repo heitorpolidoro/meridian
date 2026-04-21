@@ -13,23 +13,22 @@ import { BootstrappingService } from './src/services/BootstrappingService';
 import { TelemetryCollectorService } from './src/services/TelemetryCollectorService';
 import { NodeFilesystemWatcher } from './src/services/implementations/NodeFilesystemWatcher';
 import { SDSComplianceScorer } from './src/services/SDSComplianceScorer';
+import { ProjectService } from './src/services/ProjectService';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Central settings management (persisted in Meridian's own .meridian folder)
 const SETTINGS_DIR = path.join(__dirname, '.meridian');
 const SETTINGS_FILE = path.join(SETTINGS_DIR, 'settings.json');
 
 if (!fs.existsSync(SETTINGS_DIR)) fs.mkdirSync(SETTINGS_DIR);
 
 const fileSystem = new NodeFileSystem();
-const agentRegistry = new AgentRegistryService(fileSystem, __dirname);
-const trackMetadataService = new TrackMetadataService(fileSystem, SETTINGS_DIR);
 const sessionManager = new SessionManagerService();
-const bootstrappingService = new BootstrappingService(fileSystem, __dirname);
 const telemetryCollector = new TelemetryCollectorService();
 const watcher = new NodeFilesystemWatcher();
-const complianceScorer = new SDSComplianceScorer(fileSystem, path.join(SETTINGS_DIR, 'tracks'));
+const projectService = new ProjectService(fileSystem);
 
 const DEFAULT_SETTINGS = {
     rootDir: process.cwd()
@@ -42,6 +41,22 @@ function getSettings() {
 
 function saveSettings(settings: any) { fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2)); }
 
+// Helper to get services for the CURRENT rootDir
+function getContextServices() {
+    const settings = getSettings();
+    const rootDir = settings.rootDir;
+    const meridianDir = path.join(rootDir, '.meridian');
+    
+    return {
+        rootDir,
+        meridianDir,
+        agentRegistry: new AgentRegistryService(fileSystem, rootDir),
+        trackMetadataService: new TrackMetadataService(fileSystem, meridianDir),
+        bootstrappingService: new BootstrappingService(fileSystem, rootDir),
+        complianceScorer: new SDSComplianceScorer(fileSystem, path.join(meridianDir, 'tracks'))
+    };
+}
+
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer);
@@ -49,18 +64,7 @@ const io = new Server(httpServer);
 const PORT = 3000;
 const GEMINI_CMD = 'gemini';
 
-// --- Global Watcher and Periodic Updates ---
-watcher.watch(SETTINGS_DIR, (event, filename) => {
-    io.emit('sync-conflict', {
-        path: filename,
-        type: 'manual_change',
-        message: `Manual change detected in ${filename}`,
-        timestamp: new Date().toISOString()
-    });
-    const trackIds = trackMetadataService.listTracksWithMetadata().map(t => t.id);
-    io.emit('compliance-update', complianceScorer.getAllCompliance(trackIds));
-});
-
+// --- Periodic Updates ---
 setInterval(() => {
     io.emit('telemetry-update', telemetryCollector.getSummary());
 }, 5000);
@@ -86,11 +90,32 @@ io.on('connection', (socket) => {
     let requestId = 3;
 
     socket.on('get-settings', () => socket.emit('settings', getSettings()));
-    socket.on('save-settings', (s) => { saveSettings(s); socket.emit('settings-saved'); });
+    socket.on('save-settings', (s) => { 
+        saveSettings(s); 
+        socket.emit('settings-saved'); 
+        socket.emit('settings', getSettings()); // Broadcast back updated settings
+    });
 
-    socket.on('get-agents', () => socket.emit('agents', agentRegistry.discoverAgents()));
+    socket.on('get-projects', () => {
+        try {
+            const settings = getSettings();
+            const parentDir = path.dirname(settings.rootDir);
+            const projects = projectService.listProjects(parentDir);
+            socket.emit('projects', projects);
+        } catch (err) {
+            log('Error listing projects: ' + err, 'ERROR');
+            socket.emit('projects', []);
+        }
+    });
+
+    socket.on('get-agents', () => {
+        const { agentRegistry } = getContextServices();
+        socket.emit('agents', agentRegistry.discoverAgents());
+    });
+
     socket.on('save-agents', (a) => { 
         try {
+            const { agentRegistry } = getContextServices();
             agentRegistry.saveAgents(a); 
             agentRegistry.syncToGemini(a);
             socket.emit('agents-saved');
@@ -100,11 +125,11 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- Track Navigator Handlers ---
     socket.on('get-tracks', () => {
         try {
+            const { trackMetadataService, meridianDir } = getContextServices();
             const metadataList = trackMetadataService.listTracksWithMetadata();
-            const tracksDir = path.join(SETTINGS_DIR, 'tracks');
+            const tracksDir = path.join(meridianDir, 'tracks');
 
             const tracksWithFiles = metadataList.map(metadata => {
                 const trackPath = path.join(tracksDir, metadata.id);
@@ -113,7 +138,6 @@ io.on('connection', (socket) => {
                     files = fs.readdirSync(trackPath).filter(file => file.endsWith('.md'));
                 } catch {}
                 
-                // Attach session state if exists
                 const session = sessionManager.getSession(metadata.id);
                 
                 return {
@@ -136,10 +160,10 @@ io.on('connection', (socket) => {
         const { trackId, fileName } = data || {};
         if (typeof trackId !== 'string' || typeof fileName !== 'string') return;
 
-        const tracksDir = path.resolve(SETTINGS_DIR, 'tracks');
+        const { meridianDir } = getContextServices();
+        const tracksDir = path.resolve(meridianDir, 'tracks');
         const resolvedPath = path.resolve(tracksDir, trackId, fileName);
         
-        // Ensure the initial resolved path is within the tracks directory
         const relative = path.relative(tracksDir, resolvedPath);
         const isSafe = relative && !relative.startsWith('..') && !path.isAbsolute(relative);
 
@@ -150,14 +174,6 @@ io.on('connection', (socket) => {
 
         try {
             const realPath = fs.realpathSync(resolvedPath);
-            const safetyCheck = path.relative(tracksDir, realPath);
-            const isRealPathSafe = safetyCheck && !safetyCheck.startsWith('..') && !path.isAbsolute(safetyCheck);
-            
-            if (!isRealPathSafe) {
-                log(`Blocked potential path traversal attempt: trackId=${trackId}, fileName=${fileName}`, 'ERROR');
-                return;
-            }
-            
             const stats = fs.statSync(realPath);
             if (stats.isFile()) {
                 const content = fs.readFileSync(realPath, 'utf8');
@@ -170,33 +186,26 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- Core Session Management (Task 1.4) ---
     socket.on('assign-agent', ({ trackId, agentId, taskId }) => {
+        const { trackMetadataService } = getContextServices();
         const session = sessionManager.assignAgent(trackId, agentId, taskId);
         socket.emit('session-updated', session);
-        // Refresh tracks to show new state
         socket.emit('tracks', trackMetadataService.listTracksWithMetadata().map(m => ({
             ...m,
             activeSession: sessionManager.getSession(m.id) || { status: 'Idle' }
         })));
     });
 
-    // --- Legacy AI Session (Updated with Bootstrapping Engine) ---
-    let promptStartTime: number | null = null;
-
     socket.on('start-session', () => {
         if (gemini) gemini.kill();
-        const settings = getSettings();
+        const { rootDir, meridianDir, agentRegistry, bootstrappingService } = getContextServices();
         const agents = agentRegistry.getAgents();
 
-        // 1. Load Global Standards
-        const globalPath = path.join(__dirname, '.meridian/core/global.md');
+        const globalPath = path.join(meridianDir, 'core/global.md');
         const globalContent = fs.existsSync(globalPath) ? fs.readFileSync(globalPath, 'utf8') : '';
 
-        // 2. Resolve each agent's full hierarchy
         const agentInstructions = agents.map((a: any) => {
             try {
-                // We use resolveAgent to get the hierarchy without prepending global every time
                 const resolved = bootstrappingService.resolveAgent(a.id);
                 return `${a.name.toUpperCase()} (${a.role}):\n${resolved}`;
             } catch (err) {
@@ -215,7 +224,7 @@ Whenever I send a directive, simulate a brief debate and end with [VERDICT].`;
             '--resume', 'latest', '-y', '--extensions', ''
         ], {
             stdio: ['pipe', 'pipe', 'pipe'],
-            cwd: settings.rootDir,
+            cwd: rootDir,
             env: { ...process.env, PYTHONUNBUFFERED: '1' }
         });
 
@@ -239,7 +248,7 @@ Whenever I send a directive, simulate a brief debate and end with [VERDICT].`;
                 if (!trimmed) continue;
                 try {
                     const parsed = JSON.parse(trimmed);
-                    if (parsed.id === 1) sendACP({ jsonrpc: "2.0", id: 2, method: "session/new", params: { cwd: settings.rootDir, mcpServers: [], systemInstruction: { role: 'system', parts: [{ text: fullInstruction }] } } });
+                    if (parsed.id === 1) sendACP({ jsonrpc: "2.0", id: 2, method: "session/new", params: { cwd: rootDir, mcpServers: [], systemInstruction: { role: 'system', parts: [{ text: fullInstruction }] } } });
                     if (parsed.id === 2 && parsed.result?.sessionId) { sessionId = parsed.result.sessionId; socket.emit('ready'); }
                     if (parsed.method === 'session/update') {
                         const update = parsed.params?.update;

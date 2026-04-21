@@ -2,7 +2,13 @@
 body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #0B0E14; color: #e2e8f0; }
 .app-container { display: flex; height: 100vh; background: #0B0E14; color: #e2e8f0; overflow: hidden; }
 aside { width: 240px; background: #131720; border-right: 1px solid #1f2937; display: flex; flex-direction: column; box-shadow: 2px 0 10px rgba(0,0,0,0.3); z-index: 10; }
-aside h2 { padding: 1.5rem 1.5rem; font-size: 1.4rem; font-weight: 700; color: #38bdf8; border-bottom: 1px solid #1f2937; margin: 0; letter-spacing: 0.05rem; }
+.sidebar-header { padding: 1.5rem 1.5rem; border-bottom: 1px solid #1f2937; }
+aside h2 { font-size: 1.4rem; font-weight: 700; color: #38bdf8; margin: 0; letter-spacing: 0.05rem; }
+
+.active-project-info { margin-top: 0.8rem; display: flex; flex-direction: column; }
+.project-label { font-size: 0.7rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05rem; font-weight: 600; }
+.project-name { font-size: 0.9rem; color: #f8fafc; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
 nav { flex: 1; padding: 1.5rem 0; display: flex; flex-direction: column; gap: 0.2rem; }
 nav div { padding: 0.9rem 1.5rem; cursor: pointer; transition: all 0.2s ease; border-left: 3px solid transparent; font-weight: 500; color: #94a3b8; }
 nav div:hover { background: rgba(56, 189, 248, 0.08); color: #e2e8f0; }
@@ -53,4 +59,17 @@ footer button:disabled { background: #334155; color: #64748b; cursor: not-allowe
 /* Flash Notifications */
 #flash-container { position: fixed; bottom: 20px; right: 20px; z-index: 1000; display: flex; flex-direction: column; gap: 10px; }
 .flash-msg { background: #28a745; color: white; padding: 12px 24px; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); font-size: 0.9rem; animation: slideIn 0.3s ease-out; min-width: 250px; border-left: 4px solid #1e7e34; }
+
+/* Projects Discovery */
+.projects-view { padding: 0; }
+.projects-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.5rem; padding: 2rem; }
+.project-card { background: #131720; border: 1px solid #1f2937; border-radius: 12px; padding: 1.5rem; display: flex; align-items: flex-start; gap: 1rem; cursor: pointer; transition: all 0.2s ease; position: relative; }
+.project-card:hover { transform: translateY(-3px); border-color: #38bdf8; background: rgba(56, 189, 248, 0.05); }
+.project-card.active { border-color: #38bdf8; background: rgba(56, 189, 248, 0.1); }
+.project-icon { font-size: 2rem; }
+.project-info h3 { margin: 0 0 0.5rem 0; font-size: 1.1rem; color: #f8fafc; }
+.project-path { margin: 0; font-size: 0.8rem; color: #64748b; font-family: monospace; word-break: break-all; }
+.current-badge { position: absolute; top: 1rem; right: 1rem; background: #38bdf8; color: #0f172a; font-size: 0.7rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 20px; text-transform: uppercase; }
+.no-projects { padding: 3rem; text-align: center; color: #64748b; font-style: italic; grid-column: 1 / -1; }
+
 @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }

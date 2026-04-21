@@ -28,8 +28,14 @@ interface Track {
   };
 }
 
+interface Project {
+  id: string;
+  name: string;
+  path: string;
+}
+
 function App() {
-  const [view, setView] = useState<'dashboard' | 'warroom' | 'tracks' | 'agents' | 'settings'>('dashboard');
+  const [view, setView] = useState<'dashboard' | 'warroom' | 'tracks' | 'agents' | 'settings' | 'projects'>('dashboard');
   const [messages, setMessages] = useState<{ text: string; type: string }[]>([]);
   const [status, setStatus] = useState('Initializing...');
   const [input, setInput] = useState('');
@@ -41,6 +47,7 @@ function App() {
   const [telemetry, setTelemetry] = useState<TelemetrySummary | null>(null);
   const [compliance, setCompliance] = useState<SDSCompliance[]>([]);
   const [conflicts, setConflicts] = useState<SyncConflict[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   
   // Track Navigator States
   const [tracks, setTracks] = useState<Track[]>([]);
@@ -60,10 +67,12 @@ function App() {
     socket.emit('get-settings');
     socket.emit('get-agents');
     socket.emit('get-tracks');
+    socket.emit('get-projects');
     
     socket.on('settings', (s) => setSettings(s));
     socket.on('agents', (a) => setAgents(a));
     socket.on('tracks', (t) => setTracks(t));
+    socket.on('projects', (p) => setProjects(p));
     
     socket.on('telemetry-update', (data) => setTelemetry(data));
     socket.on('compliance-update', (data) => setCompliance(data));
@@ -112,6 +121,7 @@ function App() {
       socket.off('settings');
       socket.off('agents');
       socket.off('tracks');
+      socket.off('projects');
       socket.off('telemetry-update');
       socket.off('compliance-update');
       socket.off('sync-conflict');
@@ -139,11 +149,23 @@ function App() {
   const handleViewChange = (newView: typeof view) => {
     setView(newView);
     if (newView === 'warroom') {
-      setMessages([]); // Reset messages when entering War Room for now
+      setMessages([]); 
       socket.emit('start-session');
     }
-    if (newView === 'tracks' || newView === 'agents') {
-      socket.emit(`get-${newView}`);
+    if (newView === 'tracks' || newView === 'agents' || newView === 'projects') {
+      socket.emit(`get-${newView === 'projects' ? 'projects' : newView}`);
+    }
+  };
+
+  const handleSelectProject = (project: Project) => {
+    if (window.confirm(`Switch to project "${project.name}"?`)) {
+      socket.emit('save-settings', { ...settings, rootDir: project.path });
+      setTimeout(() => {
+        socket.emit('get-agents');
+        socket.emit('get-tracks');
+        showFlash(`Switched to project ${project.name}`);
+        // If we are in tracks or agents view, they will be refreshed by the emits above
+      }, 500);
     }
   };
 
@@ -158,8 +180,6 @@ function App() {
 
   const handleNavigate = (path: string) => {
     if (!selectedTrack) return;
-    // Resolve relative links (e.g., ./plan.md or ../track-x/plan.md)
-    // Simple implementation for now: just strip leading ./ or ../ and use current track
     const fileName = path.replace(/^(\.\/|\.\.\/)+/, '');
     handleSelectFile(selectedTrack.id, fileName);
   };
@@ -220,6 +240,8 @@ function App() {
     });
   };
 
+  const activeProject = projects.find(p => p.path === settings.rootDir);
+
   return (
     <div className="app-container">
       <div id="flash-container">
@@ -227,9 +249,18 @@ function App() {
       </div>
 
       <aside>
-        <h2>Meridian</h2>
+        <div className="sidebar-header">
+          <h2>Meridian</h2>
+          {activeProject && (
+            <div className="active-project-info">
+              <span className="project-label">Project:</span>
+              <span className="project-name">{activeProject.name}</span>
+            </div>
+          )}
+        </div>
         <nav>
           <div className={view === 'dashboard' ? 'active' : ''} onClick={() => handleViewChange('dashboard')}>Dashboard</div>
+          <div className={view === 'projects' ? 'active' : ''} onClick={() => handleViewChange('projects')}>Projects</div>
           <div className={view === 'warroom' ? 'active' : ''} onClick={() => handleViewChange('warroom')}>War Room</div>
           <div className={view === 'tracks' ? 'active' : ''} onClick={() => handleViewChange('tracks')}>Tracks</div>
           <div className={view === 'agents' ? 'active' : ''} onClick={() => handleViewChange('agents')}>Agents</div>
@@ -238,6 +269,26 @@ function App() {
       </aside>
 
       <main>
+        {view === 'projects' && (
+          <div className="view projects-view">
+            <header><h1>Projects Discovery</h1></header>
+            <div className="projects-grid">
+              {projects.length > 0 ? projects.map(project => (
+                <div key={project.id} className={`project-card ${settings.rootDir === project.path ? 'active' : ''}`} onClick={() => handleSelectProject(project)}>
+                  <div className="project-icon">📂</div>
+                  <div className="project-info">
+                    <h3>{project.name}</h3>
+                    <p className="project-path">{project.path}</p>
+                  </div>
+                  {settings.rootDir === project.path && <div className="current-badge">Current</div>}
+                </div>
+              )) : (
+                <div className="no-projects">No projects found with .meridian directory in the workspace.</div>
+              )}
+            </div>
+          </div>
+        )}
+
         {view === 'dashboard' && (
           <div className="view">
             <header><h1>Governance Dashboard</h1></header>
