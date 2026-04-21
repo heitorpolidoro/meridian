@@ -183,7 +183,7 @@ io.on('connection', (socket) => {
                 socket.emit('file-content', { trackId, fileName, content });
             }
         } catch (err: unknown) {
-            if (err instanceof Error && (err as any).code !== 'ENOENT') {
+            if (err instanceof Error && (err as Error & { code?: string }).code !== 'ENOENT') {
                 log(`Error reading file: ${err.message}`, 'ERROR');
             }
         }

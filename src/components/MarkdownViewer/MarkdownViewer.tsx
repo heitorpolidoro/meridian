@@ -16,8 +16,8 @@ export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({ content = '', on
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          code({ node, inline, className, children, ...props }: any) { // skipcq: JS-0323
-            const match = /language-(\w+)/.exec(className || '');
+          code({ node, inline, className, children, ...props }: Record<string, unknown>) {
+            const match = /language-(\w+)/.exec((className as string) || '');
             const lang = match ? match[1] : '';
             // Basic language support list, fallback to text
             const isSupported = ['typescript', 'ts', 'tsx', 'javascript', 'json', 'bash', 'markdown', 'css', 'html'].includes(lang);
@@ -25,19 +25,19 @@ export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({ content = '', on
             return !inline && (isSupported || match) ? (
               <SyntaxHighlighter
                 {...props}
-                style={vscDarkPlus}
+                style={vscDarkPlus as Record<string, React.CSSProperties>}
                 language={isSupported ? lang : 'text'}
                 PreTag="div"
               >
                 {String(children).replace(/\n$/, '')}
               </SyntaxHighlighter>
             ) : (
-              <code {...props} className={className}>
-                {children}
+              <code {...props} className={className as string}>
+                {children as React.ReactNode}
               </code>
             );
           },
-          a({ node, href, children, ...props }: any) { // skipcq: JS-0323
+          a({ node, href, children, ...props }: Record<string, unknown>) {
             const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
               if (!href) return;
               
