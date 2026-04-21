@@ -374,10 +374,37 @@ function App() {
     </div>
   );
 
+  const renderAgentRow = (agent: Agent) => {
+    if (editingId === agent.id) {
+      return (
+        <tr key={agent.id}>
+          <td><input className="table-input" type="text" value={editAgent.name} onChange={e => setEditAgent({...editAgent, name: e.target.value})} /></td>
+          <td><input className="table-input" type="text" value={editAgent.role} onChange={e => setEditAgent({...editAgent, role: e.target.value})} /></td>
+          <td><input type="color" value={editAgent.color} onChange={e => setEditAgent({...editAgent, color: e.target.value})} /></td>
+          <td className="row-actions">
+            <button className="save-row-btn" onClick={handleSaveEdit}>✅</button>
+            <button className="cancel-row-btn" onClick={() => setEditingId(null)}>❌</button>
+          </td>
+        </tr>
+      );
+    }
+    return (
+      <tr key={agent.id}>
+        <td className="agent-name-cell">{agent.name}</td>
+        <td className="agent-role-cell">{agent.role}</td>
+        <td className="agent-color-cell">
+          <div className="color-swatch" style={{ backgroundColor: agent.color }} />
+          <code>{agent.color}</code>
+        </td>
+        <td className="row-actions">
+          <button className="edit-row-btn" onClick={() => startEditing(agent)}>✏️</button>
+          <button className="delete-row-btn" onClick={() => handleDeleteAgent(agent.id)}>🗑️</button>
+        </td>
+      </tr>
+    );
+  };
+
   /** Renders the active squad agent management view. */
-  // skipcq: JS-0415
-  /** Renders the active squad agent management view. */
-  // skipcq: JS-0415
   const renderAgentsView = () => (
     <div className="view">
       <header><h1>Active Squad</h1></header>
@@ -406,34 +433,7 @@ function App() {
             </tr>
           </thead>
           <tbody>
-            {agents.map(agent => (
-              <tr key={agent.id}>
-                {editingId === agent.id ? (
-                  <>
-                    <td><input className="table-input" type="text" value={editAgent.name} onChange={e => setEditAgent({...editAgent, name: e.target.value})} /></td>
-                    <td><input className="table-input" type="text" value={editAgent.role} onChange={e => setEditAgent({...editAgent, role: e.target.value})} /></td>
-                    <td><input type="color" value={editAgent.color} onChange={e => setEditAgent({...editAgent, color: e.target.value})} /></td>
-                    <td className="row-actions">
-                      <button className="save-row-btn" onClick={handleSaveEdit}>✅</button>
-                      <button className="cancel-row-btn" onClick={() => setEditingId(null)}>❌</button>
-                    </td>
-                  </>
-                ) : (
-                  <>
-                    <td className="agent-name-cell">{agent.name}</td>
-                    <td className="agent-role-cell">{agent.role}</td>
-                    <td className="agent-color-cell">
-                      <div className="color-swatch" style={{ backgroundColor: agent.color }} />
-                      <code>{agent.color}</code>
-                    </td>
-                    <td className="row-actions">
-                      <button className="edit-row-btn" onClick={() => startEditing(agent)}>✏️</button>
-                      <button className="delete-row-btn" onClick={() => handleDeleteAgent(agent.id)}>🗑️</button>
-                    </td>
-                  </>
-                )}
-              </tr>
-            ))}
+            {agents.map(renderAgentRow)}
           </tbody>
         </table>
         <footer className="table-footer">
@@ -443,25 +443,27 @@ function App() {
     </div>
   );
 
+  const renderSettingsForm = () => (
+    <div className="form-group">
+      <label>Root Directory</label>
+      <div className="input-group">
+        <input type="text" value={settings.rootDir} readOnly />
+        <button className="browse-btn" onClick={() => socket.emit('pick-directory')}>Browse...</button>
+      </div>
+    </div>
+  );
+
   /** Renders the application settings view. */
-  // skipcq: JS-0415
   const renderSettingsView = () => (
     <div className="view">
       <header><h1>Settings</h1></header>
       <div className="settings-content">
-        <div className="form-group">
-          <label>Root Directory</label>
-          <div className="input-group">
-            <input type="text" value={settings.rootDir} readOnly />
-            <button className="browse-btn" onClick={() => socket.emit('pick-directory')}>Browse...</button>
-          </div>
-        </div>
+        {renderSettingsForm()}
         <button className="save-btn" onClick={() => socket.emit('save-settings', settings)}>Save Settings</button>
       </div>
     </div>
   );
 
-  /** Evaluates the current view state and renders the appropriate content component. */
   /** Evaluates the current view state and renders the appropriate content component. */
   const renderContent = () => {
     switch (view) {
