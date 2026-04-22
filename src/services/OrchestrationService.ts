@@ -1,0 +1,137 @@
+import path from 'node:path';
+import { SDSStateMachine, SDSPhase, OrchestrationStatus } from './SDSStateMachine';
+import { TrackMetadataService, TrackMetadata } from './TrackMetadataService';
+import { IFileSystem } from './interfaces/ICoreServices';
+
+export interface OrchestrationLogEntry {
+  timestamp: string;
+  fromPhase?: SDSPhase;
+  toPhase: SDSPhase;
+  status: OrchestrationStatus;
+  agent?: string;
+  message?: string;
+  trigger?: 'Auto' | 'Manual' | 'Override';
+}
+
+export class OrchestrationService {
+  constructor(
+    private trackMetadataService: TrackMetadataService,
+    private fs: IFileSystem,
+    private meridianDir: string
+  ) {}
+
+  private getTrackDir(trackId: string): string {
+    return path.join(this.meridianDir, 'tracks', trackId);
+  }
+
+  private appendAuditLog(trackId: string, entry: OrchestrationLogEntry) {
+    const logPath = path.join(this.getTrackDir(trackId), 'orchestration.log');
+    const logLine = JSON.stringify(entry) + '\n';
+    
+    // We explicitly don't catch here so that a log failure blocks the transition (transactional integrity)
+    this.fs.appendFile(logPath, logLine);
+  }
+
+  /**
+   * Requests a phase transition for a specific track.
+   */
+  async requestTransition(
+    trackId: string, 
+    targetPhase: SDSPhase, 
+    message?: string,
+    trigger: 'Auto' | 'Manual' | 'Override' = 'Manual'
+  ): Promise<TrackMetadata> {
+    const metadata = this.trackMetadataService.getTrackMetadata(trackId);
+    if (!metadata) {
+      throw new Error(`Track ${trackId} not found.`);
+    }
+
+    const currentPhase = metadata.orchestration.currentPhase as SDSPhase;
+    const currentStatus = metadata.orchestration.status as OrchestrationStatus;
+    const validation = SDSStateMachine.validateTransition(currentPhase, targetPhase);
+
+    // SDS Integrity Guard: Forward linear transitions MUST be in HandoffReady status
+    // unless it is an explicit User Override.
+    const isForward = SDSStateMachine.getNextPhase(currentPhase) === targetPhase;
+    if (isForward && currentStatus !== 'HandoffReady' && trigger !== 'Override') {
+      throw new Error(`Cannot transition to ${targetPhase}: current phase ${currentPhase} must be in 'HandoffReady' status.`);
+    }
+
+    if (!validation.valid && trigger !== 'Override') {
+      throw new Error(validation.error || 'Invalid transition');
+    }
+
+    const newAgent = SDSStateMachine.getAssignedRole(targetPhase);
+    const timestamp = new Date().toISOString();
+
+    const logEntry: OrchestrationLogEntry = {
+      timestamp,
+      fromPhase: currentPhase,
+      toPhase: targetPhase,
+      status: 'InProgress',
+      agent: newAgent,
+      message,
+      trigger
+    };
+
+    // Write to persistent audit log file
+    this.appendAuditLog(trackId, logEntry);
+
+    return this.trackMetadataService.updateTrackMetadata(trackId, {
+      orchestration: {
+        ...metadata.orchestration,
+        currentPhase: targetPhase,
+        status: 'InProgress',
+        assignedAgent: newAgent,
+        handoffTimestamp: timestamp,
+        logs: [logEntry, ...(metadata.orchestration.logs || [])].slice(0, 50)
+      }
+    });
+  }
+
+  /**
+   * Updates the orchestration status of a track without changing the phase.
+   */
+  async updateStatus(
+    trackId: string, 
+    status: OrchestrationStatus, 
+    message?: string,
+    trigger: 'Auto' | 'Manual' | 'Override' = 'Auto'
+  ): Promise<TrackMetadata> {
+    const metadata = this.trackMetadataService.getTrackMetadata(trackId);
+    if (!metadata) {
+      throw new Error(`Track ${trackId} not found.`);
+    }
+
+    const timestamp = new Date().toISOString();
+    const currentPhase = metadata.orchestration.currentPhase as SDSPhase;
+
+    const logEntry: OrchestrationLogEntry = {
+      timestamp,
+      toPhase: currentPhase,
+      status,
+      agent: metadata.orchestration.assignedAgent,
+      message,
+      trigger
+    };
+
+    // Write to persistent audit log file
+    this.appendAuditLog(trackId, logEntry);
+
+    return this.trackMetadataService.updateTrackMetadata(trackId, {
+      orchestration: {
+        ...metadata.orchestration,
+        status,
+        logs: [logEntry, ...(metadata.orchestration.logs || [])].slice(0, 50)
+      }
+    });
+  }
+
+  /**
+   * Gets the current orchestration state for a track.
+   */
+  getOrchestrationState(trackId: string) {
+    const metadata = this.trackMetadataService.getTrackMetadata(trackId);
+    return metadata?.orchestration || null;
+  }
+}

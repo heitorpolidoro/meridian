@@ -16,6 +16,11 @@ export class MockFileSystem implements IFileSystem {
     this.files.set(path, content);
   }
 
+  appendFile(path: string, content: string): void {
+    const existing = this.files.get(path) || '';
+    this.files.set(path, existing + content);
+  }
+
   deleteFile(path: string): void {
     this.files.delete(path);
   }

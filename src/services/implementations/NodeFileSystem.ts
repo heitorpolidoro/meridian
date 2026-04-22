@@ -13,6 +13,11 @@ export class NodeFileSystem implements IFileSystem {
   }
 
   // skipcq: JS-0105
+  appendFile(path: string, content: string): void {
+    fs.appendFileSync(path, content, 'utf8');
+  }
+
+  // skipcq: JS-0105
   deleteFile(path: string): void {
     if (fs.existsSync(path)) {
       fs.unlinkSync(path);

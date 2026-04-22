@@ -3,7 +3,8 @@ import type { TelemetrySummary } from '../IPCSchemas';
 export interface IFileSystem {
   readFile(path: string): string;
   writeFile(path: string, content: string): void;
-  deleteFile(path: string): void; // New Method
+  appendFile(path: string, content: string): void; // Added for performance logging
+  deleteFile(path: string): void;
   exists(path: string): boolean;
   readDirectory(path: string): string[];
   isDirectory(path: string): boolean;

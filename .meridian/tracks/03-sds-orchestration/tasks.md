@@ -6,36 +6,40 @@
 
 ## 1. Core State Machine (HSM Logic)
 
-### T1.1: Update Track Metadata Schema
+### T1.1: Update Track Metadata Schema ✅
 - **Description:** Update `TrackMetadataSchema` in `src/services/TrackMetadataService.ts` to include the `orchestration` object as defined in the Implementation Plan.
 - **DoD:** 
   - `TrackMetadataSchema` includes `orchestration` field with `currentPhase`, `status`, `assignedAgent`, `handoffTimestamp`, and `logs`.
   - Zod schemas for `SDSPhase` and `OrchestrationStatus` are implemented.
   - Existing tests for `TrackMetadataService` pass.
+- **Status:** COMPLETED ✅
 - **Test Coverage:** 100%
 
-### T1.2: Implement HSM Logic for SDS Phases
+### T1.2: Implement HSM Logic for SDS Phases ✅
 - **Description:** Create a robust Hierarchical State Machine logic that defines valid transitions between SDS phases (1.1 -> 1.2 -> 2.1 -> 3.1 -> 4.2 -> 5.0) and handling of sub-phases.
 - **DoD:**
   - Logic correctly identifies valid and invalid transitions.
   - Supports 'Idle', 'InProgress', 'HandoffReady', and 'Failed' statuses.
   - Unit tests cover all transition paths, including edge cases.
+- **Status:** COMPLETED ✅
 - **Test Coverage:** 100%
 
-### T1.3: Create OrchestrationService
+### T1.3: Create OrchestrationService ✅
 - **Description:** Implement `OrchestrationService` to manage the lifecycle of SDS orchestration across tracks. It should centralize the state machine and coordinate between validation and agent activation.
 - **DoD:**
   - Service is registered in the DI/Service container.
   - Provides methods to query current phase, request transition, and record logs.
   - Maintains state consistency for multiple tracks.
+- **Status:** COMPLETED ✅
 - **Test Coverage:** 100%
 
-### T1.4: Implement Orchestration Audit Logging
+### T1.4: Implement Orchestration Audit Logging ✅
 - **Description:** Implement the logic to write detailed handoff events to `orchestration.log` (JSONL format) within the track's directory.
 - **DoD:**
   - Logs are appended to `.meridian/tracks/<track_id>/orchestration.log` on every phase transition or status change.
   - Log entries include timestamp, source phase, target phase, trigger type (Auto/Manual/Override), and agent attribution.
   - Handles concurrent writes or file access errors gracefully.
+- **Status:** COMPLETED ✅
 - **Test Coverage:** 100%
 
 ---

@@ -4,6 +4,25 @@ import { IFileSystem } from './interfaces/ICoreServices';
 
 export const TrackStatusSchema = z.enum(['Draft', 'Active', 'Completed', 'Archived']);
 
+export const SDSPhaseSchema = z.enum(['1.1', '1.2', '2.1', '3.1', '4.2', '5.0']);
+export const OrchestrationStatusSchema = z.enum(['Idle', 'InProgress', 'HandoffReady', 'Failed']);
+
+export const OrchestrationSchema = z.object({
+  currentPhase: SDSPhaseSchema.default('1.1'),
+  status: OrchestrationStatusSchema.default('Idle'),
+  assignedAgent: z.string().optional(),
+  handoffTimestamp: z.string().optional(),
+  logs: z.array(z.object({
+    timestamp: z.string(),
+    fromPhase: SDSPhaseSchema.optional(),
+    toPhase: SDSPhaseSchema,
+    status: OrchestrationStatusSchema,
+    agent: z.string().optional(),
+    message: z.string().optional(),
+    trigger: z.enum(['Auto', 'Manual', 'Override']).optional()
+  })).default([])
+});
+
 export const TrackMetadataSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -17,6 +36,11 @@ export const TrackMetadataSchema = z.object({
   }).default({
     created: new Date().toISOString(),
     updated: new Date().toISOString()
+  }),
+  orchestration: OrchestrationSchema.default({
+    currentPhase: '1.1',
+    status: 'Idle',
+    logs: []
   })
 });
 
