@@ -46,23 +46,38 @@ export const TrackMetadataSchema = z.object({
 
 export type TrackMetadata = z.infer<typeof TrackMetadataSchema>;
 
+/**
+ * Service for managing track metadata persistence and schema validation.
+ */
 export class TrackMetadataService {
   private readonly TRACKS_DIR = 'tracks';
 
   constructor(private fs: IFileSystem, private meridianDir: string) {}
 
+  /**
+   * Returns the base path for all tracks.
+   */
   private getTracksPath(): string {
     return path.join(this.meridianDir, this.TRACKS_DIR);
   }
 
+  /**
+   * Returns the absolute path to a specific track directory.
+   */
   private getTrackPath(trackId: string): string {
     return path.join(this.getTracksPath(), trackId);
   }
 
+  /**
+   * Returns the path to the metadata.json file of a track.
+   */
   private getMetadataPath(trackId: string): string {
     return path.join(this.getTrackPath(trackId), 'metadata.json');
   }
 
+  /**
+   * Retrieves and validates metadata for a specific track.
+   */
   getTrackMetadata(trackId: string): TrackMetadata | null {
     const metadataPath = this.getMetadataPath(trackId);
     if (!this.fs.exists(metadataPath)) return null;
@@ -77,6 +92,10 @@ export class TrackMetadataService {
     }
   }
 
+  /**
+   * Updates track metadata and persists it to disk.
+   * Handles automatic timestamps and status transitions.
+   */
   updateTrackMetadata(trackId: string, data: Partial<TrackMetadata>): TrackMetadata {
     const trackPath = this.getTrackPath(trackId);
     if (!this.fs.exists(trackPath)) {
@@ -108,8 +127,10 @@ export class TrackMetadataService {
     if (updatedMetadata.status === 'Completed' && currentMetadata.status !== 'Completed') {
       updatedMetadata.dates.completed = new Date().toISOString();
     } else if (updatedMetadata.status !== 'Completed') {
-      const { completed: _, ...remainingDates } = updatedMetadata.dates;
-      updatedMetadata.dates = remainingDates;
+      // Remove completed date if status is not Completed
+      const newDates = { ...updatedMetadata.dates };
+      delete newDates.completed;
+      updatedMetadata.dates = newDates;
     }
 
     const parsed = TrackMetadataSchema.parse(updatedMetadata);
@@ -118,6 +139,10 @@ export class TrackMetadataService {
     return parsed;
   }
 
+  /**
+   * Lists all tracks with their corresponding metadata.
+   * Creates default metadata for tracks missing a metadata.json file.
+   */
   listTracksWithMetadata(): TrackMetadata[] {
     const tracksPath = this.getTracksPath();
     if (!this.fs.exists(tracksPath)) return [];
