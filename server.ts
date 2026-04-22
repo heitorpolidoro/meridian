@@ -249,48 +249,52 @@ Whenever I send a directive, simulate a brief debate and end with [VERDICT].`;
             params: { protocolVersion: 0, clientInfo: { name: "meridian-ai", version: "1.0" }, capabilities: {} }
         });
 
-        gemini.stdout?.on('data', (data: Buffer) => {
-            const lines = data.toString().split('\n');
-            for (const line of lines) {
-                const trimmed = line.trim();
-                if (!trimmed) continue;
-                try {
-                    const parsed = JSON.parse(trimmed);
-                    if (parsed.id === 1) {
-                        sendACP({ 
-                            jsonrpc: "2.0", id: 2, method: "session/new", 
-                            params: { 
-                                cwd: rootDir, mcpServers: [], 
-                                systemInstruction: { role: 'system', parts: [{ text: fullInstruction }] } 
-                            } 
-                        });
-                    }
-                    if (parsed.id === 2 && parsed.result?.sessionId) { 
-                        sessionId = parsed.result.sessionId; 
-                        socket.emit('ready'); 
-                    }
-                    if (parsed.method === 'session/update') {
-                        const update = parsed.params?.update;
-                        if (update?.sessionUpdate === 'agent_message_chunk') {
-                            const chunk = update.content?.text || '';
-                            telemetryCollector.recordMetric('tokens', Math.ceil(chunk.length / 4));
-                            socket.emit('chunk', chunk);
-                        }
-                    }
-                    if (parsed.id >= 3 && parsed.result) {
-                        if (promptStartTime) {
-                            telemetryCollector.recordMetric('latency', Date.now() - promptStartTime);
-                            promptStartTime = null;
-                        }
-                        socket.emit('done');
-                    }
-                } catch {
-                    // Ignore malformed JSON from Gemini process
-                }
-            }
+        gemini.stdout?.on('data', (data: Buffer) => handleGeminiStream(data, socket, sendACP));
         });
-    });
 
+        /**
+        * Handles Gemini stream data, processes JSON chunks and emits events to socket.
+        */
+        function handleGeminiStream(data: Buffer, socket: any, sendACP: (msg: unknown) => void) {
+        const lines = data.toString().split('\n');
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+            try {
+                const parsed = JSON.parse(trimmed);
+                if (parsed.id === 1) {
+                    sendACP({
+                        jsonrpc: "2.0", id: 2, method: "session/new",
+                        params: {
+                            cwd: rootDir, mcpServers: [],
+                            systemInstruction: { role: 'system', parts: [{ text: fullInstruction }] }
+                        }
+                    });
+                }
+                if (parsed.id === 2 && parsed.result?.sessionId) {
+                    sessionId = parsed.result.sessionId;
+                    socket.emit('ready');
+                }
+                if (parsed.method === 'session/update') {
+                    const update = parsed.params?.update;
+                    if (update?.sessionUpdate === 'agent_message_chunk') {
+                        const chunk = update.content?.text || '';
+                        telemetryCollector.recordMetric('tokens', Math.ceil(chunk.length / 4));
+                        socket.emit('chunk', chunk);
+                    }
+                }
+                if (parsed.id >= 3 && parsed.result) {
+                    if (promptStartTime) {
+                        telemetryCollector.recordMetric('latency', Date.now() - promptStartTime);
+                        promptStartTime = null;
+                    }
+                    socket.emit('done');
+                }
+            } catch {
+                // Ignore malformed JSON from Gemini process
+            }
+        }
+        }
     socket.on('diretriz', (text: string) => {
         if (!sessionId || !gemini?.stdin) return;
         promptStartTime = Date.now();
