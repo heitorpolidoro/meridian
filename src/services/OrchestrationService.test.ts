@@ -65,16 +65,14 @@ describe('OrchestrationService', () => {
     it('aborts transition if audit log write fails (transactional integrity)', () => {
       // 1. Prepare status
       orchestrationService.updateStatus('track-1', 'HandoffReady');
-
-      const previousState = metadataService.getTrackMetadata('track-1');
-
+      
       // 2. Mock appendFile to throw AFTER successful setup
       fs.appendFile = () => { throw new Error('Disk Full'); };
-
+      
       // 3. Attempt transition
       expect(() => orchestrationService.requestTransition('track-1', '1.2'))
         .toThrow('Disk Full');
-
+        
       // 4. Verify metadata was NOT updated (integrity check)
       const current = metadataService.getTrackMetadata('track-1');
       expect(current?.orchestration.currentPhase).toBe('1.1');
@@ -82,16 +80,24 @@ describe('OrchestrationService', () => {
     });
 
     it('performs rollback on updateStatus if audit log fails', () => {
+      // 1. Get initial state
       const originalMetadata = metadataService.getTrackMetadata('track-1');
-
-      // Mock appendFile to throw
+      expect(originalMetadata).not.toBeNull();
+      
+      // 2. Mock appendFile to throw
       fs.appendFile = () => { throw new Error('I/O Error on updateStatus'); };
-
-      expect(() => orchestrationService.updateStatus('track-1', 'HandoffReady'))
-        .toThrow('I/O Error on updateStatus');
-
+      
+      // 3. Attempt status update (should throw and rollback)
+      try {
+        orchestrationService.updateStatus('track-1', 'HandoffReady');
+        // If it doesn't throw, fail the test
+        expect(true).toBe(false);
+      } catch (error) {
+        expect((error as Error).message).toBe('I/O Error on updateStatus');
+      }
+        
+      // 4. Verify deep equality of the rolled back metadata
       const afterFail = metadataService.getTrackMetadata('track-1');
-      // Deep equal check to ensure rollback was complete
       expect(afterFail).toEqual(originalMetadata);
     });
   });
