@@ -3,6 +3,8 @@ import { SDSStateMachine, SDSPhase, OrchestrationStatus } from './SDSStateMachin
 import { TrackMetadataService, TrackMetadata } from './TrackMetadataService';
 import { IFileSystem } from './interfaces/ICoreServices';
 
+export type OrchestrationTrigger = 'Auto' | 'Manual' | 'Override';
+
 export interface OrchestrationLogEntry {
   timestamp: string;
   fromPhase?: SDSPhase;
@@ -10,7 +12,7 @@ export interface OrchestrationLogEntry {
   status: OrchestrationStatus;
   agent?: string;
   message?: string;
-  trigger?: 'Auto' | 'Manual' | 'Override';
+  trigger?: OrchestrationTrigger;
 }
 
 /**
@@ -53,7 +55,7 @@ export class OrchestrationService {
     trackId: string, 
     targetPhase: SDSPhase, 
     message?: string,
-    trigger: 'Auto' | 'Manual' | 'Override' = 'Manual'
+    trigger: OrchestrationTrigger = 'Manual'
   ): TrackMetadata {
     const metadata = this.trackMetadataService.getTrackMetadata(trackId);
     if (!metadata) {
@@ -120,7 +122,7 @@ export class OrchestrationService {
     trackId: string, 
     status: OrchestrationStatus, 
     message?: string,
-    trigger: 'Auto' | 'Manual' | 'Override' = 'Auto'
+    trigger: OrchestrationTrigger = 'Auto'
   ): TrackMetadata {
     const metadata = this.trackMetadataService.getTrackMetadata(trackId);
     if (!metadata) {

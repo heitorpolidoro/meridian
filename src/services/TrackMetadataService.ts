@@ -119,10 +119,13 @@ export class TrackMetadataService {
       id: trackId,
       dates: {
         ...currentMetadata.dates,
-        ...(data.dates ?? {}),
         updated: new Date().toISOString()
       }
     };
+
+    if (data.dates) {
+      updatedMetadata.dates = { ...updatedMetadata.dates, ...data.dates };
+    }
 
     if (updatedMetadata.status === 'Completed' && currentMetadata.status !== 'Completed') {
       updatedMetadata.dates.completed = new Date().toISOString();
