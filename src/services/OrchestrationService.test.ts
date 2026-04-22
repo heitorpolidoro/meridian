@@ -90,6 +90,19 @@ describe('OrchestrationService', () => {
       const afterFail = metadataService.getTrackMetadata('track-1');
       expect(afterFail?.orchestration.status).toBe(originalStatus);
     });
+
+    it('performs rollback on updateStatus if audit log fails', () => {
+      const originalStatus = metadataService.getTrackMetadata('track-1')?.orchestration.status;
+      
+      // Mock appendFile to throw
+      fs.appendFile = () => { throw new Error('I/O Error on updateStatus'); };
+      
+      expect(() => orchestrationService.updateStatus('track-1', 'HandoffReady'))
+        .toThrow('I/O Error on updateStatus');
+        
+      const afterFail = metadataService.getTrackMetadata('track-1');
+      expect(afterFail?.orchestration.status).toBe(originalStatus);
+    });
   });
 
   describe('updateStatus', () => {
