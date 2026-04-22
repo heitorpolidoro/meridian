@@ -8,12 +8,9 @@ import fs from 'node:fs';
 import { NodeFileSystem } from './src/services/implementations/NodeFileSystem';
 import { AgentRegistryService } from './src/services/AgentRegistryService';
 import { TrackMetadataService } from './src/services/TrackMetadataService';
-import { SessionManagerService } from './src/services/SessionManagerService';
 import { BootstrappingService } from './src/services/BootstrappingService';
 import { TelemetryCollectorService } from './src/services/TelemetryCollectorService';
-import { NodeFilesystemWatcher } from './src/services/implementations/NodeFilesystemWatcher';
 import { SDSComplianceScorer } from './src/services/SDSComplianceScorer';
-import { ProjectService } from './src/services/ProjectService';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,9 +20,7 @@ const SETTINGS_FILE = path.join(SETTINGS_DIR, 'settings.json');
 if (!fs.existsSync(SETTINGS_DIR)) fs.mkdirSync(SETTINGS_DIR);
 
 const fileSystem = new NodeFileSystem();
-const sessionManager = new SessionManagerService();
 const telemetryCollector = new TelemetryCollectorService();
-const projectService = new ProjectService(fileSystem);
 
 const DEFAULT_SETTINGS = { rootDir: process.cwd() };
 
@@ -69,27 +64,31 @@ interface GeminiContext {
 /**
  * Main handler for Gemini output.
  */
-function handleGeminiStream(data: Buffer, ctx: GeminiContext) {
+function handleGeminiStream(data: Buffer, socket: Socket, sendACP: (msg: unknown) => void, ctx: GeminiContext) {
     const lines = data.toString().split('\n');
     for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed) continue;
-        processGeminiOutput(trimmed, ctx);
+        processGeminiOutput(trimmed, ctx, sendACP);
     }
 }
 
-function processGeminiOutput(jsonLine: string, ctx: GeminiContext) {
+/**
+ * Parses and dispatches Gemini JSON outputs.
+ */
+function processGeminiOutput(jsonLine: string, ctx: GeminiContext, sendACP: (msg: unknown) => void) {
     try {
-        const parsed: any = JSON.parse(jsonLine);
-        if (parsed.id === 1) handleInitialize(ctx);
+        const parsed: GeminiMessage = JSON.parse(jsonLine);
+        if (parsed.id === 1) handleInitialize(sendACP, ctx);
         if (parsed.id === 2 && parsed.result?.sessionId) {
             ctx.setSessionId(parsed.result.sessionId);
             ctx.socket.emit('ready');
         }
         if (parsed.method === 'session/update') handleSessionUpdate(parsed, ctx.socket, ctx.telemetryCollector);
-        if (parsed.id >= 3 && parsed.result) handleRequestComplete(ctx);
+        if (parsed.id !== undefined && parsed.id >= 3 && parsed.result) handleRequestComplete(ctx);
     } catch { /* Ignore malformed */ }
 }
+
 
 function handleInitialize(sendACP: (msg: unknown) => void, ctx: GeminiContext) {
     sendACP({
