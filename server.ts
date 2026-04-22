@@ -29,8 +29,17 @@ function getSettings() {
     try { return JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')); } catch { return DEFAULT_SETTINGS; }
 }
 
+/**
+ * Saves settings to the configuration file.
+ */
 function saveSettings(settings: { rootDir: string }) { fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2)); }
 
+/**
+ * Retrieves context-dependent services based on root directory.
+ */
+/**
+ * Retrieves context-dependent services based on root directory.
+ */
 function getContextServices() {
     const settings = getSettings();
     const rootDir = settings.rootDir;
@@ -44,7 +53,11 @@ function getContextServices() {
     };
 }
 
-const app = express();
+/**
+ * Logs a message to the console with level-based coloring.
+ */
+function log(msg: string, level: 'OUT' | 'IN' | 'INFO' | 'ERROR' = 'INFO') {
+
 const httpServer = createServer(app);
 const io = new Server(httpServer);
 const PORT = 3000;
@@ -90,6 +103,9 @@ function processGeminiOutput(jsonLine: string, ctx: GeminiContext, sendACP: (msg
 }
 
 
+/**
+ * Initializes a new Gemini session.
+ */
 function handleInitialize(sendACP: (msg: unknown) => void, ctx: GeminiContext) {
     sendACP({
         jsonrpc: "2.0", id: 2, method: "session/new",
@@ -100,7 +116,10 @@ function handleInitialize(sendACP: (msg: unknown) => void, ctx: GeminiContext) {
     });
 }
 
-function handleSessionUpdate(parsed: any, socket: Socket, telemetry: TelemetryCollectorService) {
+/**
+ * Updates session state based on agent messages.
+ */
+function handleSessionUpdate(parsed: GeminiMessage, socket: Socket, telemetry: TelemetryCollectorService) {
     const update = parsed.params?.update;
     if (update?.sessionUpdate === 'agent_message_chunk') {
         const chunk = update.content?.text || '';
@@ -109,6 +128,9 @@ function handleSessionUpdate(parsed: any, socket: Socket, telemetry: TelemetryCo
     }
 }
 
+/**
+ * Handles completion of a prompt request.
+ */
 function handleRequestComplete(ctx: GeminiContext) {
     const start = ctx.getPromptStartTime();
     if (start) {
