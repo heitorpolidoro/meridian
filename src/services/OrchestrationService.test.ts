@@ -114,6 +114,11 @@ describe('OrchestrationService', () => {
       const secondEntry = JSON.parse(logContent[1]);
       expect(secondEntry.status).toBe('InProgress');
     });
+
+    it('throws error for non-existent track in updateStatus', () => {
+      expect(() => orchestrationService.updateStatus('non-existent', 'HandoffReady'))
+        .toThrow('Track non-existent not found.');
+    });
   });
 
   describe('getOrchestrationState', () => {
