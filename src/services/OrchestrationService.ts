@@ -49,12 +49,12 @@ export class OrchestrationService {
    * 
    * @throws Error if track not found, transition invalid, or log fails.
    */
-  async requestTransition(
+  requestTransition(
     trackId: string, 
     targetPhase: SDSPhase, 
     message?: string,
     trigger: 'Auto' | 'Manual' | 'Override' = 'Manual'
-  ): Promise<TrackMetadata> {
+  ): TrackMetadata {
     const metadata = this.trackMetadataService.getTrackMetadata(trackId);
     if (!metadata) {
       throw new Error(`Track ${trackId} not found.`);
@@ -116,12 +116,12 @@ export class OrchestrationService {
    * 
    * @throws Error if track not found or log fails.
    */
-  async updateStatus(
+  updateStatus(
     trackId: string, 
     status: OrchestrationStatus, 
     message?: string,
     trigger: 'Auto' | 'Manual' | 'Override' = 'Auto'
-  ): Promise<TrackMetadata> {
+  ): TrackMetadata {
     const metadata = this.trackMetadataService.getTrackMetadata(trackId);
     if (!metadata) {
       throw new Error(`Track ${trackId} not found.`);

@@ -23,11 +23,11 @@ describe('OrchestrationService', () => {
   });
 
   describe('requestTransition', () => {
-    it('successfully transitions when status is HandoffReady', async () => {
+    it('successfully transitions when status is HandoffReady', () => {
       // First set status to HandoffReady
-      await orchestrationService.updateStatus('track-1', 'HandoffReady');
+      orchestrationService.updateStatus('track-1', 'HandoffReady');
       
-      const updated = await orchestrationService.requestTransition('track-1', '1.2', 'Moving to architecture');
+      const updated = orchestrationService.requestTransition('track-1', '1.2', 'Moving to architecture');
       
       expect(updated.orchestration.currentPhase).toBe('1.2');
       expect(updated.orchestration.status).toBe('InProgress');
@@ -40,32 +40,32 @@ describe('OrchestrationService', () => {
       expect(updated.orchestration.logs[0].trigger).toBe('Manual');
     });
 
-    it('blocks transition if status is not HandoffReady', async () => {
-      await expect(orchestrationService.requestTransition('track-1', '1.2'))
-        .rejects.toThrow(/must be in 'HandoffReady' status/);
+    it('blocks transition if status is not HandoffReady', () => {
+      expect(() => orchestrationService.requestTransition('track-1', '1.2'))
+        .toThrow(/must be in 'HandoffReady' status/);
     });
 
-    it('allows transition with Override even if not HandoffReady', async () => {
-      const updated = await orchestrationService.requestTransition('track-1', '1.2', 'Urgent bypass', 'Override');
+    it('allows transition with Override even if not HandoffReady', () => {
+      const updated = orchestrationService.requestTransition('track-1', '1.2', 'Urgent bypass', 'Override');
       expect(updated.orchestration.currentPhase).toBe('1.2');
       expect(updated.orchestration.logs[0].trigger).toBe('Override');
     });
 
-    it('throws error for non-existent track', async () => {
-      await expect(orchestrationService.requestTransition('non-existent', '1.2'))
-        .rejects.toThrow('Track non-existent not found.');
+    it('throws error for non-existent track', () => {
+      expect(() => orchestrationService.requestTransition('non-existent', '1.2'))
+        .toThrow('Track non-existent not found.');
     });
 
-    it('aborts transition if audit log write fails (transactional integrity)', async () => {
+    it('aborts transition if audit log write fails (transactional integrity)', () => {
       // 1. Prepare status
-      await orchestrationService.updateStatus('track-1', 'HandoffReady');
+      orchestrationService.updateStatus('track-1', 'HandoffReady');
       
       // 2. Mock appendFile to throw AFTER successful setup
       fs.appendFile = () => { throw new Error('Disk Full'); };
       
       // 3. Attempt transition
-      await expect(orchestrationService.requestTransition('track-1', '1.2'))
-        .rejects.toThrow('Disk Full');
+      expect(() => orchestrationService.requestTransition('track-1', '1.2'))
+        .toThrow('Disk Full');
         
       // 4. Verify metadata was NOT updated (integrity check)
       const current = metadataService.getTrackMetadata('track-1');
@@ -74,9 +74,9 @@ describe('OrchestrationService', () => {
   });
 
   describe('updateStatus', () => {
-    it('updates status and appends to audit log', async () => {
-      await orchestrationService.updateStatus('track-1', 'HandoffReady', 'Validation passed');
-      await orchestrationService.updateStatus('track-1', 'InProgress', 'Back to work');
+    it('updates status and appends to audit log', () => {
+      orchestrationService.updateStatus('track-1', 'HandoffReady', 'Validation passed');
+      orchestrationService.updateStatus('track-1', 'InProgress', 'Back to work');
       
       const logPath = path.join(meridianDir, 'tracks/track-1/orchestration.log');
       const logContent = fs.readFile(logPath).trim().split('\n');
