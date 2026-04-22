@@ -29,11 +29,6 @@ def main():
     print_color(f"Source: {YELLOW}{source_dir}{NC}")
     print_color(f"Target: {YELLOW}{target_dir}{NC}")
 
-    # Safety Check
-    # if source_dir == target_dir:
-    #     print_color("Error: Running inside master directory. Please run from a target project root.", RED)
-    #     sys.exit(1)
-
     # Parse Arguments
     parser = argparse.ArgumentParser(description="Sync Meridian standards and generate agents/skills.")
     parser.add_argument('--add-expert', nargs='+', help="Add expert roles (e.g., python, go, elixir)")
@@ -45,7 +40,6 @@ def main():
         available_roles = sorted([f.stem for f in roles_source_dir.glob("*.md")])
         
         for expert_input in args.add_expert:
-            # Check for direct match or -expert suffix
             direct_file = roles_source_dir / f"{expert_input}.md"
             expert_file = roles_source_dir / f"{expert_input}-expert.md"
             
@@ -78,8 +72,6 @@ def main():
             if item.is_file():
                 shutil.copy2(item, target_core_dir / item.name)
         print_color("  ✅ Core Standards synced.", GREEN)
-    else:
-        print_color("  ℹ️ Core Standards already in target.", NC)
 
     # Sync Roles
     source_roles = source_dir / ".meridian" / "roles"
@@ -89,8 +81,6 @@ def main():
             if item.is_file():
                 shutil.copy2(item, target_roles_dir / item.name)
         print_color("  ✅ Roles synced.", GREEN)
-    else:
-        print_color("  ℹ️ Roles already in target.", NC)
 
     # agents.json Logic
     source_agents_file = source_dir / ".meridian" / "agents.json"
@@ -135,9 +125,9 @@ def main():
 
     print_color("\n[3/3] Generating Triggers (Agents & Skills)...", BLUE)
     if not target_agents_file.exists():
-        print_color(f"  ⚠️  Target {target_agents_file} not found. Generation skipped.", YELLOW)
+        print_color(f"  ⚠️ Target agents.json not found.", YELLOW)
     else:
-        # Clear skills directory to ensure only allowed skills remain
+        # Clear skills directory
         skills_dir = target_dir / ".gemini" / "skills"
         if skills_dir.exists():
             shutil.rmtree(skills_dir)
@@ -146,7 +136,7 @@ def main():
         try:
             with open(target_agents_file, 'r') as f:
                 agents = json.load(f)
-        except Exception as e:
+        except (json.JSONDecodeError, IOError) as e:
             print_color(f"  ❌ Error reading {target_agents_file}: {e}", RED)
             sys.exit(1)
 
@@ -156,21 +146,13 @@ def main():
             aid = agent.get('id')
             role_desc = agent.get('role', 'Specialized Meridian Agent')
             if not name or not aid: continue
-            
             if name not in roles_map:
                 roles_map[name] = {"ids": [], "role": role_desc}
             roles_map[name]["ids"].append(aid)
 
-        new_count = 0
-        existing_count = 0
         for name, data in roles_map.items():
             role_desc = data["role"]
             ids = data["ids"]
-            
-            # Check if any ID in this role is "new"
-            is_new_role = any(aid in added_ids for aid in ids)
-
-            # 1. Generate Agent Stubs
             for aid in ids:
                 agent_file = target_dir / ".gemini" / "agents" / f"{aid}.md"
                 agent_content = f"""---
@@ -189,43 +171,30 @@ Before performing anything, you MUST read and fully load the file above to under
                 with open(agent_file, 'w') as f:
                     f.write(agent_content)
 
-            ids_str = ", ".join(ids)
+            is_new_role = any(aid in added_ids for aid in ids)
             if is_new_role:
-                print_color(f"  ✅ {name.title()} ({ids_str}) - agents added", GREEN)
-                new_count += 1
-            else:
-                existing_count += 1
+                print_color(f"  ✅ {name.title()} ({', '.join(ids)}) - agents added", GREEN)
 
-        # 2. Sync all skills from .meridian/skills dynamically
-        skills_target_dir = target_dir / ".gemini" / "skills"
-        if skills_target_dir.exists():
-            shutil.rmtree(skills_target_dir)
-        skills_target_dir.mkdir(parents=True, exist_ok=True)
-
+        # Sync skills from .meridian/skills
         source_custom_skills = source_dir / ".meridian" / "skills"
         if source_custom_skills.exists():
             for skill_item in source_custom_skills.iterdir():
                 if skill_item.is_dir():
-                    target_skill_path = skills_target_dir / skill_item.name
+                    target_skill_path = skills_dir / skill_item.name
+                    if target_skill_path.exists():
+                        shutil.rmtree(target_skill_path)
                     shutil.copytree(skill_item, target_skill_path)
                     print_color(f"  ✅ Skill '{skill_item.name}' synced.", GREEN)
 
-                    # 3. Generate .skill package for portability
+                    # Generate .skill package
                     package_script = source_dir / "node_modules" / "@google" / "gemini-cli" / "bundle" / "builtin" / "skill-creator" / "scripts" / "package_skill.cjs"
-                    if not package_script.exists():
-                        package_script = Path("/Users/heitor/.nvm/versions/node/v24.13.0/lib/node_modules/@google/gemini-cli/bundle/builtin/skill-creator/scripts/package_skill.cjs")
-                    
                     if package_script.exists():
                         os.system(f"node {package_script} {target_skill_path} {target_dir} > /dev/null 2>&1")
                         print_color(f"  📦 Portable package '{skill_item.name}.skill' generated.", CYAN)
 
-        if existing_count > 0:
-            print_color(f"  ℹ️  Refreshed {existing_count} existing roles.", NC)
-
-        print_color(f"\nSuccessfully synced {len(roles_map)} roles ({len(agents)} triggers).", GREEN)
+        print_color(f"\nSuccessfully synced {len(roles_map)} roles.", GREEN)
 
     print_color("\n=== Synchronization & Generation Complete! ===", GREEN)
-    print_color("Meridian infrastructure is active. Agents/Skills ready.")
 
 if __name__ == "__main__":
     main()

@@ -33,9 +33,17 @@ describe('TrackMetadataService', () => {
         progress: 50,
         dates: { created: '2024-01-01T12:00:00.000Z', updated: '2024-01-01T12:00:00.000Z' }
       };
+      const expectedData = {
+        ...validData,
+        orchestration: {
+          currentPhase: '1.1',
+          status: 'Idle',
+          logs: []
+        }
+      };
       fs.mkdir(path.dirname(metadataPath));
       fs.writeFile(metadataPath, JSON.stringify(validData));
-      expect(service.getTrackMetadata('track-1')).toEqual(validData);
+      expect(service.getTrackMetadata('track-1')).toEqual(expectedData);
     });
 
     it('returns null if JSON is invalid', () => {

@@ -7,6 +7,8 @@ vi.mock('node:fs', () => ({
   default: {
     readFileSync: vi.fn(),
     writeFileSync: vi.fn(),
+    appendFileSync: vi.fn(),
+    unlinkSync: vi.fn(),
     existsSync: vi.fn(),
     readdirSync: vi.fn(),
     statSync: vi.fn(() => ({ isDirectory: () => false })),
@@ -30,6 +32,17 @@ describe('NodeFileSystem (Concrete)', () => {
   it('should call writeFileSync', () => {
     nfs.writeFile('test.txt', 'data');
     expect(fs.writeFileSync).toHaveBeenCalled();
+  });
+
+  it('should call appendFileSync', () => {
+    nfs.appendFile('test.txt', 'data');
+    expect(fs.appendFileSync).toHaveBeenCalled();
+  });
+
+  it('should call unlinkSync in deleteFile', () => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    nfs.deleteFile('test.txt');
+    expect(fs.unlinkSync).toHaveBeenCalled();
   });
 
   it('should call existsSync', () => {

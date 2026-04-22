@@ -1,18 +1,31 @@
-import { IShell } from '../IShell.ts';
+import { IShell } from '../interfaces/ICoreServices';
 
+/**
+ * Mock implementation of IShell for testing.
+ */
 export class MockShell implements IShell {
-  private mockResponses: Map<string, { stdout: string; stderr: string }> = new Map();
+  private readonly responses: Map<string, { stdout: string; stderr: string; exitCode: number }> = new Map();
 
-  // skipcq: JS-0105
-  exec(command: string, _options?: { cwd?: string; env?: NodeJS.ProcessEnv }): Promise<{ stdout: string; stderr: string }> {
-    const response = this.mockResponses.get(command);
+  /**
+   * Executes a mock shell command and returns the predefined response.
+   */
+  execute(command: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+    const response = this.responses.get(command);
+
     if (response) {
       return Promise.resolve(response);
     }
-    return Promise.resolve({ stdout: '', stderr: '' });
+    return Promise.resolve({ stdout: '', stderr: '', exitCode: 0 });
   }
 
-  setMockResponse(command: string, response: { stdout: string; stderr: string }): void {
-    this.mockResponses.set(command, response);
+  /**
+   * Helper for tests to setup command responses.
+   */
+  __setupResponse(command: string, response: { stdout: string; stderr: string; exitCode: number }) {
+    this.responses.set(command, response);
+  }
+
+  setMockResponse(command: string, response: { stdout: string; stderr: string; exitCode: number }) {
+    this.__setupResponse(command, response);
   }
 }
