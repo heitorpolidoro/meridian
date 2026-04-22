@@ -52,8 +52,12 @@ describe('SDSStateMachine', () => {
       expect(SDSStateMachine.getAssignedRole('1.1')).toBe('product-manager');
     });
 
-    it('returns software-architect for phase 1.2', () => {
+    it( 'returns software-architect for phase 1.2', () => {
       expect(SDSStateMachine.getAssignedRole('1.2')).toBe('software-architect');
+    });
+
+    it('returns software-architect for phase 2.1', () => {
+      expect(SDSStateMachine.getAssignedRole('2.1')).toBe('software-architect');
     });
 
     it('returns software-engineer for phase 3.1', () => {
