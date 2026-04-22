@@ -1,5 +1,3 @@
-import { z } from 'zod';
-
 export const SDS_PHASES = ['1.1', '1.2', '2.1', '3.1', '4.2', '5.0'] as const;
 export type SDSPhase = (typeof SDS_PHASES)[number];
 
@@ -11,6 +9,11 @@ export interface TransitionResult {
   error?: string;
 }
 
+/**
+ * Implements the Hierarchical State Machine (HSM) logic for the 
+ * Software Development Standard (SDS) phases.
+ * Defines valid transitions and maps roles to phases.
+ */
 export class SDSStateMachine {
   /**
    * Defines the linear progression of SDS phases.

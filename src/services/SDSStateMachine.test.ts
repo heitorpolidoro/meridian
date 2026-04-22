@@ -31,7 +31,7 @@ describe('SDSStateMachine', () => {
 
     it('handles invalid phase strings gracefully', () => {
       // @ts-expect-error Testing runtime invalid input
-      const result = SDSStateMachine.validateTransition('invalid' as any, '1.1');
+      const result = SDSStateMachine.validateTransition('invalid' as SDSPhase, '1.1');
       expect(result.valid).toBe(false);
       expect(result.error).toBe('Invalid phase detected.');
     });
@@ -66,7 +66,7 @@ describe('SDSStateMachine', () => {
 
     it('returns software-engineer for unknown/default phases', () => {
       // @ts-expect-error Testing fallback
-      expect(SDSStateMachine.getAssignedRole('9.9' as any)).toBe('software-engineer');
+      expect(SDSStateMachine.getAssignedRole('9.9' as SDSPhase)).toBe('software-engineer');
     });
   });
 });

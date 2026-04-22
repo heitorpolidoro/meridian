@@ -133,8 +133,12 @@ def main():
             shutil.rmtree(skills_dir)
         skills_dir.mkdir(parents=True, exist_ok=True)
 
-        with open(target_agents_file, 'r') as f:
-            agents = json.load(f)
+        try:
+            with open(target_agents_file, 'r') as f:
+                agents = json.load(f)
+        except (json.JSONDecodeError, IOError) as e:
+            print_color(f"  ❌ Error reading {target_agents_file}: {e}", RED)
+            sys.exit(1)
 
         roles_map = {}
         for agent in agents:
@@ -183,8 +187,8 @@ Before performing anything, you MUST read and fully load the file above to under
                     print_color(f"  ✅ Skill '{skill_item.name}' synced.", GREEN)
 
                     # Generate .skill package
-                    package_script = "/Users/heitor/.nvm/versions/node/v24.13.0/lib/node_modules/@google/gemini-cli/bundle/builtin/skill-creator/scripts/package_skill.cjs"
-                    if os.path.exists(package_script):
+                    package_script = source_dir / "node_modules" / "@google" / "gemini-cli" / "bundle" / "builtin" / "skill-creator" / "scripts" / "package_skill.cjs"
+                    if package_script.exists():
                         os.system(f"node {package_script} {target_skill_path} {target_dir} > /dev/null 2>&1")
                         print_color(f"  📦 Portable package '{skill_item.name}.skill' generated.", CYAN)
 

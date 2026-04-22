@@ -13,6 +13,10 @@ export interface OrchestrationLogEntry {
   trigger?: 'Auto' | 'Manual' | 'Override';
 }
 
+/**
+ * Manages the SDS (Software Development Standard) orchestration flow for tracks.
+ * Handles phase transitions, status updates, and transactional audit logging.
+ */
 export class OrchestrationService {
   constructor(
     private trackMetadataService: TrackMetadataService,
@@ -20,13 +24,20 @@ export class OrchestrationService {
     private meridianDir: string
   ) {}
 
+  /**
+   * Returns the absolute path to the track directory.
+   */
   private getTrackDir(trackId: string): string {
     return path.join(this.meridianDir, 'tracks', trackId);
   }
 
+  /**
+   * Appends an entry to the persistent orchestration log file.
+   * This operation is synchronous and transactional.
+   */
   private appendAuditLog(trackId: string, entry: OrchestrationLogEntry) {
     const logPath = path.join(this.getTrackDir(trackId), 'orchestration.log');
-    const logLine = JSON.stringify(entry) + '\n';
+    const logLine = `${JSON.stringify(entry)}\n`;
     
     // We explicitly don't catch here so that a log failure blocks the transition (transactional integrity)
     this.fs.appendFile(logPath, logLine);
@@ -34,13 +45,16 @@ export class OrchestrationService {
 
   /**
    * Requests a phase transition for a specific track.
+   * Ensures linear progression and transactional integrity.
+   * 
+   * @throws Error if track not found, transition invalid, or log fails.
    */
-  async requestTransition(
+  requestTransition(
     trackId: string, 
     targetPhase: SDSPhase, 
     message?: string,
     trigger: 'Auto' | 'Manual' | 'Override' = 'Manual'
-  ): Promise<TrackMetadata> {
+  ): TrackMetadata {
     const metadata = this.trackMetadataService.getTrackMetadata(trackId);
     if (!metadata) {
       throw new Error(`Track ${trackId} not found.`);
@@ -99,13 +113,15 @@ export class OrchestrationService {
 
   /**
    * Updates the orchestration status of a track without changing the phase.
+   * 
+   * @throws Error if track not found or log fails.
    */
-  async updateStatus(
+  updateStatus(
     trackId: string, 
     status: OrchestrationStatus, 
     message?: string,
     trigger: 'Auto' | 'Manual' | 'Override' = 'Auto'
-  ): Promise<TrackMetadata> {
+  ): TrackMetadata {
     const metadata = this.trackMetadataService.getTrackMetadata(trackId);
     if (!metadata) {
       throw new Error(`Track ${trackId} not found.`);
