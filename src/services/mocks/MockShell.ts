@@ -11,6 +11,7 @@ export class MockShell implements IShell {
    */
   execute(command: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     const response = this.responses.get(command);
+
     if (response) {
       return Promise.resolve(response);
     }
@@ -22,5 +23,9 @@ export class MockShell implements IShell {
    */
   __setupResponse(command: string, response: { stdout: string; stderr: string; exitCode: number }) {
     this.responses.set(command, response);
+  }
+
+  setMockResponse(command: string, response: { stdout: string; stderr: string; exitCode: number }) {
+    this.__setupResponse(command, response);
   }
 }

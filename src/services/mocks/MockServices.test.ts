@@ -13,18 +13,20 @@ describe('MockServices', () => {
   describe('MockServicesShell', () => {
     it('execute returns resolved promise when response exists', async () => {
       const shell = new MockServicesShell();
-      shell.__setupResponse('test-cmd', { stdout: 'success', stderr: '', exitCode: 0 });
+      shell.setMockResponse('test-cmd', { stdout: 'success', stderr: '', exitCode: 0 });
       const res = await shell.execute('test-cmd');
       expect(res.stdout).toBe('success');
+
     });
   });
 
   describe('MockShell', () => {
     it('exec returns resolved promise when response exists', async () => {
       const shell = new MockShell();
-      shell.setMockResponse('test-cmd', { stdout: 'success', stderr: '' });
-      const res = await shell.exec('test-cmd');
+      shell.setMockResponse('test-cmd', { stdout: 'success', stderr: '', exitCode: 0 });
+      const res = await shell.execute('test-cmd');
       expect(res.stdout).toBe('success');
+
     });
   });
 });
