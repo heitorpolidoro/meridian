@@ -30,30 +30,21 @@ export class SDSStateMachine {
       return { valid: false, error: 'Invalid phase detected.' };
     }
 
+    // Allow moving backwards (re-work/re-planning) or staying in the same phase
+    if (toIndex <= fromIndex) {
+      return { valid: true };
+    }
+
     // Allow moving to the immediate next phase
     if (toIndex === fromIndex + 1) {
       return { valid: true };
     }
 
-    // Allow moving backwards (re-work/re-planning)
-    if (toIndex < fromIndex) {
-      return { valid: true };
-    }
-
     // Disallow skipping phases
-    if (toIndex > fromIndex + 1) {
-      return { 
-        valid: false, 
-        error: `Cannot skip phases. Must transition from ${from} to ${this.PHASE_ORDER[fromIndex + 1]} before reaching ${to}.` 
-      };
-    }
-
-    // Transition to the same phase (e.g. status update)
-    if (from === to) {
-      return { valid: true };
-    }
-
-    return { valid: false, error: 'Unknown transition error.' };
+    return { 
+      valid: false, 
+      error: `Cannot skip phases. Must transition from ${from} to ${this.PHASE_ORDER[fromIndex + 1]} before reaching ${to}.` 
+    };
   }
 
   /**

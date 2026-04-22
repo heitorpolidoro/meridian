@@ -74,10 +74,7 @@ export class OrchestrationService {
       trigger
     };
 
-    // Write to persistent audit log file
-    this.appendAuditLog(trackId, logEntry);
-
-    return this.trackMetadataService.updateTrackMetadata(trackId, {
+    const updatedMetadata = this.trackMetadataService.updateTrackMetadata(trackId, {
       orchestration: {
         ...metadata.orchestration,
         currentPhase: targetPhase,
@@ -87,6 +84,17 @@ export class OrchestrationService {
         logs: [logEntry, ...(metadata.orchestration.logs || [])].slice(0, 50)
       }
     });
+
+    // Persistent audit log file is written ONLY after metadata update succeeds
+    try {
+      this.appendAuditLog(trackId, logEntry);
+    } catch (error) {
+      // Rollback metadata if audit log fails to maintain atomic integrity
+      this.trackMetadataService.updateTrackMetadata(trackId, metadata);
+      throw error;
+    }
+
+    return updatedMetadata;
   }
 
   /**
@@ -115,16 +123,24 @@ export class OrchestrationService {
       trigger
     };
 
-    // Write to persistent audit log file
-    this.appendAuditLog(trackId, logEntry);
-
-    return this.trackMetadataService.updateTrackMetadata(trackId, {
+    const updatedMetadata = this.trackMetadataService.updateTrackMetadata(trackId, {
       orchestration: {
         ...metadata.orchestration,
         status,
         logs: [logEntry, ...(metadata.orchestration.logs || [])].slice(0, 50)
       }
     });
+
+    // Persistent audit log file is written ONLY after metadata update succeeds
+    try {
+      this.appendAuditLog(trackId, logEntry);
+    } catch (error) {
+      // Rollback metadata if audit log fails
+      this.trackMetadataService.updateTrackMetadata(trackId, metadata);
+      throw error;
+    }
+
+    return updatedMetadata;
   }
 
   /**
