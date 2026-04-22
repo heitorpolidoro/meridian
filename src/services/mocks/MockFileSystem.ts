@@ -19,6 +19,9 @@ export class MockFileSystem implements IFileSystem {
     this.files.set(path, content);
   }
 
+  /**
+   * Appends content to a file in the mock store.
+   */
   appendFile(path: string, content: string): void {
     const existing = this.files.get(path) || '';
     this.files.set(path, existing + content);

@@ -64,6 +64,10 @@ describe('SDSStateMachine', () => {
       expect(SDSStateMachine.getAssignedRole('4.2')).toBe('quality-assurance');
     });
 
+    it('returns engineering-manager for phase 5.0', () => {
+      expect(SDSStateMachine.getAssignedRole('5.0')).toBe('engineering-manager');
+    });
+
     it('returns software-engineer for unknown/default phases', () => {
       // @ts-expect-error Testing fallback
       expect(SDSStateMachine.getAssignedRole('9.9' as SDSPhase)).toBe('software-engineer');

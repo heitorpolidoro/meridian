@@ -45,6 +45,12 @@ describe('OrchestrationService', () => {
         .toThrow(/must be in 'HandoffReady' status/);
     });
 
+    it('blocks transition if it is an invalid SDS skip', () => {
+      orchestrationService.updateStatus('track-1', 'HandoffReady');
+      expect(() => orchestrationService.requestTransition('track-1', '3.1'))
+        .toThrow(/Cannot skip phases/);
+    });
+
     it('allows transition with Override even if not HandoffReady', () => {
       const updated = orchestrationService.requestTransition('track-1', '1.2', 'Urgent bypass', 'Override');
       expect(updated.orchestration.currentPhase).toBe('1.2');
@@ -71,6 +77,19 @@ describe('OrchestrationService', () => {
       const current = metadataService.getTrackMetadata('track-1');
       expect(current?.orchestration.currentPhase).toBe('1.1');
     });
+
+    it('performs rollback on updateStatus if audit log fails', () => {
+      const originalStatus = metadataService.getTrackMetadata('track-1')?.orchestration.status;
+      
+      // Mock appendFile to throw
+      fs.appendFile = () => { throw new Error('I/O Error'); };
+      
+      expect(() => orchestrationService.updateStatus('track-1', 'HandoffReady'))
+        .toThrow('I/O Error');
+        
+      const afterFail = metadataService.getTrackMetadata('track-1');
+      expect(afterFail?.orchestration.status).toBe(originalStatus);
+    });
   });
 
   describe('updateStatus', () => {
@@ -90,6 +109,12 @@ describe('OrchestrationService', () => {
   describe('getOrchestrationState', () => {
     it('returns null for non-existent track', () => {
       expect(orchestrationService.getOrchestrationState('none')).toBeNull();
+    });
+
+    it('returns null if metadata is invalid or missing', () => {
+      // Simulate file corruption by writing invalid JSON directly to the mock storage
+      fs.writeFile(path.join(meridianDir, 'tracks/track-corrupt/metadata.json'), 'invalid-json');
+      expect(orchestrationService.getOrchestrationState('track-corrupt')).toBeNull();
     });
 
     it('returns orchestration state for valid track', () => {
