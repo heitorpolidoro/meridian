@@ -19,9 +19,9 @@ export interface OrchestrationLogEntry {
  */
 export class OrchestrationService {
   constructor(
-    private trackMetadataService: TrackMetadataService,
-    private fs: IFileSystem,
-    private meridianDir: string
+    private readonly trackMetadataService: TrackMetadataService,
+    private readonly fs: IFileSystem,
+    private readonly meridianDir: string
   ) {}
 
   /**

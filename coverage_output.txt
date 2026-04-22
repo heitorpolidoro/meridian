@@ -1,0 +1,47 @@
+
+> meridian-ai-manager@1.0.0 test
+> vitest --coverage
+
+
+ RUN  v4.1.4 /Users/heitor/workspace/meridian
+      Coverage enabled with v8
+
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+
+ Test Files  16 passed (16)
+      Tests  120 passed (120)
+   Start at  13:52:32
+   Duration  3.00s (transform 725ms, setup 1.12s, import 2.09s, tests 362ms, environment 11.89s)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |    88.6 |    74.79 |   83.01 |   89.24 |                   
+ ...metryDashboard |       0 |        0 |       0 |       0 |                   
+  ...Dashboard.tsx |       0 |        0 |       0 |       0 | 11-70             
+ services          |   88.81 |    81.37 |   85.93 |   89.73 |                   
+  ...tryService.ts |   90.47 |    70.83 |   78.57 |   94.33 | 98-100            
+  IPCSchemas.ts    |       0 |      100 |     100 |       0 | 3-35              
+  ...ionService.ts |   97.56 |     82.6 |     100 |   97.56 | 127               
+  ...ectService.ts |       0 |        0 |       0 |       0 | 5-50              
+  ...anceScorer.ts |   71.42 |      100 |      40 |      75 | 10-11,37          
+  ...torService.ts |   94.73 |      100 |    90.9 |   93.75 | 46                
+  ...ataService.ts |   97.82 |     90.9 |     100 |     100 | 129-148           
+ ...mplementations |   69.56 |       40 |   57.14 |   69.56 |                   
+  ...FileSystem.ts |   66.66 |       50 |    62.5 |   66.66 | 55-71             
+  ...temWatcher.ts |     100 |       75 |     100 |     100 | 11                
+  NodeShell.ts     |       0 |        0 |       0 |       0 | 1-8               
+ services/mocks    |   96.92 |       80 |     100 |   96.92 |                   
+  ...FileSystem.ts |     100 |    77.77 |     100 |     100 | 44-49,58          
+  MockServices.ts  |   96.96 |       85 |     100 |   96.96 | 114               
+  MockShell.ts     |   83.33 |       50 |     100 |   83.33 | 18                
+-------------------|---------|----------|---------|---------|-------------------
+
+=============================== Coverage summary ===============================
+Statements   : 88.6% ( 381/430 )
+Branches     : 74.79% ( 181/242 )
+Functions    : 83.01% ( 88/106 )
+Lines        : 89.24% ( 365/409 )
+================================================================================

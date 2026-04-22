@@ -52,7 +52,7 @@ export type TrackMetadata = z.infer<typeof TrackMetadataSchema>;
 export class TrackMetadataService {
   private readonly TRACKS_DIR = 'tracks';
 
-  constructor(private fs: IFileSystem, private meridianDir: string) {}
+  constructor(private readonly fs: IFileSystem, private readonly meridianDir: string) {}
 
   /**
    * Returns the base path for all tracks.
@@ -119,7 +119,7 @@ export class TrackMetadataService {
       id: trackId,
       dates: {
         ...currentMetadata.dates,
-        ...(data.dates || {}),
+        ...data.dates,
         updated: new Date().toISOString()
       }
     };
