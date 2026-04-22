@@ -119,7 +119,7 @@ export class TrackMetadataService {
       id: trackId,
       dates: {
         ...currentMetadata.dates,
-        ...data.dates,
+        ...(data.dates ?? {}),
         updated: new Date().toISOString()
       }
     };
