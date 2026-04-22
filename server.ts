@@ -244,65 +244,63 @@ io.on('connection', (socket) => {
             params: { protocolVersion: 0, clientInfo: { name: "meridian-ai", version: "1.0" }, capabilities: {} }
         });
 
-        gemini.stdout?.on('data', (data: Buffer) => handleGeminiStream(data, socket, sendACP));
+        // Inside socket.on('start-session')
+        gemini.stdout?.on('data', (data: Buffer) => handleGeminiStream(data, socket, sendACP, { globalContent, agentInstructions, rootDir }));
         });
 
         /**
-         * Handles Gemini stream data, processes JSON chunks and emits events to socket.
-         */
-        function handleGeminiStream(data: Buffer, socket: any, sendACP: (msg: unknown) => void) {
-            const lines = data.toString().split('\n');
-            for (const line of lines) {
-                const trimmed = line.trim();
-                if (!trimmed) continue;
-                processGeminiOutput(trimmed, socket, sendACP);
-            }
+        * Main handler for Gemini output.
+        */
+        function handleGeminiStream(data: Buffer, socket: any, sendACP: (msg: unknown) => void, ctx: { globalContent: string, agentInstructions: string, rootDir: string }) {
+        const lines = data.toString().split('\n');
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+            processGeminiOutput(trimmed, socket, sendACP, ctx);
+        }
         }
 
-        function processGeminiOutput(jsonLine: string, socket: any, sendACP: (msg: unknown) => void) {
-            try {
-                const parsed = JSON.parse(jsonLine);
-                if (parsed.id === 1) handleInitialize(sendACP);
-                if (parsed.id === 2 && parsed.result?.sessionId) handleSessionReady(parsed.result.sessionId, socket);
-                if (parsed.method === 'session/update') handleSessionUpdate(parsed, socket);
-                if (parsed.id >= 3 && parsed.result) handleRequestComplete(parsed, socket);
-            } catch {
-                // Ignore malformed JSON
-            }
+        function processGeminiOutput(jsonLine: string, socket: any, sendACP: (msg: unknown) => void, ctx: { globalContent: string, agentInstructions: string, rootDir: string }) {
+        try {
+            const parsed = JSON.parse(jsonLine);
+            if (parsed.id === 1) handleInitialize(sendACP, ctx);
+            if (parsed.id === 2 && parsed.result?.sessionId) handleSessionReady(parsed.result.sessionId, socket);
+            if (parsed.method === 'session/update') handleSessionUpdate(parsed, socket);
+            if (parsed.id >= 3 && parsed.result) handleRequestComplete(parsed, socket);
+        } catch { /* Ignore malformed */ }
         }
 
-        function handleInitialize(sendACP: (msg: unknown) => void) {
-            sendACP({
-                jsonrpc: "2.0", id: 2, method: "session/new",
-                params: {
-                    cwd: rootDir, mcpServers: [],
-                    systemInstruction: { role: 'system', parts: [{ text: `${globalContent}\n\n# Orchestration Instructions\nYou are the Meridian Orchestrator. Respond as these distinct agents debating:\n${agentInstructions}\nWhenever I send a directive, simulate a brief debate and end with [VERDICT].` }] }
-                }
-            });
+        function handleInitialize(sendACP: (msg: unknown) => void, ctx: { globalContent: string, agentInstructions: string, rootDir: string }) {
+        sendACP({
+            jsonrpc: "2.0", id: 2, method: "session/new",
+            params: {
+                cwd: ctx.rootDir, mcpServers: [],
+                systemInstruction: { role: 'system', parts: [{ text: `${ctx.globalContent}\n\n# Orchestration Instructions\nYou are the Meridian Orchestrator. Respond as these distinct agents debating:\n${ctx.agentInstructions}\nWhenever I send a directive, simulate a brief debate and end with [VERDICT].` }] }
+            }
+        });
         }
 
         function handleSessionReady(newSessionId: string, socket: any) {
-            sessionId = newSessionId;
-            socket.emit('ready');
+        sessionId = newSessionId;
+        socket.emit('ready');
         }
 
         function handleSessionUpdate(parsed: any, socket: any) {
-            const update = parsed.params?.update;
-            if (update?.sessionUpdate === 'agent_message_chunk') {
-                const chunk = update.content?.text || '';
-                telemetryCollector.recordMetric('tokens', Math.ceil(chunk.length / 4));
-                socket.emit('chunk', chunk);
-            }
+        const update = parsed.params?.update;
+        if (update?.sessionUpdate === 'agent_message_chunk') {
+            const chunk = update.content?.text || '';
+            telemetryCollector.recordMetric('tokens', Math.ceil(chunk.length / 4));
+            socket.emit('chunk', chunk);
+        }
         }
 
         function handleRequestComplete(parsed: any, socket: any) {
-            if (promptStartTime) {
-                telemetryCollector.recordMetric('latency', Date.now() - promptStartTime);
-                promptStartTime = null;
-            }
-            socket.emit('done');
+        if (promptStartTime) {
+            telemetryCollector.recordMetric('latency', Date.now() - promptStartTime);
+            promptStartTime = null;
         }
-
+        socket.emit('done');
+        }
     socket.on('diretriz', (text: string) => {
         if (!sessionId || !gemini?.stdin) return;
         promptStartTime = Date.now();
