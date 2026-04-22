@@ -217,11 +217,6 @@ io.on('connection', (socket) => {
             }
         }).join('\n\n---\n\n');
 
-        const fullInstruction = `${globalContent}\n\n# Orchestration Instructions
-You are the Meridian Orchestrator. Respond as these distinct agents debating:
-${agentInstructions}
-Whenever I send a directive, simulate a brief debate and end with [VERDICT].`;
-
         gemini = spawn(GEMINI_CMD, [
             '--experimental-acp', '--output-format', 'stream-json',
             '--resume', 'latest', '-y', '--extensions', ''
@@ -267,7 +262,7 @@ Whenever I send a directive, simulate a brief debate and end with [VERDICT].`;
                         jsonrpc: "2.0", id: 2, method: "session/new",
                         params: {
                             cwd: rootDir, mcpServers: [],
-                            systemInstruction: { role: 'system', parts: [{ text: fullInstruction }] }
+                            systemInstruction: { role: 'system', parts: [{ text: `${globalContent}\n\n# Orchestration Instructions\nYou are the Meridian Orchestrator. Respond as these distinct agents debating:\n${agentInstructions}\nWhenever I send a directive, simulate a brief debate and end with [VERDICT].` }] }
                         }
                     });
                 }
