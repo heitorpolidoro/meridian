@@ -1,8 +1,11 @@
 import { IFileSystem } from '../interfaces/ICoreServices';
 
+/**
+ * Mock implementation of IFileSystem for testing.
+ */
 export class MockFileSystem implements IFileSystem {
-  private files: Map<string, string> = new Map();
-  private directories: Set<string> = new Set();
+  private readonly files: Map<string, string> = new Map();
+  private readonly directories: Set<string> = new Set();
 
   readFile(path: string): string {
     const content = this.files.get(path);

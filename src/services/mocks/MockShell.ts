@@ -1,8 +1,14 @@
 import { IShell } from '../IShell.ts';
 
+/**
+ * Mock implementation of IShell for testing.
+ */
 export class MockShell implements IShell {
-  private mockResponses: Map<string, { stdout: string; stderr: string }> = new Map();
+  private readonly mockResponses: Map<string, { stdout: string; stderr: string }> = new Map();
 
+  /**
+   * Executes a mock command.
+   */
   // skipcq: JS-0105
   exec(command: string, _options?: { cwd?: string; env?: NodeJS.ProcessEnv }): Promise<{ stdout: string; stderr: string }> {
     const response = this.mockResponses.get(command);

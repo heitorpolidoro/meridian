@@ -10,22 +10,21 @@ export interface TransitionResult {
 }
 
 /**
- * Implements the Hierarchical State Machine (HSM) logic for the 
+ * Hierarchical State Machine (HSM) logic for the 
  * Software Development Standard (SDS) phases.
- * Defines valid transitions and maps roles to phases.
  */
-export class SDSStateMachine {
+export const SDSStateMachine = {
   /**
    * Defines the linear progression of SDS phases.
    */
-  private static readonly PHASE_ORDER: SDSPhase[] = [...SDS_PHASES];
+  PHASE_ORDER: [...SDS_PHASES] as SDSPhase[],
 
   /**
    * Validates if a transition from one phase to another is allowed.
    * Standard SDS flow is linear, but we allow jumping back to any previous phase (re-work)
    * or moving to the immediate next phase.
    */
-  static validateTransition(from: SDSPhase, to: SDSPhase): TransitionResult {
+  validateTransition(from: SDSPhase, to: SDSPhase): TransitionResult {
     const fromIndex = this.PHASE_ORDER.indexOf(from);
     const toIndex = this.PHASE_ORDER.indexOf(to);
 
@@ -48,31 +47,31 @@ export class SDSStateMachine {
       valid: false, 
       error: `Cannot skip phases. Must transition from ${from} to ${this.PHASE_ORDER[fromIndex + 1]} before reaching ${to}.` 
     };
-  }
+  },
 
   /**
    * Gets the next logical phase in the SDS process.
    */
-  static getNextPhase(current: SDSPhase): SDSPhase | null {
+  getNextPhase(current: SDSPhase): SDSPhase | null {
     const currentIndex = this.PHASE_ORDER.indexOf(current);
     if (currentIndex === -1 || currentIndex === this.PHASE_ORDER.length - 1) {
       return null;
     }
     return this.PHASE_ORDER[currentIndex + 1];
-  }
+  },
 
   /**
    * Determines the assigned agent role based on the SDS phase.
    */
-  static getAssignedRole(phase: SDSPhase): string {
+  getAssignedRole(phase: SDSPhase): string {
     switch (phase) {
       case '1.1': return 'product-manager';
       case '1.2': return 'software-architect';
-      case '2.1': return 'software-architect'; // Or Staff Engineer for task breakdown
+      case '2.1': return 'software-architect';
       case '3.1': return 'software-engineer';
       case '4.2': return 'quality-assurance';
       case '5.0': return 'engineering-manager';
       default: return 'software-engineer';
     }
   }
-}
+};
