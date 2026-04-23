@@ -19,7 +19,7 @@ describe("TelemetryDashboard", () => {
     },
   ];
 
-  it("não deve renderizar a seção de conflitos quando a lista estiver vazia", () => {
+  it("should not render conflicts section when list is empty", () => {
     render(
       <TelemetryDashboard
         telemetry={mockTelemetry}
@@ -31,7 +31,7 @@ describe("TelemetryDashboard", () => {
     expect(screen.queryByText("Sync Alerts")).not.toBeInTheDocument();
   });
 
-  it("deve renderizar a seção de conflitos quando houver itens", () => {
+  it("should render conflicts section when there are items", () => {
     const mockConflicts: SyncConflict[] = [
       {
         timestamp: Date.now(),
@@ -54,7 +54,7 @@ describe("TelemetryDashboard", () => {
     expect(screen.getByText("src/app.ts")).toBeInTheDocument();
   });
 
-  it("deve aplicar a classe de tipo correta ao item de conflito", () => {
+  it("should apply correct type class to conflict item", () => {
     const mockConflicts: SyncConflict[] = [
       {
         timestamp: Date.now(),
@@ -77,7 +77,7 @@ describe("TelemetryDashboard", () => {
     expect(conflictItem).not.toHaveClass("error");
   });
 
-  it("deve formatar o timestamp corretamente", () => {
+  it("should format timestamp correctly", () => {
     const timestamp = new Date("2023-10-10T10:00:00Z").getTime();
     const mockConflicts: SyncConflict[] = [
       {
@@ -96,9 +96,9 @@ describe("TelemetryDashboard", () => {
       />,
     );
 
-    // O formato exato depende do locale, mas verificamos se o texto começa com [ e termina com ]
-    const timestampElement = screen.getByText(
-      (content) => content.startsWith("[") && content.endsWith("]"),
+    // The exact format depends on the locale, but we check if the text starts with [ and ends with ]
+    const timestampElement = screen.getByText((content) => 
+      content.startsWith('[') && content.endsWith(']')
     );
     expect(timestampElement).toBeInTheDocument();
   });
