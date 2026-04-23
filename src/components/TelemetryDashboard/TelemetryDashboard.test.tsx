@@ -97,8 +97,8 @@ describe("TelemetryDashboard", () => {
     );
 
     // The exact format depends on the locale, but we check if the text starts with [ and ends with ]
-    const timestampElement = screen.getByText((content) => 
-      content.startsWith('[') && content.endsWith(']')
+    const timestampElement = screen.getByText(
+      (content) => content.startsWith("[") && content.endsWith("]"),
     );
     expect(timestampElement).toBeInTheDocument();
   });
