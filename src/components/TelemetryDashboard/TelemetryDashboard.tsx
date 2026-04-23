@@ -12,6 +12,14 @@ interface TelemetryDashboardProps {
   conflicts: SyncConflict[];
 }
 
+/**
+ * TelemetryDashboard component displays telemetry metrics including p95 latency, total tokens, error rate, and p50 latency.
+ *
+ * @param telemetry TelemetrySummary object containing telemetry metrics or null.
+ * @param compliance Array of SDSCompliance items for compliance stats.
+ * @param conflicts Array of SyncConflict items for sync conflict data.
+ * @returns React element rendering the telemetry dashboard UI.
+ */
 export const TelemetryDashboard: React.FC<TelemetryDashboardProps> = ({
   telemetry,
   compliance,
@@ -61,7 +69,7 @@ export const TelemetryDashboard: React.FC<TelemetryDashboardProps> = ({
                             ? "#ffcc00"
                             : "#ff4444",
                     }}
-                  ></div>
+                  />
                 </span>
                 <span className="score-value">{c.score}%</span>
               </div>
