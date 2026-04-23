@@ -96,8 +96,10 @@ describe("TelemetryDashboard", () => {
       />,
     );
 
-    // O formato exato depende do locale, mas verificamos se algo que se pareça com um horário aparece entre []
-    const timestampElement = screen.getByText(/\[[^\]]*\]/);
+    // O formato exato depende do locale, mas verificamos se o texto começa com [ e termina com ]
+    const timestampElement = screen.getByText((content) => 
+      content.startsWith('[') && content.endsWith(']')
+    );
     expect(timestampElement).toBeInTheDocument();
   });
 });
