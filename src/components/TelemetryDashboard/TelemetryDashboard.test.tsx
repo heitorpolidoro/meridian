@@ -97,7 +97,7 @@ describe("TelemetryDashboard", () => {
     );
 
     // O formato exato depende do locale, mas verificamos se algo que se pareça com um horário aparece entre []
-    const timestampElement = screen.getByText(/\[.*\]/);
+    const timestampElement = screen.getByText(/\[[^\]]*\]/);
     expect(timestampElement).toBeInTheDocument();
   });
 });
