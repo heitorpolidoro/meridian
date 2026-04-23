@@ -4,6 +4,10 @@ import {
   IContextInjectionService,
 } from "./interfaces/ICoreServices";
 
+/**
+ * Service responsible for injecting context into files and directories
+ * while enforcing security by blocking forbidden file patterns.
+ */
 export class ContextInjectionService implements IContextInjectionService {
   private readonly FORBIDDEN_PATTERNS = [
     ".env",
@@ -15,6 +19,11 @@ export class ContextInjectionService implements IContextInjectionService {
     ".DS_Store",
   ];
 
+  /**
+   * Creates a new instance of ContextInjectionService.
+   * @param fs - File system abstraction for performing file operations.
+   * @param rootDir - The root directory path where context injection occurs.
+   */
   constructor(
     private fs: IFileSystem,
     private rootDir: string,
@@ -23,6 +32,8 @@ export class ContextInjectionService implements IContextInjectionService {
   /**
    * Validates if a file path is forbidden based on security patterns.
    * Prevents leaking secrets like .env or large dependencies.
+   * @param filePath - The file path to check against forbidden patterns.
+   * @returns True if the file path contains a forbidden pattern, false otherwise.
    */
   public isForbidden(filePath: string): boolean {
     const normalizedPath = filePath.split("\\").join("/");
