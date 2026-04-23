@@ -22,19 +22,7 @@ export class ContextInjectionService implements IContextInjectionService {
     const normalizedPath = filePath.split('\\').join('/');
     const pathParts = normalizedPath.split('/');
 
-    return pathParts.some(part => {
-      // Direct match for files or directories in the list
-      if (this.FORBIDDEN_PATTERNS.includes(part)) {
-        return true;
-      }
-      
-      // Handle extension-based patterns if needed (currently exact match is enough for .env)
-      if (part.startsWith('.env')) {
-        return true;
-      }
-
-      return false;
-    });
+    return pathParts.some(part => this.FORBIDDEN_PATTERNS.includes(part) || part.startsWith('.env'));
   }
 
   /**
