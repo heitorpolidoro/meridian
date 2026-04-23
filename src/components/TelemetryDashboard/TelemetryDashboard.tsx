@@ -66,8 +66,8 @@ export const TelemetryDashboard: React.FC<TelemetryDashboardProps> = ({
         <section className="conflicts-section">
           <h3>Sync Alerts</h3>
           <div className="conflicts-list">
-            {conflicts.map((conflict, i) => (
-              <div key={i} className={`conflict-item ${conflict.type}`}>
+            {conflicts.map((conflict) => (
+              <div key={`${conflict.timestamp}-${conflict.path}`} className={`conflict-item ${conflict.type}`}>
                 <span className="timestamp">[{new Date(conflict.timestamp).toLocaleTimeString()}]</span>
                 <span className="message">{conflict.message}</span>
                 <span className="path">{conflict.path}</span>
