@@ -10,7 +10,7 @@ describe('SDSStateMachine', () => {
       ['1.1', '2.1', false, 'Cannot skip phases'],
       ['1.1', '5.0', false],
     ])('transition from %s to %s should be valid: %s', (from, to, expected, errorMsg?) => {
-      const result = SDSStateMachine.validateTransition(from as any, to as any);
+      const result = SDSStateMachine.validateTransition(from as unknown, to as unknown);
       expect(result.valid).toBe(expected);
       if (errorMsg) {
         expect(result.error).toContain(errorMsg);
@@ -30,7 +30,7 @@ describe('SDSStateMachine', () => {
       ['1.1', '1.2'],
       ['5.0', null],
     ])('getNextPhase(%s) -> %s', (current, expected) => {
-      expect(SDSStateMachine.getNextPhase(current as any)).toBe(expected);
+      expect(SDSStateMachine.getNextPhase(current as Parameters<typeof SDSStateMachine.getNextPhase>[0])).toBe(expected);
     });
   });
 
@@ -43,8 +43,8 @@ describe('SDSStateMachine', () => {
       ['4.2', 'quality-assurance'],
       ['5.0', 'engineering-manager'],
       ['9.9', 'software-engineer'], // Fallback test
-    ])('role for phase %s should be %s', (phase, role) => {
-      expect(SDSStateMachine.getAssignedRole(phase as any)).toBe(role);
+    ])('role for phase %s should be %s', (phase: string, role: string) => {
+      expect(SDSStateMachine.getAssignedRole(phase)).toBe(role);
     });
   });
 });
