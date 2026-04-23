@@ -20,7 +20,7 @@
 
 <!-- DeepSource -->
 <a href="https://app.deepsource.com/gh/heitorpolidoro/meridian/" target="_blank"><img alt="DeepSource" title="DeepSource" src="https://app.deepsource.com/gh/heitorpolidoro/meridian.svg/?label=code+coverage&show_trend=true&token=TbnUO25wUZwE2xbpNccxDYAZ"/></a>
-<a href="https://app.deepsource.io/gh/heitorpolidoro/meridian/"><img src="https://app.deepsource.com/gh/heitorpolidoro/meridian.svg/?label=coverage" alt="DeepSource Meridian Coverage"></a>
+<a href="https://app.deepsource.com/gh/heitorpolidoro/meridian/" target="_blank"><img alt="DeepSource" title="DeepSource" src="https://app.deepsource.com/gh/heitorpolidoro/meridian.svg/?label=active+issues&show_trend=true&token=lJTrsoZ84oEv-4SuRN912pX1"/></a>
 <br>
 
 <!-- SonarCloud -->
