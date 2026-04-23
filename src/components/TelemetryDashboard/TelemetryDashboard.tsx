@@ -1,6 +1,10 @@
-import React from 'react';
-import './TelemetryDashboard.css';
-import { TelemetrySummary, SDSCompliance, SyncConflict } from '../../services/IPCSchemas';
+import React from "react";
+import "./TelemetryDashboard.css";
+import {
+  TelemetrySummary,
+  SDSCompliance,
+  SyncConflict,
+} from "../../services/IPCSchemas";
 
 interface TelemetryDashboardProps {
   telemetry: TelemetrySummary | null;
@@ -8,6 +12,14 @@ interface TelemetryDashboardProps {
   conflicts: SyncConflict[];
 }
 
+/**
+ * TelemetryDashboard component displays telemetry metrics including p95 latency, total tokens, error rate, and p50 latency.
+ *
+ * @param telemetry TelemetrySummary object containing telemetry metrics or null.
+ * @param compliance Array of SDSCompliance items for compliance stats.
+ * @param conflicts Array of SyncConflict items for sync conflict data.
+ * @returns React element rendering the telemetry dashboard UI.
+ */
 export const TelemetryDashboard: React.FC<TelemetryDashboardProps> = ({
   telemetry,
   compliance,
@@ -22,11 +34,15 @@ export const TelemetryDashboard: React.FC<TelemetryDashboardProps> = ({
         </div>
         <div className="metric-card">
           <label>Total Tokens</label>
-          <div className="value">{telemetry?.totalTokens.toLocaleString() || 0}</div>
+          <div className="value">
+            {telemetry?.totalTokens.toLocaleString() || 0}
+          </div>
         </div>
         <div className="metric-card">
           <label>Error Rate</label>
-          <div className="value">{(telemetry?.errorRate || 0 * 100).toFixed(1)}%</div>
+          <div className="value">
+            {(telemetry?.errorRate || 0 * 100).toFixed(1)}%
+          </div>
         </div>
         <div className="metric-card">
           <label>p50 Latency</label>
@@ -46,16 +62,27 @@ export const TelemetryDashboard: React.FC<TelemetryDashboardProps> = ({
                     className="score-fill"
                     style={{
                       width: `${c.score}%`,
-                      backgroundColor: c.score > 80 ? '#00ff88' : c.score > 50 ? '#ffcc00' : '#ff4444',
+                      backgroundColor:
+                        c.score > 80
+                          ? "#00ff88"
+                          : c.score > 50
+                            ? "#ffcc00"
+                            : "#ff4444",
                     }}
-                  ></div>
+                  />
                 </span>
                 <span className="score-value">{c.score}%</span>
               </div>
               <div className="details">
-                <span className={c.details.hasSpec ? 'valid' : 'invalid'}>Spec</span>
-                <span className={c.details.hasPlan ? 'valid' : 'invalid'}>Plan</span>
-                <span className={c.details.hasTasks ? 'valid' : 'invalid'}>Tasks</span>
+                <span className={c.details.hasSpec ? "valid" : "invalid"}>
+                  Spec
+                </span>
+                <span className={c.details.hasPlan ? "valid" : "invalid"}>
+                  Plan
+                </span>
+                <span className={c.details.hasTasks ? "valid" : "invalid"}>
+                  Tasks
+                </span>
               </div>
             </div>
           ))}
@@ -66,9 +93,14 @@ export const TelemetryDashboard: React.FC<TelemetryDashboardProps> = ({
         <section className="conflicts-section">
           <h3>Sync Alerts</h3>
           <div className="conflicts-list">
-            {conflicts.map((conflict, i) => (
-              <div key={i} className={`conflict-item ${conflict.type}`}>
-                <span className="timestamp">[{new Date(conflict.timestamp).toLocaleTimeString()}]</span>
+            {conflicts.map((conflict) => (
+              <div
+                key={`${conflict.timestamp}-${conflict.path}`}
+                className={`conflict-item ${conflict.type}`}
+              >
+                <span className="timestamp">
+                  [{new Date(conflict.timestamp).toLocaleTimeString()}]
+                </span>
                 <span className="message">{conflict.message}</span>
                 <span className="path">{conflict.path}</span>
               </div>
