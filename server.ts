@@ -10,11 +10,13 @@ import { AgentRegistryService } from "./src/services/AgentRegistryService";
 import { TrackMetadataService } from "./src/services/TrackMetadataService";
 import { BootstrappingService } from "./src/services/BootstrappingService";
 import { SDSComplianceScorer } from "./src/services/SDSComplianceScorer";
+import { TelemetryCollectorService } from "./src/services/TelemetryCollectorService";
 import { GeminiMessage } from "./src/services/IPCSchemas";
 
 if (!fs.existsSync(SETTINGS_DIR)) fs.mkdirSync(SETTINGS_DIR);
 
 const fileSystem = new NodeFileSystem();
+const telemetryCollector = new TelemetryCollectorService();
 
 const DEFAULT_SETTINGS = { rootDir: process.cwd() };
 
