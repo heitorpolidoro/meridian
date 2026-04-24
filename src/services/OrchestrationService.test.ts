@@ -109,8 +109,10 @@ describe("OrchestrationService", () => {
 
     it("handles missing logs array when updating metadata", () => {
       // 1. Get real metadata
-      // skipcq: JS-XXXX valid track metadata must exist in test setup
-      const realMetadata = metadataService.getTrackMetadata("track-1")!;
+      const realMetadata = metadataService.getTrackMetadata("track-1");
+      if (!realMetadata) {
+        throw new Error("Valid track metadata must exist in test setup");
+      }
 
       // 2. Create a modified version without logs (corrupt/incomplete state)
       const corruptedMetadata: typeof realMetadata = {
