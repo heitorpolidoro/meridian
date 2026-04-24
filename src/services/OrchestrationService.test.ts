@@ -107,9 +107,10 @@ describe('OrchestrationService', () => {
 
     it('handles missing logs array in requestTransition', () => {
       orchestrationService.updateStatus('track-1', 'HandoffReady');
+      const trackMetadata = metadataService.getTrackMetadata('track-1')!;
       const corruptedMetadata = {
-        ...metadataService.getTrackMetadata('track-1')!,
-        orchestration: { ...metadataService.getTrackMetadata('track-1')!.orchestration }
+        ...trackMetadata,
+        orchestration: { ...trackMetadata.orchestration }
       };
       // @ts-expect-error simulating missing property
       delete corruptedMetadata.orchestration.logs;
