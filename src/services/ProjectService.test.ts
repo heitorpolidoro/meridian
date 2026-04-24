@@ -58,7 +58,7 @@ describe("ProjectService", () => {
     });
 
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {
-        // empty because we're suppressing console.error output during tests
+      // empty because we're suppressing console.error output during tests
     });
 
     const projects = service.listProjects("/error-path");
