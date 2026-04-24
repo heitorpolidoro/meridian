@@ -109,10 +109,11 @@ describe("OrchestrationService", () => {
 
     it("handles missing logs array when updating metadata", () => {
       // 1. Get real metadata
+      // skipcq: JS-XXXX valid track metadata must exist in test setup
       const realMetadata = metadataService.getTrackMetadata("track-1")!;
 
       // 2. Create a modified version without logs (corrupt/incomplete state)
-      const corruptedMetadata = {
+      const corruptedMetadata: typeof realMetadata = {
         ...realMetadata,
         orchestration: { ...realMetadata.orchestration },
       };
@@ -122,7 +123,7 @@ describe("OrchestrationService", () => {
       // 3. Spy on getTrackMetadata to return our corrupted version once
       const spy = vi
         .spyOn(metadataService, "getTrackMetadata")
-        .mockReturnValue(corruptedMetadata as any);
+        .mockReturnValue(corruptedMetadata);
 
       // 4. Update status - this should hit the (logs || []) branch
       const updated = orchestrationService.updateStatus(
@@ -138,7 +139,10 @@ describe("OrchestrationService", () => {
 
     it("handles missing logs array in requestTransition", () => {
       orchestrationService.updateStatus("track-1", "HandoffReady");
-      const trackMetadata = metadataService.getTrackMetadata("track-1")!;
+      const trackMetadata = metadataService.getTrackMetadata("track-1");
+      if (!trackMetadata) {
+        throw new Error("Track metadata is null or undefined");
+      }
       const corruptedMetadata = {
         ...trackMetadata,
         orchestration: { ...trackMetadata.orchestration },
@@ -148,7 +152,7 @@ describe("OrchestrationService", () => {
 
       const spy = vi
         .spyOn(metadataService, "getTrackMetadata")
-        .mockReturnValue(corruptedMetadata as any);
+        .mockReturnValue(corruptedMetadata);
 
       const updated = orchestrationService.requestTransition("track-1", "1.2");
       // Should have 1 entry (the one we just added)
