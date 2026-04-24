@@ -1,7 +1,7 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 export const TelemetryMetricSchema = z.object({
-  type: z.enum(['latency', 'tokens', 'errors']),
+  type: z.enum(["latency", "tokens", "errors"]),
   value: z.number(),
   timestamp: z.string(),
   metadata: z.record(z.unknown()).optional(),
@@ -27,15 +27,21 @@ export const SDSComplianceSchema = z.object({
 
 export const SyncConflictSchema = z.object({
   path: z.string(),
-  type: z.enum(['manual_change', 'agent_change', 'conflict']),
+  type: z.enum(["manual_change", "agent_change", "conflict"]),
   message: z.string(),
   timestamp: z.string(),
 });
 
-export const IPCEventSchema = z.discriminatedUnion('event', [
-  z.object({ event: z.literal('telemetry-update'), data: TelemetrySummarySchema }),
-  z.object({ event: z.literal('compliance-update'), data: z.array(SDSComplianceSchema) }),
-  z.object({ event: z.literal('sync-conflict'), data: SyncConflictSchema }),
+export const IPCEventSchema = z.discriminatedUnion("event", [
+  z.object({
+    event: z.literal("telemetry-update"),
+    data: TelemetrySummarySchema,
+  }),
+  z.object({
+    event: z.literal("compliance-update"),
+    data: z.array(SDSComplianceSchema),
+  }),
+  z.object({ event: z.literal("sync-conflict"), data: SyncConflictSchema }),
 ]);
 
 export type TelemetryMetric = z.infer<typeof TelemetryMetricSchema>;
