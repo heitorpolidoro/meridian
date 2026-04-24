@@ -9,22 +9,20 @@ import { NodeFileSystem } from "./src/services/implementations/NodeFileSystem";
 import { AgentRegistryService } from "./src/services/AgentRegistryService";
 import { TrackMetadataService } from "./src/services/TrackMetadataService";
 import { BootstrappingService } from "./src/services/BootstrappingService";
-import { TelemetryCollectorService } from "./src/services/TelemetryCollectorService";
 import { SDSComplianceScorer } from "./src/services/SDSComplianceScorer";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const SETTINGS_DIR = path.join(__dirname, ".meridian");
-const SETTINGS_FILE = path.join(SETTINGS_DIR, "settings.json");
 
 if (!fs.existsSync(SETTINGS_DIR)) fs.mkdirSync(SETTINGS_DIR);
 
 const fileSystem = new NodeFileSystem();
-const telemetryCollector = new TelemetryCollectorService();
 
 const DEFAULT_SETTINGS = { rootDir: process.cwd() };
 
-function getSettings() {
+/**
+ * Retrieves the application settings from the settings file, ensuring the file exists with default settings.
+ * If the settings file does not exist, it is created with DEFAULT_SETTINGS.
+ * @returns {object} The settings object from the file or DEFAULT_SETTINGS if parsing fails.
+ */
+export function getSettings() {
   if (!fs.existsSync(SETTINGS_FILE))
     fs.writeFileSync(SETTINGS_FILE, JSON.stringify(DEFAULT_SETTINGS, null, 2));
   try {
@@ -35,19 +33,12 @@ function getSettings() {
 }
 
 /**
- * Saves settings to the configuration file.
- */
-function saveSettings(settings: { rootDir: string }) {
-  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
-}
-
-/**
  * Retrieves context-dependent services based on root directory.
  */
 /**
  * Retrieves context-dependent services based on root directory.
  */
-function getContextServices() {
+export function getContextServices() {
   const settings = getSettings();
   const rootDir = settings.rootDir;
   const meridianDir = path.join(rootDir, ".meridian");
@@ -67,7 +58,7 @@ function getContextServices() {
 /**
  * Logs a message to the console with level-based coloring.
  */
-function log(msg: string, level: "OUT" | "IN" | "INFO" | "ERROR" = "INFO") {
+export function log(msg: string, level: "OUT" | "IN" | "INFO" | "ERROR" = "INFO") {
   const timestamp = new Date().toLocaleTimeString();
   const colors = {
     INFO: "\x1b[32m",
@@ -100,7 +91,7 @@ interface GeminiContext {
 /**
  * Main handler for Gemini output.
  */
-function handleGeminiStream(
+export function handleGeminiStream(
   data: Buffer,
   socket: Socket,
   sendACP: (msg: unknown) => void,
@@ -117,22 +108,37 @@ function handleGeminiStream(
 /**
  * Parses and dispatches Gemini JSON outputs.
  */
-function processGeminiOutput(
+export function processGeminiOutput(
   jsonLine: string,
   ctx: GeminiContext,
   sendACP: (msg: unknown) => void,
 ) {
   try {
     const parsed: GeminiMessage = JSON.parse(jsonLine);
-    if (parsed.id === 1) handleInitialize(sendACP, ctx);
-    if (parsed.id === 2 && parsed.result?.sessionId) {
-      ctx.setSessionId(parsed.result.sessionId);
-      ctx.socket.emit("ready");
-    }
-    if (parsed.method === "session/update")
-      handleSessionUpdate(parsed, ctx.socket, ctx.telemetryCollector);
-    if (parsed.id !== undefined && parsed.id >= 3 && parsed.result)
-      handleRequestComplete(ctx);
+    const handlers: Record<string, () => void> = {
+      'id:1': () => handleInitialize(sendACP, ctx),
+      'id:2': () => {
+        const sessionId = parsed.result?.sessionId;
+        if (sessionId) {
+          ctx.setSessionId(sessionId);
+          ctx.socket.emit("ready");
+        }
+      },
+      'method:session/update': () =>
+        handleSessionUpdate(parsed, ctx.socket, ctx.telemetryCollector),
+      'default': () => {
+        if (parsed.id !== undefined && parsed.id >= 3 && parsed.result) {
+          handleRequestComplete(ctx);
+        }
+      },
+    };
+    const methodKey = parsed.method ? `method:${parsed.method}` : '';
+    const idKey = parsed.id !== undefined ? `id:${parsed.id}` : '';
+    const key =
+      methodKey && handlers[methodKey] ? methodKey :
+      idKey && handlers[idKey] ? idKey :
+      'default';
+    handlers[key]();
   } catch {
     /* Ignore malformed */
   }
@@ -141,7 +147,7 @@ function processGeminiOutput(
 /**
  * Initializes a new Gemini session.
  */
-function handleInitialize(sendACP: (msg: unknown) => void, ctx: GeminiContext) {
+export function handleInitialize(sendACP: (msg: unknown) => void, ctx: GeminiContext) {
   sendACP({
     jsonrpc: "2.0",
     id: 2,
@@ -164,7 +170,7 @@ function handleInitialize(sendACP: (msg: unknown) => void, ctx: GeminiContext) {
 /**
  * Updates session state based on agent messages.
  */
-function handleSessionUpdate(
+export function handleSessionUpdate(
   parsed: GeminiMessage,
   socket: Socket,
   telemetry: TelemetryCollectorService,
@@ -180,7 +186,7 @@ function handleSessionUpdate(
 /**
  * Handles completion of a prompt request.
  */
-function handleRequestComplete(ctx: GeminiContext) {
+export function handleRequestComplete(ctx: GeminiContext) {
   const start = ctx.getPromptStartTime();
   if (start) {
     ctx.telemetryCollector.recordMetric("latency", Date.now() - start);
@@ -189,7 +195,12 @@ function handleRequestComplete(ctx: GeminiContext) {
   ctx.socket.emit("done");
 }
 
-function log(msg: string, level: "OUT" | "IN" | "INFO" | "ERROR" = "INFO") {
+/**
+ * Logs a message with a timestamp and level to the console.
+ * @param msg - The message to log.
+ * @param level - The log level ("OUT", "IN", "INFO", or "ERROR").
+ */
+window.log = function(msg: string, level: "OUT" | "IN" | "INFO" | "ERROR" = "INFO") {
   const timestamp = new Date().toLocaleTimeString();
   const colors = {
     INFO: "\x1b[32m",
@@ -198,7 +209,7 @@ function log(msg: string, level: "OUT" | "IN" | "INFO" | "ERROR" = "INFO") {
     IN: "\x1b[35m",
   };
   console.error(`${colors[level]}[${timestamp}] [${level}] ${msg}\x1b[0m`);
-}
+};
 
 io.on("connection", (socket) => {
   let gemini: ChildProcess | null = null;
@@ -221,6 +232,10 @@ io.on("connection", (socket) => {
     getPromptStartTime: () => promptStartTime,
   };
 
+  /**
+   * Sends a message to the Gemini child process and logs it.
+   * @param msg - The message object to send.
+   */
   const sendACP = (msg: unknown) => {
     if (gemini?.stdin) {
       gemini.stdin.write(`${JSON.stringify(msg)}\n`);
@@ -239,7 +254,7 @@ io.on("connection", (socket) => {
       : "";
     ctx.agentInstructions = agents
       .map(
-        (a: any) =>
+        (a: { name: string; role: string; id: string }) =>
           `${a.name.toUpperCase()} (${a.role}): ${bootstrappingService.resolveAgent(a.id)}`,
       )
       .join("\n\n---\n\n");
@@ -293,5 +308,6 @@ io.on("connection", (socket) => {
 });
 
 httpServer.listen(PORT, () =>
-  console.log(`\n🚀 Meridian running at http://localhost:${PORT}`),
-);
+  // Logging server startup is useful for monitoring server status in production
+  console.log(`
+🚀 Meridian running at http://localhost:${PORT}`) // skipcq: JS-0002
