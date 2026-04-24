@@ -57,6 +57,13 @@ function getContextServices() {
  * Logs a message to the console with level-based coloring.
  */
 function log(msg: string, level: 'OUT' | 'IN' | 'INFO' | 'ERROR' = 'INFO') {
+    const timestamp = new Date().toLocaleTimeString();
+    const colors = { INFO: '\x1b[32m', ERROR: '\x1b[31m', OUT: '\x1b[34m', IN: '\x1b[35m' };
+    console.error(`${colors[level]}[${timestamp}] [${level}] ${msg}\x1b[0m`);
+}
+
+const app = express();
+app.use(express.static('dist'));
 
 const httpServer = createServer(app);
 const io = new Server(httpServer);

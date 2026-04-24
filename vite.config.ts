@@ -14,6 +14,10 @@ export default defineConfig({
     },
   },
   server: {
+    host: '0.0.0.0',
+    watch: {
+      usePolling: true,
+    },
     proxy: {
       '/socket.io': {
         target: 'http://localhost:3000',

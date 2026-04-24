@@ -1,0 +1,26 @@
+FROM node:24-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install gemini-cli globally
+RUN npm install -g @google/gemini-cli
+
+COPY package*.json ./
+RUN npm install
+
+# In development, we mount the code, but we copy it initially 
+# to ensure the container can run if no mount is present
+COPY . .
+
+# Expose Vite (5173) and Server (3000)
+EXPOSE 5173 3000
+
+ENV NODE_ENV=development
+
+# Run concurrently (Vite + Server with watch)
+CMD ["npm", "run", "dev"]
