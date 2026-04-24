@@ -10,10 +10,18 @@ import { AgentRegistryService } from "./src/services/AgentRegistryService";
 import { TrackMetadataService } from "./src/services/TrackMetadataService";
 import { BootstrappingService } from "./src/services/BootstrappingService";
 import { SDSComplianceScorer } from "./src/services/SDSComplianceScorer";
+import { TelemetryCollectorService } from "./src/services/TelemetryCollectorService";
+import { GeminiMessage } from "./src/services/IPCSchemas";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const SETTINGS_DIR = path.join(__dirname, ".meridian");
+const SETTINGS_FILE = path.join(SETTINGS_DIR, "settings.json");
 
 if (!fs.existsSync(SETTINGS_DIR)) fs.mkdirSync(SETTINGS_DIR);
 
 const fileSystem = new NodeFileSystem();
+const telemetryCollector = new TelemetryCollectorService();
 
 const DEFAULT_SETTINGS = { rootDir: process.cwd() };
 
@@ -194,22 +202,6 @@ export function handleRequestComplete(ctx: GeminiContext) {
   }
   ctx.socket.emit("done");
 }
-
-/**
- * Logs a message with a timestamp and level to the console.
- * @param msg - The message to log.
- * @param level - The log level ("OUT", "IN", "INFO", or "ERROR").
- */
-window.log = function(msg: string, level: "OUT" | "IN" | "INFO" | "ERROR" = "INFO") {
-  const timestamp = new Date().toLocaleTimeString();
-  const colors = {
-    INFO: "\x1b[32m",
-    ERROR: "\x1b[31m",
-    OUT: "\x1b[34m",
-    IN: "\x1b[35m",
-  };
-  console.error(`${colors[level]}[${timestamp}] [${level}] ${msg}\x1b[0m`);
-};
 
 io.on("connection", (socket) => {
   let gemini: ChildProcess | null = null;
