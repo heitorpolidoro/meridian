@@ -31,17 +31,16 @@ jobs:
           CI: true
 
       - name: SonarCloud Scan
-        - name: SonarCloud Scan
-          if: matrix.node-version == '24.x'
-          uses: SonarSource/sonarqube-scan-action@v6
-          env:
-            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-            SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        if: matrix.node-version == '24.x'
+        uses: SonarSource/sonarqube-scan-action@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-        - name: Report coverage to DeepSource
-          if: matrix.node-version == '24.x'
-          run: |
-            curl -fsSL https://cli.deepsource.com/install | BINDIR=./bin sh
-            ./bin/deepsource report --analyzer test-coverage --key javascript --value-file ./coverage/lcov.info
-          env:
-            DEEPSOURCE_DSN: ${{ secrets.DEEPSOURCE_DSN }}
+      - name: Report coverage to DeepSource
+        if: matrix.node-version == '24.x'
+        run: |
+          curl -fsSL https://cli.deepsource.com/install | BINDIR=./bin sh
+          ./bin/deepsource report --analyzer test-coverage --key javascript --value-file ./coverage/lcov.info
+        env:
+          DEEPSOURCE_DSN: ${{ secrets.DEEPSOURCE_DSN }}
