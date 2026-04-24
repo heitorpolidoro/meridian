@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { OrchestrationService } from './OrchestrationService';
 import { TrackMetadataService } from './TrackMetadataService';
+import { SDSStateMachine } from './SDSStateMachine';
 import { MockFileSystem } from './mocks/MockServices';
 import path from 'node:path';
 
@@ -60,6 +61,66 @@ describe('OrchestrationService', () => {
     it('throws error for non-existent track', () => {
       expect(() => orchestrationService.requestTransition('non-existent', '1.2'))
         .toThrow('Track non-existent not found.');
+    });
+
+    it('allows invalid transition with Override', () => {
+      // Linear skip 1.1 -> 3.1 is invalid, but allowed with Override
+      const updated = orchestrationService.requestTransition('track-1', '3.1', 'Manual skip', 'Override');
+      expect(updated.orchestration.currentPhase).toBe('3.1');
+    });
+
+    it('uses default error message if validation error is missing', () => {
+      orchestrationService.updateStatus('track-1', 'HandoffReady');
+      // Mock SDSStateMachine.validateTransition to return valid: false without error message
+      const spy = vi.spyOn(SDSStateMachine, 'validateTransition').mockReturnValue({ valid: false });
+      
+      expect(() => orchestrationService.requestTransition('track-1', '1.2'))
+        .toThrow('Invalid transition');
+      
+      spy.mockRestore();
+    });
+
+    it('handles missing logs array when updating metadata', () => {
+      // 1. Get real metadata
+      const realMetadata = metadataService.getTrackMetadata('track-1')!;
+      
+      // 2. Create a modified version without logs (corrupt/incomplete state)
+      const corruptedMetadata = {
+        ...realMetadata,
+        orchestration: { ...realMetadata.orchestration }
+      };
+      // @ts-expect-error simulating missing property
+      delete corruptedMetadata.orchestration.logs;
+
+      // 3. Spy on getTrackMetadata to return our corrupted version once
+      const spy = vi.spyOn(metadataService, 'getTrackMetadata')
+        .mockReturnValue(corruptedMetadata as any);
+      
+      // 4. Update status - this should hit the (logs || []) branch
+      const updated = orchestrationService.updateStatus('track-1', 'HandoffReady');
+      
+      // 5. Verify it worked (it will have 1 log entry because OrchestrationService prepends one)
+      expect(updated.orchestration.logs).toHaveLength(1);
+      
+      spy.mockRestore();
+    });
+
+    it('handles missing logs array in requestTransition', () => {
+      orchestrationService.updateStatus('track-1', 'HandoffReady');
+      const corruptedMetadata = {
+        ...metadataService.getTrackMetadata('track-1')!,
+        orchestration: { ...metadataService.getTrackMetadata('track-1')!.orchestration }
+      };
+      // @ts-expect-error simulating missing property
+      delete corruptedMetadata.orchestration.logs;
+
+      const spy = vi.spyOn(metadataService, 'getTrackMetadata').mockReturnValue(corruptedMetadata as any);
+      
+      const updated = orchestrationService.requestTransition('track-1', '1.2');
+      // Should have 1 entry (the one we just added)
+      expect(updated.orchestration.logs).toHaveLength(1);
+      
+      spy.mockRestore();
     });
 
     it('aborts transition if audit log write fails (transactional integrity)', () => {
