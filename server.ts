@@ -10,6 +10,7 @@ import { AgentRegistryService } from "./src/services/AgentRegistryService";
 import { TrackMetadataService } from "./src/services/TrackMetadataService";
 import { BootstrappingService } from "./src/services/BootstrappingService";
 import { SDSComplianceScorer } from "./src/services/SDSComplianceScorer";
+import { GeminiMessage } from "./src/services/IPCSchemas";
 
 if (!fs.existsSync(SETTINGS_DIR)) fs.mkdirSync(SETTINGS_DIR);
 

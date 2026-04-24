@@ -43,3 +43,19 @@ export type TelemetrySummary = z.infer<typeof TelemetrySummarySchema>;
 export type SDSCompliance = z.infer<typeof SDSComplianceSchema>;
 export type SyncConflict = z.infer<typeof SyncConflictSchema>;
 export type IPCEvent = z.infer<typeof IPCEventSchema>;
+
+export interface GeminiMessage {
+  id?: number;
+  method?: string;
+  params?: {
+    update?: {
+      sessionUpdate?: string;
+      content?: {
+        text?: string;
+      };
+    };
+  };
+  result?: {
+    sessionId?: string;
+  };
+}
