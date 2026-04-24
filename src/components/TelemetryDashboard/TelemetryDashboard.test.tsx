@@ -102,4 +102,76 @@ describe("TelemetryDashboard", () => {
     );
     expect(timestampElement).toBeInTheDocument();
   });
+
+  it("should handle null telemetry", () => {
+    render(
+      <TelemetryDashboard
+        telemetry={null}
+        compliance={mockCompliance}
+        conflicts={[]}
+      />,
+    );
+
+    expect(screen.getAllByText("0ms")).toHaveLength(2); // p95 and p50
+    expect(screen.getByText("0")).toBeInTheDocument(); // total tokens
+    expect(screen.getByText("0.0%")).toBeInTheDocument(); // error rate
+  });
+
+  it("should apply correct colors for different score ranges", () => {
+    const multiCompliance = [
+      {
+        trackId: "high",
+        score: 85,
+        details: { hasSpec: true, hasPlan: true, hasTasks: true },
+      },
+      {
+        trackId: "medium",
+        score: 60,
+        details: { hasSpec: true, hasPlan: true, hasTasks: true },
+      },
+      {
+        trackId: "low",
+        score: 30,
+        details: { hasSpec: true, hasPlan: true, hasTasks: true },
+      },
+    ];
+
+    const { container } = render(
+      <TelemetryDashboard
+        telemetry={mockTelemetry}
+        compliance={multiCompliance}
+        conflicts={[]}
+      />,
+    );
+
+    const scoreFills = container.querySelectorAll(".score-fill");
+    // High score (>80) should be #00ff88
+    expect(scoreFills[0]).toHaveStyle("background-color: rgb(0, 255, 136)");
+    // Medium score (>50) should be #ffcc00
+    expect(scoreFills[1]).toHaveStyle("background-color: rgb(255, 204, 0)");
+    // Low score (<=50) should be #ff4444
+    expect(scoreFills[2]).toHaveStyle("background-color: rgb(255, 68, 68)");
+  });
+
+  it("should show invalid state for missing details", () => {
+    const incompleteCompliance = [
+      {
+        trackId: "incomplete",
+        score: 0,
+        details: { hasSpec: false, hasPlan: false, hasTasks: false },
+      },
+    ];
+
+    render(
+      <TelemetryDashboard
+        telemetry={mockTelemetry}
+        compliance={incompleteCompliance}
+        conflicts={[]}
+      />,
+    );
+
+    expect(screen.getByText("Spec")).toHaveClass("invalid");
+    expect(screen.getByText("Plan")).toHaveClass("invalid");
+    expect(screen.getByText("Tasks")).toHaveClass("invalid");
+  });
 });

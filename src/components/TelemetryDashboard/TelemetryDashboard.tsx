@@ -41,7 +41,7 @@ export const TelemetryDashboard: React.FC<TelemetryDashboardProps> = ({
         <div className="metric-card">
           <label>Error Rate</label>
           <div className="value">
-            {(telemetry?.errorRate || 0 * 100).toFixed(1)}%
+            {((telemetry?.errorRate || 0) * 100).toFixed(1)}%
           </div>
         </div>
         <div className="metric-card">
