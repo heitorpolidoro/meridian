@@ -57,7 +57,9 @@ describe("ProjectService", () => {
       throw new Error("Read failed");
     });
 
-    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {
+        // empty because we're suppressing console.error output during tests
+    });
 
     const projects = service.listProjects("/error-path");
 
