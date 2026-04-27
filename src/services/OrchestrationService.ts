@@ -53,15 +53,21 @@ export class OrchestrationService {
         const trackId = segments[0];
 
         // Ensure we are watching a file inside a track directory, not the tracks dir itself
-        if (!trackId || trackId === "." || trackId === ".." || segments.length <= 1) {
+        if (
+          !trackId ||
+          trackId === "." ||
+          trackId === ".." ||
+          segments.length <= 1
+        ) {
           return;
         }
 
-        const eventHandlers: { [key: string]: (id: string) => Promise<void> } = {
-          change: (id: string) => this.runAutoValidation(id),
-          rename: (id: string) => this.runAutoValidation(id),
-          FILE_SAVED: (id: string) => this.runAutoValidation(id),
-        };
+        const eventHandlers: { [key: string]: (id: string) => Promise<void> } =
+          {
+            change: (id: string) => this.runAutoValidation(id),
+            rename: (id: string) => this.runAutoValidation(id),
+            FILE_SAVED: (id: string) => this.runAutoValidation(id),
+          };
 
         const promise = eventHandlers[event]?.(trackId);
         if (promise) {
@@ -111,7 +117,7 @@ export class OrchestrationService {
           comment: "Quality gates failed after modification.",
         },
       ];
-      const action = transitionActions.find(t => t.condition);
+      const action = transitionActions.find((t) => t.condition);
       if (action) {
         const { newStatus, comment } = action;
         this.updateStatus(trackId, newStatus, comment);

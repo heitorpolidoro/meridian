@@ -142,13 +142,9 @@ export function processGeminiOutput(
 
     if (parsed.method && methodHandlers[parsed.method]) {
       methodHandlers[parsed.method]();
-    } else if (
-      parsed.id !== undefined && idHandlers[parsed.id]
-    ) {
+    } else if (parsed.id !== undefined && idHandlers[parsed.id]) {
       idHandlers[parsed.id]();
-    } else if (
-      parsed.id !== undefined && parsed.id >= 3 && parsed.result
-    ) {
+    } else if (parsed.id !== undefined && parsed.id >= 3 && parsed.result) {
       handleRequestComplete(ctx);
     }
   } catch {
