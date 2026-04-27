@@ -63,7 +63,10 @@ export function getContextServices() {
 /**
  * Logs a message to the console with level-based coloring.
  */
-export function log(msg: string, level: "OUT" | "IN" | "INFO" | "ERROR" = "INFO") {
+export function log(
+  msg: string,
+  level: "OUT" | "IN" | "INFO" | "ERROR" = "INFO",
+) {
   const timestamp = new Date().toLocaleTimeString();
   const colors = {
     INFO: "\x1b[32m",
@@ -121,28 +124,30 @@ export function processGeminiOutput(
   try {
     const parsed: GeminiMessage = JSON.parse(jsonLine);
     const handlers: Record<string, () => void> = {
-      'id:1': () => handleInitialize(sendACP, ctx),
-      'id:2': () => {
+      "id:1": () => handleInitialize(sendACP, ctx),
+      "id:2": () => {
         const sessionId = parsed.result?.sessionId;
         if (sessionId) {
           ctx.setSessionId(sessionId);
           ctx.socket.emit("ready");
         }
       },
-      'method:session/update': () =>
+      "method:session/update": () =>
         handleSessionUpdate(parsed, ctx.socket, ctx.telemetryCollector),
-      'default': () => {
+      default: () => {
         if (parsed.id !== undefined && parsed.id >= 3 && parsed.result) {
           handleRequestComplete(ctx);
         }
       },
     };
-    const methodKey = parsed.method ? `method:${parsed.method}` : '';
-    const idKey = parsed.id !== undefined ? `id:${parsed.id}` : '';
+    const methodKey = parsed.method ? `method:${parsed.method}` : "";
+    const idKey = parsed.id !== undefined ? `id:${parsed.id}` : "";
     const key =
-      methodKey && handlers[methodKey] ? methodKey :
-      idKey && handlers[idKey] ? idKey :
-      'default';
+      methodKey && handlers[methodKey]
+        ? methodKey
+        : idKey && handlers[idKey]
+          ? idKey
+          : "default";
     handlers[key]();
   } catch {
     /* Ignore malformed */
@@ -152,7 +157,10 @@ export function processGeminiOutput(
 /**
  * Initializes a new Gemini session.
  */
-export function handleInitialize(sendACP: (msg: unknown) => void, ctx: GeminiContext) {
+export function handleInitialize(
+  sendACP: (msg: unknown) => void,
+  ctx: GeminiContext,
+) {
   sendACP({
     jsonrpc: "2.0",
     id: 2,
