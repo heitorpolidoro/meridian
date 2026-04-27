@@ -1,7 +1,8 @@
 import path from 'node:path';
 import { SDSStateMachine, SDSPhase, OrchestrationStatus } from './SDSStateMachine';
 import { TrackMetadataService, TrackMetadata } from './TrackMetadataService';
-import { IFileSystem } from './interfaces/ICoreServices';
+import { IFileSystem, IFilesystemWatcher } from './interfaces/ICoreServices';
+import { ValidationEngine } from './ValidationEngine';
 
 export type OrchestrationTrigger = 'Auto' | 'Manual' | 'Override';
 
@@ -23,8 +24,51 @@ export class OrchestrationService {
   constructor(
     private readonly trackMetadataService: TrackMetadataService,
     private readonly fs: IFileSystem,
-    private readonly meridianDir: string
-  ) {}
+    private readonly meridianDir: string,
+    private readonly validationEngine?: ValidationEngine,
+    private readonly watcher?: IFilesystemWatcher
+  ) {
+    if (this.watcher && this.validationEngine) {
+      this.setupAutoValidation();
+    }
+  }
+
+  /**
+   * Sets up file system watching to trigger validation automatically.
+   */
+  private setupAutoValidation() {
+    this.watcher?.watch(path.join(this.meridianDir, 'tracks'), (event, filePath) => {
+      // Extract trackId from path: tracks/<trackId>/...
+      const relative = path.relative(path.join(this.meridianDir, 'tracks'), filePath);
+      const trackId = relative.split(path.sep)[0];
+      
+      if (trackId && (event === 'change' || event === 'rename' || event === 'FILE_SAVED')) {
+        this.runAutoValidation(trackId).catch(err => {
+          console.error(`Auto-validation failed for track ${trackId}:`, err);
+        });
+      }
+    });
+  }
+
+  /**
+   * Runs validation engine for the track's current phase.
+   * If validation passes, updates status to 'HandoffReady'.
+   */
+  public async runAutoValidation(trackId: string): Promise<void> {
+    if (!this.validationEngine) return;
+
+    const metadata = this.trackMetadataService.getTrackMetadata(trackId);
+    if (!metadata || metadata.orchestration.status === 'Completed') return;
+
+    const currentPhase = metadata.orchestration.currentPhase as SDSPhase;
+    const report = await this.validationEngine.runValidation(trackId, currentPhase);
+
+    if (report.overallSuccess && metadata.orchestration.status !== 'HandoffReady') {
+      this.updateStatus(trackId, 'HandoffReady', 'All quality gates passed automatically.');
+    } else if (!report.overallSuccess && metadata.orchestration.status === 'HandoffReady') {
+      this.updateStatus(trackId, 'InProgress', 'Quality gates failed after modification.');
+    }
+  }
 
   /**
    * Returns the absolute path to the track directory.
