@@ -74,7 +74,8 @@ describe("OrchestrationService", () => {
     });
 
     it("does nothing if validation fails but status is already InProgress", async () => {
-      // Status is already InProgress by default
+      // Set status to InProgress explicitly
+      orchestrationService.updateStatus("track-1", "InProgress");
       const spy = vi.spyOn(orchestrationService, "updateStatus");
 
       // Mock validation to fail
@@ -109,6 +110,23 @@ describe("OrchestrationService", () => {
         path.join(meridianDir, "tracks/track-1/tasks.md"),
       );
       expect(spy).toHaveBeenCalledTimes(3);
+    });
+
+    it("ignores watcher events for files outside track directories", () => {
+      const watchMock = mockWatcher.watch as Mock<
+        [string, (eventType: string, filePath: string) => void],
+        void
+      >;
+      const watchCallback = watchMock.mock.calls[0][1];
+      const spy = vi.spyOn(orchestrationService, "runAutoValidation");
+
+      // Root of tracks/
+      watchCallback("change", path.join(meridianDir, "tracks/some-file.txt"));
+      expect(spy).not.toHaveBeenCalled();
+
+      // Outside tracks/
+      watchCallback("change", path.join(meridianDir, "other-file.txt"));
+      expect(spy).not.toHaveBeenCalled();
     });
 
     it("logs error if auto-validation fails", async () => {
