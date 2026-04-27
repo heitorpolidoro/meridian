@@ -53,11 +53,8 @@ export class OrchestrationService {
         const trackId = segments[0];
 
         // Ensure we are watching a file inside a track directory, not the tracks dir itself
-        const isValidTrackDir = 
-          trackId && 
-          trackId !== "." && 
-          trackId !== ".." && 
-          segments.length > 1;
+        const isValidTrackDir =
+          trackId && trackId !== "." && trackId !== ".." && segments.length > 1;
 
         if (
           isValidTrackDir &&
@@ -91,8 +88,12 @@ export class OrchestrationService {
       );
 
       // Re-fetch metadata to avoid race conditions with stale state after async validation
-      const latestMetadata = this.trackMetadataService.getTrackMetadata(trackId);
-      if (!latestMetadata || latestMetadata.orchestration.status === "Completed")
+      const latestMetadata =
+        this.trackMetadataService.getTrackMetadata(trackId);
+      if (
+        !latestMetadata ||
+        latestMetadata.orchestration.status === "Completed"
+      )
         return;
 
       const transitions = [
