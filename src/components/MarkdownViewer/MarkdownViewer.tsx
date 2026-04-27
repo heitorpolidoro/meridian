@@ -22,6 +22,8 @@ export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({ content = '', on
             // Basic language support list, fallback to text
             const isSupported = ['typescript', 'ts', 'tsx', 'javascript', 'json', 'bash', 'markdown', 'css', 'html'].includes(lang);
             
+            const content = React.Children.toArray(children).join('').replace(/\n$/, '');
+            
             return !inline && (isSupported || match) ? (
               <SyntaxHighlighter
                 {...props}
@@ -29,7 +31,7 @@ export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({ content = '', on
                 language={isSupported ? lang : 'text'}
                 PreTag="div"
               >
-                {String(children).replace(/\n$/, '')}
+                {content}
               </SyntaxHighlighter>
             ) : (
               <code {...props} className={className as string}>

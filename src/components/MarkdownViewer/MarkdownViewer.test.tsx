@@ -31,7 +31,8 @@ describe('MarkdownViewer - Link Handler', () => {
     const link = screen.getByRole('link', { name: 'External Link' });
     
     // This covers the return; in handleClick for external links
-    fireEvent.click(link);
+    const result = fireEvent.click(link);
+    expect(result).toBe(true); // true means preventDefault was NOT called
   });
 
   it('should prevent default and call onNavigate for relative .md links', () => {
@@ -88,8 +89,8 @@ describe('MarkdownViewer - Link Handler', () => {
     const content = '[Relative Link](./plan.md)';
     render(<MarkdownViewer content={content} />);
     const link = screen.getByRole('link', { name: 'Relative Link' });
-    fireEvent.click(link);
-    // Should not crash
+    const result = fireEvent.click(link);
+    expect(result).toBe(false); // false means preventDefault WAS called
   });
 });
 

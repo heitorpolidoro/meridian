@@ -25,8 +25,8 @@ export class ContextInjectionService implements IContextInjectionService {
    * @param rootDir - The root directory path where context injection occurs.
    */
   constructor(
-    private fs: IFileSystem,
-    private rootDir: string,
+    private readonly fs: IFileSystem,
+    private readonly rootDir: string,
   ) {}
 
   /**

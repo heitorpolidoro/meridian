@@ -73,7 +73,7 @@ export class OrchestrationService {
     const metadata = this.trackMetadataService.getTrackMetadata(trackId);
     if (!metadata || metadata.orchestration.status === "Completed") return;
 
-    const currentPhase = metadata.orchestration.currentPhase as SDSPhase;
+    const currentPhase = metadata.orchestration.currentPhase;
     const report = await this.validationEngine.runValidation(
       trackId,
       currentPhase,
@@ -136,8 +136,8 @@ export class OrchestrationService {
       throw new Error(`Track ${trackId} not found.`);
     }
 
-    const currentPhase = metadata.orchestration.currentPhase as SDSPhase;
-    const currentStatus = metadata.orchestration.status as OrchestrationStatus;
+    const currentPhase = metadata.orchestration.currentPhase;
+    const currentStatus = metadata.orchestration.status;
     const validation = SDSStateMachine.validateTransition(
       currentPhase,
       targetPhase,
@@ -217,7 +217,7 @@ export class OrchestrationService {
     }
 
     const timestamp = new Date().toISOString();
-    const currentPhase = metadata.orchestration.currentPhase as SDSPhase;
+    const currentPhase = metadata.orchestration.currentPhase;
 
     const logEntry: OrchestrationLogEntry = {
       timestamp,

@@ -6,11 +6,11 @@ aside { width: 240px; background: #131720; border-right: 1px solid #1f2937; disp
 aside h2 { font-size: 1.4rem; font-weight: 700; color: #38bdf8; margin: 0; letter-spacing: 0.05rem; }
 
 .active-project-info { margin-top: 0.8rem; display: flex; flex-direction: column; }
-.project-label { font-size: 0.7rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05rem; font-weight: 600; }
+.project-label { font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05rem; font-weight: 600; }
 .project-name { font-size: 0.9rem; color: #f8fafc; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 nav { flex: 1; padding: 1.5rem 0; display: flex; flex-direction: column; gap: 0.2rem; }
-nav button { padding: 0.9rem 1.5rem; cursor: pointer; transition: all 0.2s ease; border-left: 3px solid transparent; font-weight: 500; color: #cbd5e1; background: transparent; border: none; width: 100%; text-align: left; font-family: inherit; font-size: inherit; outline: none; }
+nav button { padding: 0.9rem 1.5rem; cursor: pointer; transition: all 0.2s ease; border-left: 3px solid transparent; font-weight: 500; color: #f1f5f9; background: transparent; border: none; width: 100%; text-align: left; font-family: inherit; font-size: inherit; outline: none; }
 nav button:hover { background: rgba(56, 189, 248, 0.08); color: #f8fafc; }
 nav button.active { background: rgba(56, 189, 248, 0.15); color: #7dd3fc; border-left: 3px solid #38bdf8; }
 nav button:focus-visible { background: rgba(56, 189, 248, 0.1); box-shadow: inset 0 0 0 2px rgba(56, 189, 248, 0.6); }
