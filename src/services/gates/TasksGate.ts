@@ -17,7 +17,7 @@ export const TasksGate: QualityGateFn = async (
   meridianDir: string,
 ): Promise<ValidationResult> => {
   const tasksPath = path.join(meridianDir, "tracks", trackId, "tasks.md");
-  
+
   if (!fs.exists(tasksPath)) {
     return {
       success: false,
@@ -34,14 +34,16 @@ export const TasksGate: QualityGateFn = async (
     return {
       success: false,
       gateName: "TasksGate",
-      message: "tasks.md must contain at least one task definition (e.g., [Task 1.1])",
+      message:
+        "tasks.md must contain at least one task definition (e.g., [Task 1.1])",
     };
   }
 
   // Split content by tasks to check for DoD in each
   const taskSections = content.split(/#+.*\[Task\s+\d+\.\d+\].*/i).slice(1);
 
-  const dodRegex = /#+\s*(?:Definition of Done|DoD)|(?:Definition of Done|DoD)\s*:/i;
+  const dodRegex =
+    /#+\s*(?:Definition of Done|DoD)|(?:Definition of Done|DoD)\s*:/i;
   let invalidTasksCount = 0;
 
   for (const section of taskSections) {
