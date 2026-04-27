@@ -43,9 +43,6 @@ export function getSettings() {
 /**
  * Retrieves context-dependent services based on root directory.
  */
-/**
- * Retrieves context-dependent services based on root directory.
- */
 export function getContextServices() {
   const settings = getSettings();
   const rootDir = settings.rootDir;
@@ -66,7 +63,10 @@ export function getContextServices() {
 /**
  * Logs a message to the console with level-based coloring.
  */
-export function log(msg: string, level: "OUT" | "IN" | "INFO" | "ERROR" = "INFO") {
+export function log(
+  msg: string,
+  level: "OUT" | "IN" | "INFO" | "ERROR" = "INFO",
+) {
   const timestamp = new Date().toLocaleTimeString();
   const colors = {
     INFO: "\x1b[32m",
@@ -94,6 +94,7 @@ interface GeminiContext {
   setSessionId: (id: string) => void;
   setPromptStartTime: (time: number | null) => void;
   getPromptStartTime: () => number | null;
+  gemini?: ChildProcess | null;
 }
 
 /**
@@ -101,9 +102,8 @@ interface GeminiContext {
  */
 export function handleGeminiStream(
   data: Buffer,
-  socket: Socket,
-  sendACP: (msg: unknown) => void,
   ctx: GeminiContext,
+  sendACP: (msg: unknown) => void,
 ) {
   const lines = data.toString().split("\n");
   for (const line of lines) {
@@ -123,30 +123,25 @@ export function processGeminiOutput(
 ) {
   try {
     const parsed: GeminiMessage = JSON.parse(jsonLine);
-    const handlers: Record<string, () => void> = {
-      'id:1': () => handleInitialize(sendACP, ctx),
-      'id:2': () => {
+
+    const handlers: Record<string | number, () => void> = {
+      "session/update": () =>
+        handleSessionUpdate(parsed, ctx.socket, ctx.telemetryCollector),
+      1: () => handleInitialize(sendACP, ctx),
+      2: () => {
         const sessionId = parsed.result?.sessionId;
         if (sessionId) {
           ctx.setSessionId(sessionId);
           ctx.socket.emit("ready");
         }
       },
-      'method:session/update': () =>
-        handleSessionUpdate(parsed, ctx.socket, ctx.telemetryCollector),
-      'default': () => {
-        if (parsed.id !== undefined && parsed.id >= 3 && parsed.result) {
-          handleRequestComplete(ctx);
-        }
-      },
+      ...(parsed.id !== undefined && parsed.id >= 3 && parsed.result
+        ? { [parsed.id]: () => handleRequestComplete(ctx) }
+        : {}),
     };
-    const methodKey = parsed.method ? `method:${parsed.method}` : '';
-    const idKey = parsed.id !== undefined ? `id:${parsed.id}` : '';
-    const key =
-      methodKey && handlers[methodKey] ? methodKey :
-      idKey && handlers[idKey] ? idKey :
-      'default';
-    handlers[key]();
+
+    const key = parsed.method ?? parsed.id;
+    handlers[key]?.();
   } catch {
     /* Ignore malformed */
   }
@@ -155,7 +150,10 @@ export function processGeminiOutput(
 /**
  * Initializes a new Gemini session.
  */
-export function handleInitialize(sendACP: (msg: unknown) => void, ctx: GeminiContext) {
+export function handleInitialize(
+  sendACP: (msg: unknown) => void,
+  ctx: GeminiContext,
+) {
   sendACP({
     jsonrpc: "2.0",
     id: 2,
@@ -271,7 +269,7 @@ io.on("connection", (socket) => {
     );
 
     gemini.stdout?.on("data", (data: Buffer) =>
-      handleGeminiStream(data, { ...ctx, gemini }),
+      handleGeminiStream(data, { ...ctx, gemini }, sendACP),
     );
     socket.emit("status", "Initializing...");
     sendACP({
@@ -299,7 +297,8 @@ io.on("connection", (socket) => {
   });
 });
 
-httpServer.listen(PORT, () =>
+httpServer.listen(PORT, () => {
   // Logging server startup is useful for monitoring server status in production
   console.log(`
-🚀 Meridian running at http://localhost:${PORT}`) // skipcq: JS-0002
+🚀 Meridian running at http://localhost:${PORT}`); // skipcq: JS-0002
+});

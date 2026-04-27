@@ -1,23 +1,35 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, vi, Mock } from "vitest";
 import { OrchestrationService } from "./OrchestrationService";
 import { TrackMetadataService } from "./TrackMetadataService";
 import { SDSStateMachine } from "./SDSStateMachine";
-import { MockFileSystem } from "./mocks/MockServices";
+import { MockFileSystem } from "./mocks/MockFileSystem";
+import { ValidationEngine } from "./ValidationEngine";
+import { IFilesystemWatcher } from "./interfaces/ICoreServices";
 import path from "node:path";
 
 describe("OrchestrationService", () => {
   let fs: MockFileSystem;
   let metadataService: TrackMetadataService;
   let orchestrationService: OrchestrationService;
+  let validationEngine: ValidationEngine;
+  let mockWatcher: IFilesystemWatcher;
   const meridianDir = "/test/.meridian";
 
   beforeEach(() => {
     fs = new MockFileSystem();
     metadataService = new TrackMetadataService(fs, meridianDir);
+    validationEngine = new ValidationEngine(fs, meridianDir);
+    mockWatcher = {
+      watch: vi.fn(),
+      stop: vi.fn(),
+    };
+
     orchestrationService = new OrchestrationService(
       metadataService,
       fs,
       meridianDir,
+      validationEngine,
+      mockWatcher,
     );
 
     vi.useFakeTimers();
@@ -25,6 +37,163 @@ describe("OrchestrationService", () => {
 
     // Initialize a track
     metadataService.updateTrackMetadata("track-1", { name: "Test Track" });
+  });
+
+  describe("Auto-Validation", () => {
+    it("updates status to HandoffReady if validation passes", async () => {
+      // Mock validation to pass
+      vi.spyOn(validationEngine, "runValidation").mockResolvedValue({
+        trackId: "track-1",
+        phase: "1.1",
+        overallSuccess: true,
+        results: [],
+      });
+
+      await orchestrationService.runAutoValidation("track-1");
+
+      const state = orchestrationService.getOrchestrationState("track-1");
+      expect(state?.status).toBe("HandoffReady");
+    });
+
+    it("reverts HandoffReady to InProgress if validation fails after modification", async () => {
+      // Start as HandoffReady
+      orchestrationService.updateStatus("track-1", "HandoffReady");
+
+      // Mock validation to fail
+      vi.spyOn(validationEngine, "runValidation").mockResolvedValue({
+        trackId: "track-1",
+        phase: "1.1",
+        overallSuccess: false,
+        results: [],
+      });
+
+      await orchestrationService.runAutoValidation("track-1");
+
+      const state = orchestrationService.getOrchestrationState("track-1");
+      expect(state?.status).toBe("InProgress");
+    });
+
+    it("does nothing if validation fails but status is already InProgress", async () => {
+      // Set status to InProgress explicitly
+      orchestrationService.updateStatus("track-1", "InProgress");
+      const spy = vi.spyOn(orchestrationService, "updateStatus");
+
+      // Mock validation to fail
+      vi.spyOn(validationEngine, "runValidation").mockResolvedValue({
+        trackId: "track-1",
+        phase: "1.1",
+        overallSuccess: false,
+        results: [],
+      });
+
+      await orchestrationService.runAutoValidation("track-1");
+
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it("triggers validation on watcher events", () => {
+      const watchMock = mockWatcher.watch as Mock<
+        [string, (eventType: string, filePath: string) => void],
+        void
+      >;
+      const watchCallback = watchMock.mock.calls[0][1];
+      const spy = vi.spyOn(orchestrationService, "runAutoValidation");
+
+      watchCallback("change", path.join(meridianDir, "tracks/track-1/spec.md"));
+      expect(spy).toHaveBeenCalledWith("track-1");
+
+      watchCallback("rename", path.join(meridianDir, "tracks/track-1/plan.md"));
+      expect(spy).toHaveBeenCalledTimes(2);
+
+      watchCallback(
+        "FILE_SAVED",
+        path.join(meridianDir, "tracks/track-1/tasks.md"),
+      );
+      expect(spy).toHaveBeenCalledTimes(3);
+    });
+
+    it("ignores watcher events for files outside track directories", () => {
+      const watchMock = mockWatcher.watch as Mock<
+        [string, (eventType: string, filePath: string) => void],
+        void
+      >;
+      const watchCallback = watchMock.mock.calls[0][1];
+      const spy = vi.spyOn(orchestrationService, "runAutoValidation");
+
+      // Root of tracks/
+      watchCallback("change", path.join(meridianDir, "tracks/some-file.txt"));
+      expect(spy).not.toHaveBeenCalled();
+
+      // Outside tracks/
+      watchCallback("change", path.join(meridianDir, "other-file.txt"));
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it("logs error if auto-validation fails", async () => {
+      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {
+        /* empty because this mock does not need to return a value */
+      });
+      vi.spyOn(orchestrationService, "runAutoValidation").mockRejectedValue(
+        new Error("Async Fail"),
+      );
+
+      const watchMock = mockWatcher.watch as Mock<
+        [string, (eventType: string, filePath: string) => void],
+        void
+      >;
+      const watchCallback = watchMock.mock.calls[0][1];
+      await watchCallback(
+        "change",
+        path.join(meridianDir, "tracks/track-1/spec.md"),
+      );
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        "Auto-validation failed for track track-1:",
+        expect.any(Error),
+      );
+      consoleSpy.mockRestore();
+    });
+
+    it("stops validation if track becomes Completed during async validation", async () => {
+      const spy = vi.spyOn(orchestrationService, "updateStatus");
+
+      // Mock validation to pass but take time
+      vi.spyOn(validationEngine, "runValidation").mockImplementation(() => {
+        // Change track status to Completed while validation is "running"
+        metadataService.updateTrackMetadata("track-1", {
+          status: "Completed",
+        });
+        return Promise.resolve({
+          trackId: "track-1",
+          phase: "1.1",
+          overallSuccess: true,
+          results: [],
+        });
+      });
+
+      await orchestrationService.runAutoValidation("track-1");
+
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it("stops validation if track is deleted during async validation", async () => {
+      const spy = vi.spyOn(orchestrationService, "updateStatus");
+
+      vi.spyOn(validationEngine, "runValidation").mockImplementation(() => {
+        // Delete metadata while validation is running
+        vi.spyOn(metadataService, "getTrackMetadata").mockReturnValue(null);
+        return {
+          trackId: "track-1",
+          phase: "1.1",
+          overallSuccess: true,
+          results: [],
+        };
+      });
+
+      await orchestrationService.runAutoValidation("track-1");
+
+      expect(spy).not.toHaveBeenCalled();
+    });
   });
 
   describe("requestTransition", () => {

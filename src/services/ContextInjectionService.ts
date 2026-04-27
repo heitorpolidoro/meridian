@@ -1,4 +1,4 @@
-import * as path from "node:path";
+import path from "node:path";
 import {
   IFileSystem,
   IContextInjectionService,
@@ -25,8 +25,8 @@ export class ContextInjectionService implements IContextInjectionService {
    * @param rootDir - The root directory path where context injection occurs.
    */
   constructor(
-    private fs: IFileSystem,
-    private rootDir: string,
+    private readonly fs: IFileSystem,
+    private readonly rootDir: string,
   ) {}
 
   /**

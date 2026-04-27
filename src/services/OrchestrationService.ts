@@ -1,9 +1,14 @@
-import path from 'node:path';
-import { SDSStateMachine, SDSPhase, OrchestrationStatus } from './SDSStateMachine';
-import { TrackMetadataService, TrackMetadata } from './TrackMetadataService';
-import { IFileSystem } from './interfaces/ICoreServices';
+import path from "node:path";
+import {
+  SDSStateMachine,
+  SDSPhase,
+  OrchestrationStatus,
+} from "./SDSStateMachine";
+import { TrackMetadataService, TrackMetadata } from "./TrackMetadataService";
+import { IFileSystem, IFilesystemWatcher } from "./interfaces/ICoreServices";
+import { ValidationEngine } from "./ValidationEngine";
 
-export type OrchestrationTrigger = 'Auto' | 'Manual' | 'Override';
+export type OrchestrationTrigger = "Auto" | "Manual" | "Override";
 
 export interface OrchestrationLogEntry {
   timestamp: string;
@@ -20,17 +25,106 @@ export interface OrchestrationLogEntry {
  * Handles phase transitions, status updates, and transactional audit logging.
  */
 export class OrchestrationService {
+  private readonly validatingTracks = new Set<string>();
+
   constructor(
     private readonly trackMetadataService: TrackMetadataService,
     private readonly fs: IFileSystem,
-    private readonly meridianDir: string
-  ) {}
+    private readonly meridianDir: string,
+    private readonly validationEngine?: ValidationEngine,
+    private readonly watcher?: IFilesystemWatcher,
+  ) {
+    if (this.watcher && this.validationEngine) {
+      this.setupAutoValidation();
+    }
+  }
 
+  /**
+   * Sets up file system watching to trigger validation automatically.
+   */
+  private setupAutoValidation() {
+    this.watcher?.watch(
+      path.join(this.meridianDir, "tracks"),
+      (event: string, filePath: string) => {
+        // Extract trackId from path: tracks/<trackId>/...
+        const tracksDir = path.join(this.meridianDir, "tracks");
+        const relative = path.relative(tracksDir, filePath);
+        const segments = relative.split(path.sep);
+        const trackId = segments[0];
+
+        // Ensure we are watching a file inside a track directory, not the tracks dir itself
+        const invalidTrackIds = new Set(["", ".", ".."]);
+        if (invalidTrackIds.has(trackId) || segments.length <= 1) {
+          return;
+        }
+
+        const eventHandlers: { [key: string]: (id: string) => Promise<void> } =
+          {
+            change: (id: string) => this.runAutoValidation(id),
+            rename: (id: string) => this.runAutoValidation(id),
+            FILE_SAVED: (id: string) => this.runAutoValidation(id),
+          };
+
+        eventHandlers[event]?.(trackId)?.catch((err: unknown) => {
+          console.error(`Auto-validation failed for track ${trackId}:`, err);
+        });
+      },
+    );
+  }
+
+  /**
+   * Runs validation engine for the track's current phase.
+   * If validation passes, updates status to 'HandoffReady'.
+   */
+  public async runAutoValidation(trackId: string): Promise<void> {
+    if (!this.validationEngine || this.validatingTracks.has(trackId)) return;
+
+    this.validatingTracks.add(trackId);
+
+    try {
+      const metadata = this.trackMetadataService.getTrackMetadata(trackId);
+      if (!metadata || metadata.orchestration.status === "Completed") return;
+
+      const currentPhase = metadata.orchestration.currentPhase;
+      const report = await this.validationEngine.runValidation(
+        trackId,
+        currentPhase,
+      );
+
+      // Re-fetch metadata to avoid race conditions with stale state after async validation
+      const latestMetadata =
+        this.trackMetadataService.getTrackMetadata(trackId);
+      if (!latestMetadata || latestMetadata.status === "Completed") return;
+
+      const currentStatus = latestMetadata.orchestration.status;
+
+      const transitionMap: Record<
+        "pass" | "fail",
+        { newStatus: string; comment: string }
+      > = {
+        pass: {
+          newStatus: "HandoffReady",
+          comment: "All quality gates passed automatically.",
+        },
+        fail: {
+          newStatus: "InProgress",
+          comment: "Quality gates failed after modification.",
+        },
+      };
+      const key = report.overallSuccess ? "pass" : "fail";
+      const action = transitionMap[key];
+      if (action.newStatus !== currentStatus) {
+        this.updateStatus(trackId, action.newStatus, action.comment);
+      }
+    } finally {
+      this.validatingTracks.delete(trackId);
+    }
+  }
   /**
    * Returns the absolute path to the track directory.
    */
   private getTrackDir(trackId: string): string {
-    return path.join(this.meridianDir, 'tracks', trackId);
+    return path.join(this.meridianDir, "tracks", trackId);
   }
 
   /**
@@ -38,9 +132,9 @@ export class OrchestrationService {
    * This operation is synchronous and transactional.
    */
   private appendAuditLog(trackId: string, entry: OrchestrationLogEntry) {
-    const logPath = path.join(this.getTrackDir(trackId), 'orchestration.log');
+    const logPath = path.join(this.getTrackDir(trackId), "orchestration.log");
     const logLine = `${JSON.stringify(entry)}\n`;
-    
+
     // We explicitly don't catch here so that a log failure blocks the transition (transactional integrity)
     this.fs.appendFile(logPath, logLine);
   }
@@ -48,33 +142,43 @@ export class OrchestrationService {
   /**
    * Requests a phase transition for a specific track.
    * Ensures linear progression and transactional integrity.
-   * 
+   *
    * @throws Error if track not found, transition invalid, or log fails.
    */
   requestTransition(
-    trackId: string, 
-    targetPhase: SDSPhase, 
+    trackId: string,
+    targetPhase: SDSPhase,
     message?: string,
-    trigger: OrchestrationTrigger = 'Manual'
+    trigger: OrchestrationTrigger = "Manual",
   ): TrackMetadata {
     const metadata = this.trackMetadataService.getTrackMetadata(trackId);
     if (!metadata) {
       throw new Error(`Track ${trackId} not found.`);
     }
 
-    const currentPhase = metadata.orchestration.currentPhase as SDSPhase;
-    const currentStatus = metadata.orchestration.status as OrchestrationStatus;
-    const validation = SDSStateMachine.validateTransition(currentPhase, targetPhase);
+    const currentPhase = metadata.orchestration.currentPhase;
+    const currentStatus = metadata.orchestration.status;
+    const validation = SDSStateMachine.validateTransition(
+      currentPhase,
+      targetPhase,
+    );
 
     // SDS Integrity Guard: Forward linear transitions MUST be in HandoffReady status
     // unless it is an explicit User Override.
-    const isForward = SDSStateMachine.getNextPhase(currentPhase) === targetPhase;
-    if (isForward && currentStatus !== 'HandoffReady' && trigger !== 'Override') {
-      throw new Error(`Cannot transition to ${targetPhase}: current phase ${currentPhase} must be in 'HandoffReady' status.`);
+    const isForward =
+      SDSStateMachine.getNextPhase(currentPhase) === targetPhase;
+    if (
+      isForward &&
+      currentStatus !== "HandoffReady" &&
+      trigger !== "Override"
+    ) {
+      throw new Error(
+        `Cannot transition to ${targetPhase}: current phase ${currentPhase} must be in 'HandoffReady' status.`,
+      );
     }
 
-    if (!validation.valid && trigger !== 'Override') {
-      throw new Error(validation.error || 'Invalid transition');
+    if (!validation.valid && trigger !== "Override") {
+      throw new Error(validation.error || "Invalid transition");
     }
 
     const newAgent = SDSStateMachine.getAssignedRole(targetPhase);
@@ -84,22 +188,25 @@ export class OrchestrationService {
       timestamp,
       fromPhase: currentPhase,
       toPhase: targetPhase,
-      status: 'InProgress',
+      status: "InProgress",
       agent: newAgent,
       message,
-      trigger
+      trigger,
     };
 
-    const updatedMetadata = this.trackMetadataService.updateTrackMetadata(trackId, {
-      orchestration: {
-        ...metadata.orchestration,
-        currentPhase: targetPhase,
-        status: 'InProgress',
-        assignedAgent: newAgent,
-        handoffTimestamp: timestamp,
-        logs: [logEntry, ...(metadata.orchestration.logs || [])].slice(0, 50)
-      }
-    });
+    const updatedMetadata = this.trackMetadataService.updateTrackMetadata(
+      trackId,
+      {
+        orchestration: {
+          ...metadata.orchestration,
+          currentPhase: targetPhase,
+          status: "InProgress",
+          assignedAgent: newAgent,
+          handoffTimestamp: timestamp,
+          logs: [logEntry, ...(metadata.orchestration.logs || [])].slice(0, 50),
+        },
+      },
+    );
 
     // Persistent audit log file is written ONLY after metadata update succeeds
     try {
@@ -115,14 +222,14 @@ export class OrchestrationService {
 
   /**
    * Updates the orchestration status of a track without changing the phase.
-   * 
+   *
    * @throws Error if track not found or log fails.
    */
   updateStatus(
-    trackId: string, 
-    status: OrchestrationStatus, 
+    trackId: string,
+    status: OrchestrationStatus,
     message?: string,
-    trigger: OrchestrationTrigger = 'Auto'
+    trigger: OrchestrationTrigger = "Auto",
   ): TrackMetadata {
     const metadata = this.trackMetadataService.getTrackMetadata(trackId);
     if (!metadata) {
@@ -130,7 +237,7 @@ export class OrchestrationService {
     }
 
     const timestamp = new Date().toISOString();
-    const currentPhase = metadata.orchestration.currentPhase as SDSPhase;
+    const currentPhase = metadata.orchestration.currentPhase;
 
     const logEntry: OrchestrationLogEntry = {
       timestamp,
@@ -138,16 +245,19 @@ export class OrchestrationService {
       status,
       agent: metadata.orchestration.assignedAgent,
       message,
-      trigger
+      trigger,
     };
 
-    const updatedMetadata = this.trackMetadataService.updateTrackMetadata(trackId, {
-      orchestration: {
-        ...metadata.orchestration,
-        status,
-        logs: [logEntry, ...(metadata.orchestration.logs || [])].slice(0, 50)
-      }
-    });
+    const updatedMetadata = this.trackMetadataService.updateTrackMetadata(
+      trackId,
+      {
+        orchestration: {
+          ...metadata.orchestration,
+          status,
+          logs: [logEntry, ...(metadata.orchestration.logs || [])].slice(0, 50),
+        },
+      },
+    );
 
     // Persistent audit log file is written ONLY after metadata update succeeds
     try {
