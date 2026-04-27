@@ -10,7 +10,7 @@ import path from "node:path";
  * @param meridianDir - The base directory where track files are located.
  * @returns A promise that resolves to a ValidationResult indicating success or failure of the gate.
  */
-export const PlanGate: QualityGateFn = async (
+export const PlanGate: QualityGateFn = (
   trackId: string,
   fs: IFileSystem,
   meridianDir: string,
@@ -18,11 +18,11 @@ export const PlanGate: QualityGateFn = async (
   const planPath = path.join(meridianDir, "tracks", trackId, "plan.md");
 
   if (!fs.exists(planPath)) {
-    return {
+    return Promise.resolve({
       success: false,
       gateName: "PlanGate",
       message: `plan.md not found for track ${trackId}`,
-    };
+    });
   }
 
   const content = fs.readFile(planPath);
@@ -45,17 +45,17 @@ export const PlanGate: QualityGateFn = async (
   const errors = checks.filter((c) => c.condition).map((c) => c.error);
 
   if (errors.length > 0) {
-    return {
+    return Promise.resolve({
       success: false,
       gateName: "PlanGate",
       message: "Validation failed for plan.md",
       errors,
-    };
+    });
   }
 
-  return {
+  return Promise.resolve({
     success: true,
     gateName: "PlanGate",
     message: "plan.md is valid",
-  };
+  });
 };

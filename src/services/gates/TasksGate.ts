@@ -11,7 +11,7 @@ import path from "node:path";
  * @returns A promise that resolves to a ValidationResult indicating success if
  * the tasks.md file is valid, or failure otherwise.
  */
-export const TasksGate: QualityGateFn = async (
+export const TasksGate: QualityGateFn = (
   trackId: string,
   fs: IFileSystem,
   meridianDir: string,
@@ -19,11 +19,11 @@ export const TasksGate: QualityGateFn = async (
   const tasksPath = path.join(meridianDir, "tracks", trackId, "tasks.md");
 
   if (!fs.exists(tasksPath)) {
-    return {
+    return Promise.resolve({
       success: false,
       gateName: "TasksGate",
       message: `tasks.md not found for track ${trackId}`,
-    };
+    });
   }
 
   const content = fs.readFile(tasksPath);
@@ -33,21 +33,14 @@ export const TasksGate: QualityGateFn = async (
     /#+\s*(?:Definition of Done|DoD)|(?:Definition of Done|DoD)\s*:/i;
 
   // Declarative checks
-  const checks = [
-    {
-      condition: !/\[Task\s+\d+\.\d+\]/i.test(content),
-      message:
-        "tasks.md must contain at least one task definition (e.g., [Task 1.1])",
-    },
-  ];
-
-  const initialFailure = checks.find((c) => c.condition);
-  if (initialFailure) {
-    return {
+  const hasTasks = /\[Task\s+\d+\.\d+\]/i.test(content);
+  if (!hasTasks) {
+    return Promise.resolve({
       success: false,
       gateName: "TasksGate",
-      message: initialFailure.message,
-    };
+      message:
+        "tasks.md must contain at least one task definition (e.g., [Task 1.1])",
+    });
   }
 
   const invalidTasksCount = taskSections.filter(
@@ -55,17 +48,17 @@ export const TasksGate: QualityGateFn = async (
   ).length;
 
   if (invalidTasksCount > 0) {
-    return {
+    return Promise.resolve({
       success: false,
       gateName: "TasksGate",
       message: "Each task in tasks.md must have a 'Definition of Done' (DoD)",
       errors: [`${invalidTasksCount} task(s) are missing DoD`],
-    };
+    });
   }
 
-  return {
+  return Promise.resolve({
     success: true,
     gateName: "TasksGate",
     message: "tasks.md is valid",
-  };
+  });
 };

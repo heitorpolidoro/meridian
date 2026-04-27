@@ -1,5 +1,6 @@
 import { ISDSComplianceScorer } from "../interfaces/ICoreServices";
 import { QualityGateFn, ValidationResult } from "../ValidationEngine";
+
 /**
  * Creates a quality gate function that evaluates SDS compliance for a given track ID using the provided scorer.
  * @param {ISDSComplianceScorer} scorer - The scorer used to calculate the SDS compliance score.

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { BootstrappingService } from './BootstrappingService';
 import { MockFileSystem } from './mocks/MockServices';
-import * as path from 'node:path';
+import path from 'node:path';
 
 describe('BootstrappingService', () => {
   let mockFs: MockFileSystem;

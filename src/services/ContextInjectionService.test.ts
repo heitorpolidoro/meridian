@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ContextInjectionService } from './ContextInjectionService';
 import { MockFileSystem } from './mocks/MockServices';
-import * as path from 'node:path';
+import path from 'node:path';
 
 describe('ContextInjectionService', () => {
   let mockFs: MockFileSystem;
