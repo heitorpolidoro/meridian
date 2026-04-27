@@ -123,32 +123,34 @@ export function processGeminiOutput(
 ) {
   try {
     const parsed: GeminiMessage = JSON.parse(jsonLine);
-    const handlers: Record<string, () => void> = {
-      "id:1": () => handleInitialize(sendACP, ctx),
-      "id:2": () => {
+
+    const methodHandlers: Record<string, () => void> = {
+      "session/update": () =>
+        handleSessionUpdate(parsed, ctx.socket, ctx.telemetryCollector),
+    };
+
+    const idHandlers: Record<number, () => void> = {
+      1: () => handleInitialize(sendACP, ctx),
+      2: () => {
         const sessionId = parsed.result?.sessionId;
         if (sessionId) {
           ctx.setSessionId(sessionId);
           ctx.socket.emit("ready");
         }
       },
-      "method:session/update": () =>
-        handleSessionUpdate(parsed, ctx.socket, ctx.telemetryCollector),
-      default: () => {
-        if (parsed.id !== undefined && parsed.id >= 3 && parsed.result) {
-          handleRequestComplete(ctx);
-        }
-      },
     };
-    const methodKey = parsed.method ? `method:${parsed.method}` : "";
-    const idKey = parsed.id !== undefined ? `id:${parsed.id}` : "";
-    const key =
-      methodKey && handlers[methodKey]
-        ? methodKey
-        : idKey && handlers[idKey]
-          ? idKey
-          : "default";
-    handlers[key]();
+
+    if (parsed.method && methodHandlers[parsed.method]) {
+      methodHandlers[parsed.method]();
+    } else if (
+      parsed.id !== undefined && idHandlers[parsed.id]
+    ) {
+      idHandlers[parsed.id]();
+    } else if (
+      parsed.id !== undefined && parsed.id >= 3 && parsed.result
+    ) {
+      handleRequestComplete(ctx);
+    }
   } catch {
     /* Ignore malformed */
   }

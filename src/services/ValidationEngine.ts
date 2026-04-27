@@ -63,20 +63,20 @@ export class ValidationEngine {
     phase: SDSPhase,
   ): Promise<ValidationReport> {
     const phaseGates = this.gates.get(phase) || [];
-    const results: ValidationResult[] = [];
 
-    for (const gate of phaseGates) {
-      try {
-        const result = await gate(trackId, this.fs, this.meridianDir);
-        results.push(result);
-      } catch (error) {
-        results.push({
-          success: false,
-          gateName: gate.name || "Quality Gate",
-          message: `Unexpected error during validation: ${error instanceof Error ? error.message : String(error)}`,
-        });
-      }
-    }
+    const results: ValidationResult[] = await Promise.all(
+      phaseGates.map(async (gate) => {
+        try {
+          return await gate(trackId, this.fs, this.meridianDir);
+        } catch (error) {
+          return {
+            success: false,
+            gateName: gate.name || "Quality Gate",
+            message: `Unexpected error during validation: ${error instanceof Error ? error.message : String(error)}`,
+          };
+        }
+      }),
+    );
 
     const overallSuccess = results.every((r) => r.success);
 

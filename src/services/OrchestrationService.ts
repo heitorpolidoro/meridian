@@ -53,18 +53,19 @@ export class OrchestrationService {
         const trackId = segments[0];
 
         // Ensure we are watching a file inside a track directory, not the tracks dir itself
-        const isValidTrackDir =
-          trackId && trackId !== "." && trackId !== ".." && segments.length > 1;
+        if (!trackId || trackId === "." || trackId === ".." || segments.length <= 1) {
+          return;
+        }
 
-        const eventHandlers: { [key: string]: (id: string) => Promise<void> } =
-          {
-            change: (id: string) => this.runAutoValidation(id),
-            rename: (id: string) => this.runAutoValidation(id),
-            FILE_SAVED: (id: string) => this.runAutoValidation(id),
-          };
+        const eventHandlers: { [key: string]: (id: string) => Promise<void> } = {
+          change: (id: string) => this.runAutoValidation(id),
+          rename: (id: string) => this.runAutoValidation(id),
+          FILE_SAVED: (id: string) => this.runAutoValidation(id),
+        };
 
-        if (isValidTrackDir && eventHandlers[event]) {
-          eventHandlers[event](trackId).catch((err: unknown) => {
+        const promise = eventHandlers[event]?.(trackId);
+        if (promise) {
+          promise.catch((err: unknown) => {
             console.error(`Auto-validation failed for track ${trackId}:`, err);
           });
         }
@@ -98,25 +99,21 @@ export class OrchestrationService {
 
       const currentStatus = latestMetadata.orchestration.status;
 
-      const transitions: Record<string, [string, string]> = {
-        success_notHandoffReady: [
-          "HandoffReady",
-          "All quality gates passed automatically.",
-        ],
-        failure_HandoffReady: [
-          "InProgress",
-          "Quality gates failed after modification.",
-        ],
-      };
-      const transitionKey = report.overallSuccess
-        ? currentStatus !== "HandoffReady"
-          ? "success_notHandoffReady"
-          : ""
-        : !report.overallSuccess && currentStatus === "HandoffReady"
-          ? "failure_HandoffReady"
-          : "";
-      if (transitionKey && transitions[transitionKey]) {
-        const [newStatus, comment] = transitions[transitionKey];
+      const transitionActions = [
+        {
+          condition: report.overallSuccess && currentStatus !== "HandoffReady",
+          newStatus: "HandoffReady",
+          comment: "All quality gates passed automatically.",
+        },
+        {
+          condition: !report.overallSuccess && currentStatus === "HandoffReady",
+          newStatus: "InProgress",
+          comment: "Quality gates failed after modification.",
+        },
+      ];
+      const action = transitionActions.find(t => t.condition);
+      if (action) {
+        const { newStatus, comment } = action;
         this.updateStatus(trackId, newStatus, comment);
       }
     } finally {
