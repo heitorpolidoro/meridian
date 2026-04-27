@@ -10,57 +10,32 @@ import path from "node:path";
  * @param meridianDir - The base directory where track files are located.
  * @returns A promise that resolves to a ValidationResult indicating success or failure of the gate.
  */
-export const PlanGate: QualityGateFn = (
+export const PlanGate: QualityGateFn = async (
   trackId: string,
   fs: IFileSystem,
   meridianDir: string,
 ): Promise<ValidationResult> => {
   const planPath = path.join(meridianDir, "tracks", trackId, "plan.md");
+
+  if (!fs.exists(planPath)) {
+    return {
+      success: false,
+      gateName: "PlanGate",
+      message: `plan.md not found for track ${trackId}`,
+    };
+  }
+
   const content = fs.readFile(planPath);
   const mandatorySections = ["Proposed Architecture", "Requirements Mapping"];
   const missingSections = mandatorySections.filter((section) => {
     const sectionRegex = new RegExp(`^#+\\s+.*${section}.*`, "mi");
     return !sectionRegex.test(content);
   });
+
   // 2. Check for reference to spec.md
   const specRefRegex = /\[.*spec\.md\]\(.*\)/i;
   const hasSpecRef =
     specRefRegex.test(content) || content.toLowerCase().includes("spec.md");
-
-  const resultMap: Record<string, ValidationResult> = {
-    notFound: {
-      success: false,
-      gateName: "PlanGate",
-      message: `plan.md not found for track ${trackId}`,
-    },
-    missingSections: {
-      success: false,
-      gateName: "PlanGate",
-      message: `Missing mandatory sections: ${missingSections.join(", ")}`,
-    },
-    missingSpec: {
-      success: false,
-      gateName: "PlanGate",
-      message: `spec.md not referenced in plan.md for track ${trackId}`,
-    },
-  };
-
-  const failureCases = [
-    { condition: !fs.exists(planPath), key: "notFound" },
-    { condition: missingSections.length > 0, key: "missingSections" },
-    { condition: !hasSpecRef, key: "missingSpec" },
-  ];
-
-  const failed = failureCases.find((fc) => fc.condition);
-  if (failed) {
-    return Promise.resolve(resultMap[failed.key]);
-  }
-
-  return Promise.resolve({
-    success: true,
-    gateName: "PlanGate",
-  });
-};
 
   const errors: string[] = [];
   if (missingSections.length > 0) {
@@ -71,17 +46,17 @@ export const PlanGate: QualityGateFn = (
   }
 
   if (errors.length > 0) {
-    return Promise.resolve({
+    return {
       success: false,
       gateName: "PlanGate",
       message: "Validation failed for plan.md",
       errors,
-    });
+    };
   }
 
-  return Promise.resolve({
+  return {
     success: true,
     gateName: "PlanGate",
     message: "plan.md is valid",
-  });
+  };
 };
