@@ -58,11 +58,12 @@ export class OrchestrationService {
           return;
         }
 
-        const eventHandlers: { [key: string]: (id: string) => Promise<void> } = {
-          change: (id: string) => this.runAutoValidation(id),
-          rename: (id: string) => this.runAutoValidation(id),
-          FILE_SAVED: (id: string) => this.runAutoValidation(id),
-        };
+        const eventHandlers: { [key: string]: (id: string) => Promise<void> } =
+          {
+            change: (id: string) => this.runAutoValidation(id),
+            rename: (id: string) => this.runAutoValidation(id),
+            FILE_SAVED: (id: string) => this.runAutoValidation(id),
+          };
 
         eventHandlers[event]?.(trackId)?.catch((err: unknown) => {
           console.error(`Auto-validation failed for track ${trackId}:`, err);
@@ -97,7 +98,10 @@ export class OrchestrationService {
 
       const currentStatus = latestMetadata.orchestration.status;
 
-      const transitionMap: Record<"pass" | "fail", { newStatus: string; comment: string }> = {
+      const transitionMap: Record<
+        "pass" | "fail",
+        { newStatus: string; comment: string }
+      > = {
         pass: {
           newStatus: "HandoffReady",
           comment: "All quality gates passed automatically.",

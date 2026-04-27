@@ -124,7 +124,7 @@ export function processGeminiOutput(
   try {
     const parsed: GeminiMessage = JSON.parse(jsonLine);
 
-    const handlers: Record<string|number, () => void> = {
+    const handlers: Record<string | number, () => void> = {
       "session/update": () =>
         handleSessionUpdate(parsed, ctx.socket, ctx.telemetryCollector),
       1: () => handleInitialize(sendACP, ctx),
