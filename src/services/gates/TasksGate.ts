@@ -29,17 +29,19 @@ export const TasksGate: QualityGateFn = async (
   const content = fs.readFile(tasksPath);
   const taskHeaderRegex = /#+.*\[Task\s+\d+\.\d+\].*/i;
   const taskSections = content.split(taskHeaderRegex).slice(1);
-  const dodRegex = /#+\s*(?:Definition of Done|DoD)|(?:Definition of Done|DoD)\s*:/i;
+  const dodRegex =
+    /#+\s*(?:Definition of Done|DoD)|(?:Definition of Done|DoD)\s*:/i;
 
   // Declarative checks
   const checks = [
     {
       condition: !/\[Task\s+\d+\.\d+\]/i.test(content),
-      message: "tasks.md must contain at least one task definition (e.g., [Task 1.1])"
-    }
+      message:
+        "tasks.md must contain at least one task definition (e.g., [Task 1.1])",
+    },
   ];
 
-  const initialFailure = checks.find(c => c.condition);
+  const initialFailure = checks.find((c) => c.condition);
   if (initialFailure) {
     return {
       success: false,
@@ -48,7 +50,9 @@ export const TasksGate: QualityGateFn = async (
     };
   }
 
-  const invalidTasksCount = taskSections.filter(section => !dodRegex.test(section)).length;
+  const invalidTasksCount = taskSections.filter(
+    (section) => !dodRegex.test(section),
+  ).length;
 
   if (invalidTasksCount > 0) {
     return {

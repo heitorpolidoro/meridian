@@ -26,20 +26,23 @@ export const PlanGate: QualityGateFn = async (
   }
 
   const content = fs.readFile(planPath);
-  
+
   // Declarative validation checks
   const checks = [
     {
-      condition: !(/\[.*spec\.md\]\(.*\)/i.test(content) || content.toLowerCase().includes("spec.md")),
-      error: 'Reference to "spec.md" is missing'
+      condition: !(
+        /\[.*spec\.md\]\(.*\)/i.test(content) ||
+        content.toLowerCase().includes("spec.md")
+      ),
+      error: 'Reference to "spec.md" is missing',
     },
-    ...["Proposed Architecture", "Requirements Mapping"].map(section => ({
+    ...["Proposed Architecture", "Requirements Mapping"].map((section) => ({
       condition: !new RegExp(`^#+\\s+.*${section}.*`, "mi").test(content),
-      error: `Section "${section}" is missing`
-    }))
+      error: `Section "${section}" is missing`,
+    })),
   ];
 
-  const errors = checks.filter(c => c.condition).map(c => c.error);
+  const errors = checks.filter((c) => c.condition).map((c) => c.error);
 
   if (errors.length > 0) {
     return {
