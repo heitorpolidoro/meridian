@@ -15,14 +15,18 @@ export interface ValidationReport {
   results: ValidationResult[];
 }
 
-export type QualityGateFn = (trackId: string, fs: IFileSystem, meridianDir: string) => Promise<ValidationResult>;
+export type QualityGateFn = (
+  trackId: string,
+  fs: IFileSystem,
+  meridianDir: string,
+) => Promise<ValidationResult>;
 
 export class ValidationEngine {
   private gates: Map<SDSPhase, QualityGateFn[]> = new Map();
 
   constructor(
     private fs: IFileSystem,
-    private meridianDir: string
+    private meridianDir: string,
   ) {}
 
   /**
@@ -37,7 +41,10 @@ export class ValidationEngine {
   /**
    * Runs all quality gates registered for the given phase.
    */
-  async runValidation(trackId: string, phase: SDSPhase): Promise<ValidationReport> {
+  async runValidation(
+    trackId: string,
+    phase: SDSPhase,
+  ): Promise<ValidationReport> {
     const phaseGates = this.gates.get(phase) || [];
     const results: ValidationResult[] = [];
 

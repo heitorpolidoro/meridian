@@ -25,8 +25,12 @@ describe("PlanGate", () => {
 
     const result = await PlanGate(trackId, fs, meridianDir);
     expect(result.success).toBe(false);
-    expect(result.errors).toContain('Section "Proposed Architecture" is missing');
-    expect(result.errors).toContain('Section "Requirements Mapping" is missing');
+    expect(result.errors).toContain(
+      'Section "Proposed Architecture" is missing',
+    );
+    expect(result.errors).toContain(
+      'Section "Requirements Mapping" is missing',
+    );
   });
 
   it("fails if spec.md reference is missing", async () => {

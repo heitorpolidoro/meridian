@@ -2,9 +2,13 @@ import { IFileSystem } from "../interfaces/ICoreServices";
 import { QualityGateFn, ValidationResult } from "../ValidationEngine";
 import path from "node:path";
 
-export const PlanGate: QualityGateFn = async (trackId: string, fs: IFileSystem, meridianDir: string): Promise<ValidationResult> => {
+export const PlanGate: QualityGateFn = async (
+  trackId: string,
+  fs: IFileSystem,
+  meridianDir: string,
+): Promise<ValidationResult> => {
   const planPath = path.join(meridianDir, "tracks", trackId, "plan.md");
-  
+
   if (!fs.exists(planPath)) {
     return {
       success: false,
@@ -27,11 +31,12 @@ export const PlanGate: QualityGateFn = async (trackId: string, fs: IFileSystem, 
 
   // 2. Check for reference to spec.md
   const specRefRegex = /\[.*spec\.md\]\(.*\)/i;
-  const hasSpecRef = specRefRegex.test(content) || content.toLowerCase().includes("spec.md");
+  const hasSpecRef =
+    specRefRegex.test(content) || content.toLowerCase().includes("spec.md");
 
   const errors: string[] = [];
   if (missingSections.length > 0) {
-    errors.push(...missingSections.map(s => `Section "${s}" is missing`));
+    errors.push(...missingSections.map((s) => `Section "${s}" is missing`));
   }
   if (!hasSpecRef) {
     errors.push('Reference to "spec.md" is missing');

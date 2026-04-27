@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { ValidationEngine, QualityGateFn, ValidationResult } from "./ValidationEngine";
+import {
+  ValidationEngine,
+  QualityGateFn,
+  ValidationResult,
+} from "./ValidationEngine";
 import { MockFileSystem } from "./mocks/MockFileSystem";
 
 describe("ValidationEngine", () => {
@@ -63,7 +67,9 @@ describe("ValidationEngine", () => {
     const report = await engine.runValidation("track-1", "1.1");
 
     expect(report.overallSuccess).toBe(false);
-    expect(report.results[0].message).toContain("Unexpected error during validation: Boom");
+    expect(report.results[0].message).toContain(
+      "Unexpected error during validation: Boom",
+    );
   });
 
   it("handles non-Error objects thrown within gates", async () => {
@@ -75,12 +81,16 @@ describe("ValidationEngine", () => {
     const report = await engine.runValidation("track-1", "1.1");
 
     expect(report.overallSuccess).toBe(false);
-    expect(report.results[0].message).toContain("Unexpected error during validation: Non-Error Object");
+    expect(report.results[0].message).toContain(
+      "Unexpected error during validation: Non-Error Object",
+    );
   });
 
   it("passes necessary parameters to gates", async () => {
-    const spyGate = vi.fn().mockResolvedValue({ success: true, gateName: "Spy", message: "ok" });
-    
+    const spyGate = vi
+      .fn()
+      .mockResolvedValue({ success: true, gateName: "Spy", message: "ok" });
+
     engine.registerGate("1.1", spyGate);
     await engine.runValidation("track-my-id", "1.1");
 

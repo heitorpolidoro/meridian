@@ -29,7 +29,7 @@ describe("OrchestrationService", () => {
       fs,
       meridianDir,
       validationEngine,
-      mockWatcher
+      mockWatcher,
     );
 
     vi.useFakeTimers();
@@ -83,20 +83,26 @@ describe("OrchestrationService", () => {
     });
 
     it("logs error if auto-validation fails", async () => {
-      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-      vi.spyOn(orchestrationService, "runAutoValidation").mockRejectedValue(new Error("Async Fail"));
+      const consoleSpy = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+      vi.spyOn(orchestrationService, "runAutoValidation").mockRejectedValue(
+        new Error("Async Fail"),
+      );
 
       const watchCallback = (mockWatcher.watch as any).mock.calls[0][1];
-      await watchCallback("change", path.join(meridianDir, "tracks/track-1/spec.md"));
+      await watchCallback(
+        "change",
+        path.join(meridianDir, "tracks/track-1/spec.md"),
+      );
 
       expect(consoleSpy).toHaveBeenCalledWith(
         "Auto-validation failed for track track-1:",
-        expect.any(Error)
+        expect.any(Error),
       );
       consoleSpy.mockRestore();
     });
   });
-
 
   describe("requestTransition", () => {
     it("successfully transitions when status is HandoffReady", () => {
