@@ -93,11 +93,7 @@ export class OrchestrationService {
       // Re-fetch metadata to avoid race conditions with stale state after async validation
       const latestMetadata =
         this.trackMetadataService.getTrackMetadata(trackId);
-      if (
-        !latestMetadata ||
-        latestMetadata.status === "Completed"
-      )
-        return;
+      if (!latestMetadata || latestMetadata.status === "Completed") return;
 
       const currentStatus = latestMetadata.orchestration.status;
 
