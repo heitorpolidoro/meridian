@@ -73,6 +73,23 @@ describe("OrchestrationService", () => {
       expect(state?.status).toBe("InProgress");
     });
 
+    it("does nothing if validation fails but status is already InProgress", async () => {
+      // Status is already InProgress by default
+      const spy = vi.spyOn(orchestrationService, "updateStatus");
+
+      // Mock validation to fail
+      vi.spyOn(validationEngine, "runValidation").mockResolvedValue({
+        trackId: "track-1",
+        phase: "1.1",
+        overallSuccess: false,
+        results: [],
+      });
+
+      await orchestrationService.runAutoValidation("track-1");
+
+      expect(spy).not.toHaveBeenCalled();
+    });
+
     it("triggers validation on watcher events", () => {
       const watchMock = mockWatcher.watch as Mock<
         [string, (eventType: string, filePath: string) => void],
