@@ -27,31 +27,28 @@ export const TasksGate: QualityGateFn = async (
   }
 
   const content = fs.readFile(tasksPath);
-  const taskRegex = /\[Task\s+\d+\.\d+\]/i;
-  const hasTasks = taskRegex.test(content);
+  const taskHeaderRegex = /#+.*\[Task\s+\d+\.\d+\].*/i;
+  const taskSections = content.split(taskHeaderRegex).slice(1);
+  const dodRegex = /#+\s*(?:Definition of Done|DoD)|(?:Definition of Done|DoD)\s*:/i;
 
-  if (!hasTasks) {
+  // Declarative checks
+  const checks = [
+    {
+      condition: !/\[Task\s+\d+\.\d+\]/i.test(content),
+      message: "tasks.md must contain at least one task definition (e.g., [Task 1.1])"
+    }
+  ];
+
+  const initialFailure = checks.find(c => c.condition);
+  if (initialFailure) {
     return {
       success: false,
       gateName: "TasksGate",
-      message:
-        "tasks.md must contain at least one task definition (e.g., [Task 1.1])",
+      message: initialFailure.message,
     };
   }
 
-  // Split content by tasks to check for DoD in each
-  const taskHeaderRegex = /#+.*\[Task\s+\d+\.\d+\].*/i;
-  const taskSections = content.split(taskHeaderRegex).slice(1);
-
-  const dodRegex =
-    /#+\s*(?:Definition of Done|DoD)|(?:Definition of Done|DoD)\s*:/i;
-  let invalidTasksCount = 0;
-
-  for (const section of taskSections) {
-    if (!dodRegex.test(section)) {
-      invalidTasksCount++;
-    }
-  }
+  const invalidTasksCount = taskSections.filter(section => !dodRegex.test(section)).length;
 
   if (invalidTasksCount > 0) {
     return {
