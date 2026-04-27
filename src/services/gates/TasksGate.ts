@@ -11,29 +11,19 @@ import path from "node:path";
  * @returns A promise that resolves to a ValidationResult indicating success if
  * the tasks.md file is valid, or failure otherwise.
  */
-export const TasksGate: QualityGateFn = (
+export const TasksGate: QualityGateFn = async (
   trackId: string,
   fs: IFileSystem,
   meridianDir: string,
 ): Promise<ValidationResult> => {
   const tasksPath = path.join(meridianDir, "tracks", trackId, "tasks.md");
 
-  const errorMap: Record<'notFound' | 'noTasks', ValidationResult> = {
-    notFound: {
+  if (!fs.exists(tasksPath)) {
+    return {
       success: false,
       gateName: "TasksGate",
       message: `tasks.md not found for track ${trackId}`,
-    },
-    noTasks: {
-      success: false,
-      gateName: "TasksGate",
-      message:
-        "tasks.md must contain at least one task definition (e.g., [Task 1.1])",
-    },
-  };
-
-  if (!fs.exists(tasksPath)) {
-    return Promise.resolve(errorMap.notFound);
+    };
   }
 
   const content = fs.readFile(tasksPath);
@@ -41,12 +31,17 @@ export const TasksGate: QualityGateFn = (
   const hasTasks = taskRegex.test(content);
 
   if (!hasTasks) {
-    return Promise.resolve(errorMap.noTasks);
-  }
+    return {
+      success: false,
+      gateName: "TasksGate",
+      message:
+        "tasks.md must contain at least one task definition (e.g., [Task 1.1])",
+    };
   }
 
   // Split content by tasks to check for DoD in each
-  const taskSections = content.split(/#+.*\[Task\s+\d+\.\d+\].*/i).slice(1);
+  const taskHeaderRegex = /#+.*\[Task\s+\d+\.\d+\].*/i;
+  const taskSections = content.split(taskHeaderRegex).slice(1);
 
   const dodRegex =
     /#+\s*(?:Definition of Done|DoD)|(?:Definition of Done|DoD)\s*:/i;

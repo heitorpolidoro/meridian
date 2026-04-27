@@ -95,29 +95,24 @@ export class OrchestrationService {
         this.trackMetadataService.getTrackMetadata(trackId);
       if (
         !latestMetadata ||
-        latestMetadata.orchestration.status === "Completed"
+        latestMetadata.status === "Completed"
       )
         return;
 
-      const transitionsMap: Record<
-        string,
-        { status: string; message: string }
-      > = {
-        [`true:InProgress`]: {
-          status: "HandoffReady",
-          message: "All quality gates passed automatically.",
-        },
-        [`false:HandoffReady`]: {
-          status: "InProgress",
-          message: "Quality gates failed after modification.",
-        },
-      };
+      const currentStatus = latestMetadata.orchestration.status;
 
-      const key = `${report.overallSuccess}:${latestMetadata.orchestration.status}`;
-      const transition = transitionsMap[key];
-
-      if (transition) {
-        this.updateStatus(trackId, transition.status, transition.message);
+      if (report.overallSuccess && currentStatus !== "HandoffReady") {
+        this.updateStatus(
+          trackId,
+          "HandoffReady",
+          "All quality gates passed automatically.",
+        );
+      } else if (!report.overallSuccess && currentStatus === "HandoffReady") {
+        this.updateStatus(
+          trackId,
+          "InProgress",
+          "Quality gates failed after modification.",
+        );
       }
     } finally {
       this.validatingTracks.delete(trackId);

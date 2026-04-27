@@ -99,8 +99,13 @@ describe("OrchestrationService", () => {
       const spy = vi.spyOn(orchestrationService, "runAutoValidation");
 
       watchCallback("change", path.join(meridianDir, "tracks/track-1/spec.md"));
-
       expect(spy).toHaveBeenCalledWith("track-1");
+
+      watchCallback("rename", path.join(meridianDir, "tracks/track-1/plan.md"));
+      expect(spy).toHaveBeenCalledTimes(2);
+
+      watchCallback("FILE_SAVED", path.join(meridianDir, "tracks/track-1/tasks.md"));
+      expect(spy).toHaveBeenCalledTimes(3);
     });
 
     it("logs error if auto-validation fails", async () => {
@@ -111,7 +116,11 @@ describe("OrchestrationService", () => {
         new Error("Async Fail"),
       );
 
-      const watchCallback = (mockWatcher.watch as Mock).mock.calls[0][1];
+      const watchMock = mockWatcher.watch as Mock<
+        [string, (eventType: string, filePath: string) => void],
+        void
+      >;
+      const watchCallback = watchMock.mock.calls[0][1];
       await watchCallback(
         "change",
         path.join(meridianDir, "tracks/track-1/spec.md"),
@@ -122,6 +131,47 @@ describe("OrchestrationService", () => {
         expect.any(Error),
       );
       consoleSpy.mockRestore();
+    });
+
+    it("stops validation if track becomes Completed during async validation", async () => {
+      const spy = vi.spyOn(orchestrationService, "updateStatus");
+      
+      // Mock validation to pass but take time
+      vi.spyOn(validationEngine, "runValidation").mockImplementation(async () => {
+        // Change track status to Completed while validation is "running"
+        metadataService.updateTrackMetadata("track-1", {
+          status: "Completed"
+        });
+        return {
+          trackId: "track-1",
+          phase: "1.1",
+          overallSuccess: true,
+          results: [],
+        };
+      });
+
+      await orchestrationService.runAutoValidation("track-1");
+
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it("stops validation if track is deleted during async validation", async () => {
+      const spy = vi.spyOn(orchestrationService, "updateStatus");
+      
+      vi.spyOn(validationEngine, "runValidation").mockImplementation(async () => {
+        // Delete metadata while validation is running
+        vi.spyOn(metadataService, "getTrackMetadata").mockReturnValue(null);
+        return {
+          trackId: "track-1",
+          phase: "1.1",
+          overallSuccess: true,
+          results: [],
+        };
+      });
+
+      await orchestrationService.runAutoValidation("track-1");
+
+      expect(spy).not.toHaveBeenCalled();
     });
   });
 
