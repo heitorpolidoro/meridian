@@ -87,9 +87,9 @@ describe("OrchestrationService", () => {
     });
 
     it("logs error if auto-validation fails", async () => {
-      const consoleSpy = vi
-        .spyOn(console, "error")
-        .mockImplementation(() => { /* empty because this mock does not need to return a value */ });
+      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {
+        /* empty because this mock does not need to return a value */
+      });
       vi.spyOn(orchestrationService, "runAutoValidation").mockRejectedValue(
         new Error("Async Fail"),
       );

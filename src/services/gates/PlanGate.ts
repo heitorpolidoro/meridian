@@ -27,7 +27,7 @@ export const PlanGate: QualityGateFn = (
 
   const content = fs.readFile(planPath);
   const mandatorySections = ["Proposed Architecture", "Requirements Mapping"];
-  const missingSections = mandatorySections.filter(section => {
+  const missingSections = mandatorySections.filter((section) => {
     const sectionRegex = new RegExp(`^#+\\s+.*${section}.*`, "mi");
     return !sectionRegex.test(content);
   });

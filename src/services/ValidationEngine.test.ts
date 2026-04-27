@@ -1,8 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import {
-  ValidationEngine,
-  QualityGateFn,
-} from "./ValidationEngine";
+import { ValidationEngine, QualityGateFn } from "./ValidationEngine";
 import { MockFileSystem } from "./mocks/MockFileSystem";
 
 describe("ValidationEngine", () => {
@@ -16,11 +13,12 @@ describe("ValidationEngine", () => {
   });
 
   it("registers and runs a success gate", async () => {
-    const successGate: QualityGateFn = () => Promise.resolve({
-      success: true,
-      gateName: "SuccessGate",
-      message: "Passed",
-    });
+    const successGate: QualityGateFn = () =>
+      Promise.resolve({
+        success: true,
+        gateName: "SuccessGate",
+        message: "Passed",
+      });
 
     engine.registerGate("1.1", successGate);
     const report = await engine.runValidation("track-1", "1.1");
@@ -31,16 +29,18 @@ describe("ValidationEngine", () => {
   });
 
   it("fails overall success if one gate fails", async () => {
-    const successGate: QualityGateFn = () => Promise.resolve({
-      success: true,
-      gateName: "SuccessGate",
-      message: "Passed",
-    });
-    const failGate: QualityGateFn = () => Promise.resolve({
-      success: false,
-      gateName: "FailGate",
-      message: "Failed",
-    });
+    const successGate: QualityGateFn = () =>
+      Promise.resolve({
+        success: true,
+        gateName: "SuccessGate",
+        message: "Passed",
+      });
+    const failGate: QualityGateFn = () =>
+      Promise.resolve({
+        success: false,
+        gateName: "FailGate",
+        message: "Failed",
+      });
 
     engine.registerGate("1.1", successGate);
     engine.registerGate("1.1", failGate);
