@@ -44,28 +44,28 @@ export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({
           }: Record<string, unknown>) {
             const match = /language-(\w+)/.exec((className as string) || "");
             const lang = match ? match[1] : "";
-            // Basic language support list, fallback to text
-            const isSupported = [
-              "typescript",
-              "ts",
-              "tsx",
-              "javascript",
-              "json",
-              "bash",
-              "markdown",
-              "css",
-              "html",
-            ].includes(lang);
+            const langMap: Record<string, string> = {
+              typescript: "typescript",
+              ts: "ts",
+              tsx: "tsx",
+              javascript: "javascript",
+              json: "json",
+              bash: "bash",
+              markdown: "markdown",
+              css: "css",
+              html: "html",
+            };
+            const language = langMap[lang] ?? "text";
 
             const content = React.Children.toArray(children)
               .join("")
               .replace(/\n$/, "");
 
-            return !inline && (isSupported || match) ? (
+            return !inline && match ? (
               <SyntaxHighlighter
                 {...props}
                 style={vscDarkPlus as Record<string, React.CSSProperties>}
-                language={isSupported ? lang : "text"}
+                language={language}
                 PreTag="div"
               >
                 {content}

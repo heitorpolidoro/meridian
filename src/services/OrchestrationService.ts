@@ -56,11 +56,14 @@ export class OrchestrationService {
         const isValidTrackDir =
           trackId && trackId !== "." && trackId !== ".." && segments.length > 1;
 
-        if (
-          isValidTrackDir &&
-          (event === "change" || event === "rename" || event === "FILE_SAVED")
-        ) {
-          this.runAutoValidation(trackId).catch((err) => {
+        const eventHandlers: { [key: string]: (id: string) => Promise<any> } = {
+          change: (id) => this.runAutoValidation(id),
+          rename: (id) => this.runAutoValidation(id),
+          FILE_SAVED: (id) => this.runAutoValidation(id),
+        };
+
+        if (isValidTrackDir && eventHandlers[event]) {
+          eventHandlers[event](trackId).catch((err) => {
             console.error(`Auto-validation failed for track ${trackId}:`, err);
           });
         }
@@ -96,24 +99,19 @@ export class OrchestrationService {
       )
         return;
 
-      const transitions = [
-        {
-          predicate: (success: boolean, status: string) =>
-            success && status !== "HandoffReady",
+      const transitionsMap: Record<string, { status: string; message: string }> = {
+        [`true:InProgress`]: {
           status: "HandoffReady",
           message: "All quality gates passed automatically.",
         },
-        {
-          predicate: (success: boolean, status: string) =>
-            !success && status === "HandoffReady",
+        [`false:HandoffReady`]: {
           status: "InProgress",
           message: "Quality gates failed after modification.",
         },
-      ];
+      };
 
-      const transition = transitions.find((t) =>
-        t.predicate(report.overallSuccess, latestMetadata.orchestration.status),
-      );
+      const key = `${report.overallSuccess}:${latestMetadata.orchestration.status}`;
+      const transition = transitionsMap[key];
 
       if (transition) {
         this.updateStatus(trackId, transition.status, transition.message);

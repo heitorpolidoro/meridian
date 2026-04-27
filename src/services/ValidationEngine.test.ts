@@ -73,7 +73,7 @@ describe("ValidationEngine", () => {
 
   it("handles non-Error objects thrown within gates", async () => {
     const stringErrorGate: QualityGateFn = () => {
-      return Promise.reject("Non-Error Object");
+      return Promise.reject(new Error("Non-Error Object"));
     };
 
     engine.registerGate("1.1", stringErrorGate);

@@ -11,19 +11,29 @@ import path from "node:path";
  * @returns A promise that resolves to a ValidationResult indicating success if
  * the tasks.md file is valid, or failure otherwise.
  */
-export const TasksGate: QualityGateFn = async (
+export const TasksGate: QualityGateFn = (
   trackId: string,
   fs: IFileSystem,
   meridianDir: string,
 ): Promise<ValidationResult> => {
   const tasksPath = path.join(meridianDir, "tracks", trackId, "tasks.md");
 
-  if (!fs.exists(tasksPath)) {
-    return {
+  const errorMap: Record<'notFound' | 'noTasks', ValidationResult> = {
+    notFound: {
       success: false,
       gateName: "TasksGate",
       message: `tasks.md not found for track ${trackId}`,
-    };
+    },
+    noTasks: {
+      success: false,
+      gateName: "TasksGate",
+      message:
+        "tasks.md must contain at least one task definition (e.g., [Task 1.1])",
+    },
+  };
+
+  if (!fs.exists(tasksPath)) {
+    return Promise.resolve(errorMap.notFound);
   }
 
   const content = fs.readFile(tasksPath);
@@ -31,12 +41,8 @@ export const TasksGate: QualityGateFn = async (
   const hasTasks = taskRegex.test(content);
 
   if (!hasTasks) {
-    return {
-      success: false,
-      gateName: "TasksGate",
-      message:
-        "tasks.md must contain at least one task definition (e.g., [Task 1.1])",
-    };
+    return Promise.resolve(errorMap.noTasks);
+  }
   }
 
   // Split content by tasks to check for DoD in each
