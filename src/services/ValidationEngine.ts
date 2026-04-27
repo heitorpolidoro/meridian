@@ -21,9 +21,19 @@ export type QualityGateFn = (
   meridianDir: string,
 ) => Promise<ValidationResult>;
 
+/**
+ * ValidationEngine manages and executes quality gates for different SDS phases.
+ * It maintains a registry of phase-specific validation functions and processes them.
+ */
 export class ValidationEngine {
   private gates: Map<SDSPhase, QualityGateFn[]> = new Map();
 
+  /**
+   * Creates a new ValidationEngine.
+   *
+   * @param fs - File system interface used by the engine.
+   * @param meridianDir - Directory path for meridian resources.
+   */
   constructor(
     private fs: IFileSystem,
     private meridianDir: string,
@@ -31,6 +41,9 @@ export class ValidationEngine {
 
   /**
    * Registers a quality gate for a specific SDS phase.
+   *
+   * @param phase - The SDS phase to register the gate for.
+   * @param gate - The quality gate function to execute during validation.
    */
   registerGate(phase: SDSPhase, gate: QualityGateFn): void {
     const phaseGates = this.gates.get(phase) || [];
@@ -40,6 +53,10 @@ export class ValidationEngine {
 
   /**
    * Runs all quality gates registered for the given phase.
+   *
+   * @param trackId - Identifier for the current track.
+   * @param phase - The SDS phase to validate.
+   * @returns A ValidationReport containing the results of all gates.
    */
   async runValidation(
     trackId: string,

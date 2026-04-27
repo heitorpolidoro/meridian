@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, vi, Mock } from "vitest";
 import { OrchestrationService } from "./OrchestrationService";
 import { TrackMetadataService } from "./TrackMetadataService";
 import { SDSStateMachine } from "./SDSStateMachine";
@@ -74,7 +74,11 @@ describe("OrchestrationService", () => {
     });
 
     it("triggers validation on watcher events", () => {
-      const watchCallback = (mockWatcher.watch as any).mock.calls[0][1];
+      const watchMock = mockWatcher.watch as Mock<
+        [string, (eventType: string, filePath: string) => void],
+        void
+      >;
+      const watchCallback = watchMock.mock.calls[0][1];
       const spy = vi.spyOn(orchestrationService, "runAutoValidation");
 
       watchCallback("change", path.join(meridianDir, "tracks/track-1/spec.md"));
@@ -85,12 +89,12 @@ describe("OrchestrationService", () => {
     it("logs error if auto-validation fails", async () => {
       const consoleSpy = vi
         .spyOn(console, "error")
-        .mockImplementation(() => {});
+        .mockImplementation(() => { /* empty because this mock does not need to return a value */ });
       vi.spyOn(orchestrationService, "runAutoValidation").mockRejectedValue(
         new Error("Async Fail"),
       );
 
-      const watchCallback = (mockWatcher.watch as any).mock.calls[0][1];
+      const watchCallback = (mockWatcher.watch as Mock).mock.calls[0][1];
       await watchCallback(
         "change",
         path.join(meridianDir, "tracks/track-1/spec.md"),

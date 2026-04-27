@@ -10,6 +10,13 @@ interface MarkdownViewerProps {
   onNavigate?: (path: string) => void;
 }
 
+/**
+ * MarkdownViewer component displays markdown content with GitHub Flavored Markdown support and syntax highlighting.
+ *
+ * @param {string} content - The markdown content to render.
+ * @param {(path: string) => void} onNavigate - Callback when a link is clicked, receives the navigation path.
+ * @returns {JSX.Element} The rendered MarkdownViewer component.
+ */
 export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({
   content = "",
   onNavigate,
@@ -19,8 +26,17 @@ export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
+          /**
+           * Custom renderer for code blocks and inline code with syntax highlighting.
+           *
+           * @param {unknown} node - The AST node for the code element.
+           * @param {boolean} inline - Whether the code is inline.
+           * @param {string} className - CSS class name indicating the language.
+           * @param {React.ReactNode[]} children - The code content as React nodes.
+           * @param {Object} props - Additional props passed to the code element.
+           * @returns {React.ReactNode} The rendered code block or inline code element.
+           */
           code({
-            node,
             inline,
             className,
             children,
@@ -60,7 +76,22 @@ export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({
               </code>
             );
           },
+          /**
+           * Render a link element for Markdown-rendered content.
+           *
+           * @param node The Markdown AST node.
+           * @param href The hyperlink reference.
+           * @param children The content to display within the link.
+           * @param props Additional anchor element props.
+           * @returns The rendered anchor element.
+           */
           a({ node, href, children, ...props }: Record<string, unknown>) {
+            /**
+             * Handle click events on the anchor element to navigate within markdown or delegate to external links.
+             *
+             * @param e The click event triggered on the anchor element.
+             * @returns void
+             */
             const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
               if (!href) return;
 

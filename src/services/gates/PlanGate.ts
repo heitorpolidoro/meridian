@@ -2,7 +2,15 @@ import { IFileSystem } from "../interfaces/ICoreServices";
 import { QualityGateFn, ValidationResult } from "../ValidationEngine";
 import path from "node:path";
 
-export const PlanGate: QualityGateFn = async (
+/**
+ * Validates that the plan.md file for a given track contains mandatory sections.
+ *
+ * @param trackId - The identifier of the track to validate.
+ * @param fs - The file system interface used to read and check files.
+ * @param meridianDir - The base directory where track files are located.
+ * @returns A promise that resolves to a ValidationResult indicating success or failure of the gate.
+ */
+export const PlanGate: QualityGateFn = (
   trackId: string,
   fs: IFileSystem,
   meridianDir: string,
@@ -10,24 +18,19 @@ export const PlanGate: QualityGateFn = async (
   const planPath = path.join(meridianDir, "tracks", trackId, "plan.md");
 
   if (!fs.exists(planPath)) {
-    return {
+    return Promise.resolve({
       success: false,
       gateName: "PlanGate",
       message: `plan.md not found for track ${trackId}`,
-    };
+    });
   }
 
   const content = fs.readFile(planPath);
   const mandatorySections = ["Proposed Architecture", "Requirements Mapping"];
-  const missingSections: string[] = [];
-
-  // 1. Check for mandatory sections
-  for (const section of mandatorySections) {
+  const missingSections = mandatorySections.filter(section => {
     const sectionRegex = new RegExp(`^#+\\s+.*${section}.*`, "mi");
-    if (!sectionRegex.test(content)) {
-      missingSections.push(section);
-    }
-  }
+    return !sectionRegex.test(content);
+  });
 
   // 2. Check for reference to spec.md
   const specRefRegex = /\[.*spec\.md\]\(.*\)/i;

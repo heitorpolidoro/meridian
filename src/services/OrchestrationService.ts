@@ -79,24 +79,27 @@ export class OrchestrationService {
       currentPhase,
     );
 
-    if (
-      report.overallSuccess &&
-      metadata.orchestration.status !== "HandoffReady"
-    ) {
-      this.updateStatus(
-        trackId,
-        "HandoffReady",
-        "All quality gates passed automatically.",
-      );
-    } else if (
-      !report.overallSuccess &&
-      metadata.orchestration.status === "HandoffReady"
-    ) {
-      this.updateStatus(
-        trackId,
-        "InProgress",
-        "Quality gates failed after modification.",
-      );
+    const transitions = [
+      {
+        predicate: (success: boolean, status: string) =>
+          success && status !== "HandoffReady",
+        status: "HandoffReady",
+        message: "All quality gates passed automatically.",
+      },
+      {
+        predicate: (success: boolean, status: string) =>
+          !success && status === "HandoffReady",
+        status: "InProgress",
+        message: "Quality gates failed after modification.",
+      },
+    ];
+
+    const transition = transitions.find((t) =>
+      t.predicate(report.overallSuccess, metadata.orchestration.status),
+    );
+
+    if (transition) {
+      this.updateStatus(trackId, transition.status, transition.message);
     }
   }
 

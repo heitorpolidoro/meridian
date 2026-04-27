@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   ValidationEngine,
   QualityGateFn,
-  ValidationResult,
 } from "./ValidationEngine";
 import { MockFileSystem } from "./mocks/MockFileSystem";
 
@@ -17,7 +16,7 @@ describe("ValidationEngine", () => {
   });
 
   it("registers and runs a success gate", async () => {
-    const successGate: QualityGateFn = async () => ({
+    const successGate: QualityGateFn = () => Promise.resolve({
       success: true,
       gateName: "SuccessGate",
       message: "Passed",
@@ -32,12 +31,12 @@ describe("ValidationEngine", () => {
   });
 
   it("fails overall success if one gate fails", async () => {
-    const successGate: QualityGateFn = async () => ({
+    const successGate: QualityGateFn = () => Promise.resolve({
       success: true,
       gateName: "SuccessGate",
       message: "Passed",
     });
-    const failGate: QualityGateFn = async () => ({
+    const failGate: QualityGateFn = () => Promise.resolve({
       success: false,
       gateName: "FailGate",
       message: "Failed",
@@ -59,8 +58,8 @@ describe("ValidationEngine", () => {
   });
 
   it("handles errors within gates gracefully", async () => {
-    const errorGate: QualityGateFn = async () => {
-      throw new Error("Boom");
+    const errorGate: QualityGateFn = () => {
+      return Promise.reject(new Error("Boom"));
     };
 
     engine.registerGate("1.1", errorGate);
@@ -73,8 +72,8 @@ describe("ValidationEngine", () => {
   });
 
   it("handles non-Error objects thrown within gates", async () => {
-    const stringErrorGate: QualityGateFn = async () => {
-      throw "Non-Error Object";
+    const stringErrorGate: QualityGateFn = () => {
+      return Promise.reject("Non-Error Object");
     };
 
     engine.registerGate("1.1", stringErrorGate);

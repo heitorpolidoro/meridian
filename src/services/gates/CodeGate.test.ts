@@ -8,7 +8,7 @@ describe("CodeGate", () => {
       calculateScore: vi.fn().mockReturnValue(85),
     };
     const gate = createCodeGate(mockScorer);
-    const result = await gate("track-1", {} as any, "");
+    const result = await gate("track-1", {} as unknown, "");
 
     expect(result.success).toBe(false);
     expect(result.message).toContain("Score is only 85%");
@@ -19,7 +19,7 @@ describe("CodeGate", () => {
       calculateScore: vi.fn().mockReturnValue(100),
     };
     const gate = createCodeGate(mockScorer);
-    const result = await gate("track-1", {} as any, "");
+    const result = await gate("track-1", {} as unknown, "");
 
     expect(result.success).toBe(true);
     expect(result.message).toContain("Score is 100%");

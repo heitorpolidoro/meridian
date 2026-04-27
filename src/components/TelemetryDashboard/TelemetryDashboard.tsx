@@ -25,6 +25,12 @@ export const TelemetryDashboard: React.FC<TelemetryDashboardProps> = ({
   compliance,
   conflicts,
 }) => {
+  /**
+   * Returns a hex color code based on the provided score.
+   *
+   * @param score Numeric score used to determine the color.
+   * @returns Hex color string representing the performance level for the given score.
+   */
   const getScoreColor = (score: number) => {
     if (score > 80) return "#00ff88";
     if (score > 50) return "#ffcc00";
