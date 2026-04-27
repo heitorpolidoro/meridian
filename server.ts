@@ -124,12 +124,9 @@ export function processGeminiOutput(
   try {
     const parsed: GeminiMessage = JSON.parse(jsonLine);
 
-    const methodHandlers: Record<string, () => void> = {
+    const handlers: Record<string|number, () => void> = {
       "session/update": () =>
         handleSessionUpdate(parsed, ctx.socket, ctx.telemetryCollector),
-    };
-
-    const idHandlers: Record<number, () => void> = {
       1: () => handleInitialize(sendACP, ctx),
       2: () => {
         const sessionId = parsed.result?.sessionId;
@@ -140,12 +137,14 @@ export function processGeminiOutput(
       },
     };
 
-    if (parsed.method && methodHandlers[parsed.method]) {
-      methodHandlers[parsed.method]();
-    } else if (parsed.id !== undefined && idHandlers[parsed.id]) {
-      idHandlers[parsed.id]();
-    } else if (parsed.id !== undefined && parsed.id >= 3 && parsed.result) {
-      handleRequestComplete(ctx);
+    if (parsed.id !== undefined && parsed.id >= 3 && parsed.result) {
+      handlers[parsed.id] = () => handleRequestComplete(ctx);
+    }
+
+    const key = parsed.method ?? parsed.id;
+    const handler = handlers[key];
+    if (handler) {
+      handler();
     }
   } catch {
     /* Ignore malformed */
