@@ -56,11 +56,12 @@ export class OrchestrationService {
         const isValidTrackDir =
           trackId && trackId !== "." && trackId !== ".." && segments.length > 1;
 
-        const eventHandlers: { [key: string]: (id: string) => Promise<void> } = {
-          change: (id: string) => this.runAutoValidation(id),
-          rename: (id: string) => this.runAutoValidation(id),
-          FILE_SAVED: (id: string) => this.runAutoValidation(id),
-        };
+        const eventHandlers: { [key: string]: (id: string) => Promise<void> } =
+          {
+            change: (id: string) => this.runAutoValidation(id),
+            rename: (id: string) => this.runAutoValidation(id),
+            FILE_SAVED: (id: string) => this.runAutoValidation(id),
+          };
 
         if (isValidTrackDir && eventHandlers[event]) {
           eventHandlers[event](trackId).catch((err: unknown) => {
@@ -112,8 +113,8 @@ export class OrchestrationService {
           ? "success_notHandoffReady"
           : ""
         : !report.overallSuccess && currentStatus === "HandoffReady"
-        ? "failure_HandoffReady"
-        : "";
+          ? "failure_HandoffReady"
+          : "";
       if (transitionKey && transitions[transitionKey]) {
         const [newStatus, comment] = transitions[transitionKey];
         this.updateStatus(trackId, newStatus, comment);

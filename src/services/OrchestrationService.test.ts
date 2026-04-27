@@ -140,20 +140,18 @@ describe("OrchestrationService", () => {
       const spy = vi.spyOn(orchestrationService, "updateStatus");
 
       // Mock validation to pass but take time
-      vi.spyOn(validationEngine, "runValidation").mockImplementation(
-        () => {
-          // Change track status to Completed while validation is "running"
-          metadataService.updateTrackMetadata("track-1", {
-            status: "Completed",
-          });
-          return Promise.resolve({
-            trackId: "track-1",
-            phase: "1.1",
-            overallSuccess: true,
-            results: [],
-          });
-        },
-      );
+      vi.spyOn(validationEngine, "runValidation").mockImplementation(() => {
+        // Change track status to Completed while validation is "running"
+        metadataService.updateTrackMetadata("track-1", {
+          status: "Completed",
+        });
+        return Promise.resolve({
+          trackId: "track-1",
+          phase: "1.1",
+          overallSuccess: true,
+          results: [],
+        });
+      });
 
       await orchestrationService.runAutoValidation("track-1");
 
@@ -163,18 +161,16 @@ describe("OrchestrationService", () => {
     it("stops validation if track is deleted during async validation", async () => {
       const spy = vi.spyOn(orchestrationService, "updateStatus");
 
-      vi.spyOn(validationEngine, "runValidation").mockImplementation(
-        () => {
-          // Delete metadata while validation is running
-          vi.spyOn(metadataService, "getTrackMetadata").mockReturnValue(null);
-          return {
-            trackId: "track-1",
-            phase: "1.1",
-            overallSuccess: true,
-            results: [],
-          };
-        },
-      );
+      vi.spyOn(validationEngine, "runValidation").mockImplementation(() => {
+        // Delete metadata while validation is running
+        vi.spyOn(metadataService, "getTrackMetadata").mockReturnValue(null);
+        return {
+          trackId: "track-1",
+          phase: "1.1",
+          overallSuccess: true,
+          results: [],
+        };
+      });
 
       await orchestrationService.runAutoValidation("track-1");
 
