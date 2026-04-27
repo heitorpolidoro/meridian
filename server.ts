@@ -135,17 +135,13 @@ export function processGeminiOutput(
           ctx.socket.emit("ready");
         }
       },
+      ...(parsed.id !== undefined && parsed.id >= 3 && parsed.result
+        ? { [parsed.id]: () => handleRequestComplete(ctx) }
+        : {}),
     };
 
-    if (parsed.id !== undefined && parsed.id >= 3 && parsed.result) {
-      handlers[parsed.id] = () => handleRequestComplete(ctx);
-    }
-
     const key = parsed.method ?? parsed.id;
-    const handler = handlers[key];
-    if (handler) {
-      handler();
-    }
+    handlers[key]?.();
   } catch {
     /* Ignore malformed */
   }

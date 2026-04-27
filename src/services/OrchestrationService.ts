@@ -113,10 +113,7 @@ export class OrchestrationService {
       };
       const key = report.overallSuccess ? "pass" : "fail";
       const action = transitionMap[key];
-      if (
-        (report.overallSuccess && currentStatus !== "HandoffReady") ||
-        (!report.overallSuccess && currentStatus === "HandoffReady")
-      ) {
+      if (action.newStatus !== currentStatus) {
         this.updateStatus(trackId, action.newStatus, action.comment);
       }
     } finally {
