@@ -25,6 +25,8 @@ export interface OrchestrationLogEntry {
  * Handles phase transitions, status updates, and transactional audit logging.
  */
 export class OrchestrationService {
+  private readonly validatingTracks = new Set<string>();
+
   constructor(
     private readonly trackMetadataService: TrackMetadataService,
     private readonly fs: IFileSystem,
@@ -45,14 +47,20 @@ export class OrchestrationService {
       path.join(this.meridianDir, "tracks"),
       (event, filePath) => {
         // Extract trackId from path: tracks/<trackId>/...
-        const relative = path.relative(
-          path.join(this.meridianDir, "tracks"),
-          filePath,
-        );
-        const trackId = relative.split(path.sep)[0];
+        const tracksDir = path.join(this.meridianDir, "tracks");
+        const relative = path.relative(tracksDir, filePath);
+        const segments = relative.split(path.sep);
+        const trackId = segments[0];
+
+        // Ensure we are watching a file inside a track directory, not the tracks dir itself
+        const isValidTrackDir = 
+          trackId && 
+          trackId !== "." && 
+          trackId !== ".." && 
+          segments.length > 1;
 
         if (
-          trackId &&
+          isValidTrackDir &&
           (event === "change" || event === "rename" || event === "FILE_SAVED")
         ) {
           this.runAutoValidation(trackId).catch((err) => {
@@ -68,41 +76,51 @@ export class OrchestrationService {
    * If validation passes, updates status to 'HandoffReady'.
    */
   public async runAutoValidation(trackId: string): Promise<void> {
-    if (!this.validationEngine) return;
+    if (!this.validationEngine || this.validatingTracks.has(trackId)) return;
 
-    const metadata = this.trackMetadataService.getTrackMetadata(trackId);
-    if (!metadata || metadata.orchestration.status === "Completed") return;
+    this.validatingTracks.add(trackId);
 
-    const currentPhase = metadata.orchestration.currentPhase;
-    const report = await this.validationEngine.runValidation(
-      trackId,
-      currentPhase,
-    );
+    try {
+      const metadata = this.trackMetadataService.getTrackMetadata(trackId);
+      if (!metadata || metadata.orchestration.status === "Completed") return;
 
-    const transitions = [
-      {
-        predicate: (success: boolean, status: string) =>
-          success && status !== "HandoffReady",
-        status: "HandoffReady",
-        message: "All quality gates passed automatically.",
-      },
-      {
-        predicate: (success: boolean, status: string) =>
-          !success && status === "HandoffReady",
-        status: "InProgress",
-        message: "Quality gates failed after modification.",
-      },
-    ];
+      const currentPhase = metadata.orchestration.currentPhase;
+      const report = await this.validationEngine.runValidation(
+        trackId,
+        currentPhase,
+      );
 
-    const transition = transitions.find((t) =>
-      t.predicate(report.overallSuccess, metadata.orchestration.status),
-    );
+      // Re-fetch metadata to avoid race conditions with stale state after async validation
+      const latestMetadata = this.trackMetadataService.getTrackMetadata(trackId);
+      if (!latestMetadata || latestMetadata.orchestration.status === "Completed")
+        return;
 
-    if (transition) {
-      this.updateStatus(trackId, transition.status, transition.message);
+      const transitions = [
+        {
+          predicate: (success: boolean, status: string) =>
+            success && status !== "HandoffReady",
+          status: "HandoffReady",
+          message: "All quality gates passed automatically.",
+        },
+        {
+          predicate: (success: boolean, status: string) =>
+            !success && status === "HandoffReady",
+          status: "InProgress",
+          message: "Quality gates failed after modification.",
+        },
+      ];
+
+      const transition = transitions.find((t) =>
+        t.predicate(report.overallSuccess, latestMetadata.orchestration.status),
+      );
+
+      if (transition) {
+        this.updateStatus(trackId, transition.status, transition.message);
+      }
+    } finally {
+      this.validatingTracks.delete(trackId);
     }
   }
-
   /**
    * Returns the absolute path to the track directory.
    */

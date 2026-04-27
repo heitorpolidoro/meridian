@@ -72,7 +72,7 @@ export class ValidationEngine {
       } catch (error) {
         results.push({
           success: false,
-          gateName: "Unknown Gate",
+          gateName: gate.name || "Quality Gate",
           message: `Unexpected error during validation: ${error instanceof Error ? error.message : String(error)}`,
         });
       }

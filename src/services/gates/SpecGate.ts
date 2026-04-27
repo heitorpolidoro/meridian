@@ -9,7 +9,7 @@ import path from "node:path";
  * @param meridianDir - The root directory containing meridian tracks.
  * @returns A promise resolving to a ValidationResult indicating the success or failure of the spec gate validation.
  */
-export const SpecGate: QualityGateFn = (
+export const SpecGate: QualityGateFn = async (
   trackId: string,
   fs: IFileSystem,
   meridianDir: string,
@@ -17,11 +17,11 @@ export const SpecGate: QualityGateFn = (
   const specPath = path.join(meridianDir, "tracks", trackId, "spec.md");
 
   if (!fs.exists(specPath)) {
-    return Promise.resolve({
+    return {
       success: false,
       gateName: "SpecGate",
       message: `spec.md not found for track ${trackId}`,
-    });
+    };
   }
 
   const content = fs.readFile(specPath);
@@ -41,17 +41,17 @@ export const SpecGate: QualityGateFn = (
   }
 
   if (missingSections.length > 0) {
-    return Promise.resolve({
+    return {
       success: false,
       gateName: "SpecGate",
       message: "Missing mandatory sections in spec.md",
       errors: missingSections.map((s) => `Section "${s}" is missing`),
-    });
+    };
   }
 
-  return Promise.resolve({
+  return {
     success: true,
     gateName: "SpecGate",
     message: "spec.md contains all mandatory sections",
-  });
+  };
 };
