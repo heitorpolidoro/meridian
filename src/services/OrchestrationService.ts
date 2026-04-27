@@ -45,7 +45,7 @@ export class OrchestrationService {
   private setupAutoValidation() {
     this.watcher?.watch(
       path.join(this.meridianDir, "tracks"),
-      (event, filePath) => {
+      (event: string, filePath: string) => {
         // Extract trackId from path: tracks/<trackId>/...
         const tracksDir = path.join(this.meridianDir, "tracks");
         const relative = path.relative(tracksDir, filePath);
@@ -56,14 +56,14 @@ export class OrchestrationService {
         const isValidTrackDir =
           trackId && trackId !== "." && trackId !== ".." && segments.length > 1;
 
-        const eventHandlers: { [key: string]: (id: string) => Promise<any> } = {
-          change: (id) => this.runAutoValidation(id),
-          rename: (id) => this.runAutoValidation(id),
-          FILE_SAVED: (id) => this.runAutoValidation(id),
+        const eventHandlers: { [key: string]: (id: string) => Promise<void> } = {
+          change: (id: string) => this.runAutoValidation(id),
+          rename: (id: string) => this.runAutoValidation(id),
+          FILE_SAVED: (id: string) => this.runAutoValidation(id),
         };
 
         if (isValidTrackDir && eventHandlers[event]) {
-          eventHandlers[event](trackId).catch((err) => {
+          eventHandlers[event](trackId).catch((err: unknown) => {
             console.error(`Auto-validation failed for track ${trackId}:`, err);
           });
         }
@@ -97,18 +97,26 @@ export class OrchestrationService {
 
       const currentStatus = latestMetadata.orchestration.status;
 
-      if (report.overallSuccess && currentStatus !== "HandoffReady") {
-        this.updateStatus(
-          trackId,
+      const transitions: Record<string, [string, string]> = {
+        success_notHandoffReady: [
           "HandoffReady",
           "All quality gates passed automatically.",
-        );
-      } else if (!report.overallSuccess && currentStatus === "HandoffReady") {
-        this.updateStatus(
-          trackId,
+        ],
+        failure_HandoffReady: [
           "InProgress",
           "Quality gates failed after modification.",
-        );
+        ],
+      };
+      const transitionKey = report.overallSuccess
+        ? currentStatus !== "HandoffReady"
+          ? "success_notHandoffReady"
+          : ""
+        : !report.overallSuccess && currentStatus === "HandoffReady"
+        ? "failure_HandoffReady"
+        : "";
+      if (transitionKey && transitions[transitionKey]) {
+        const [newStatus, comment] = transitions[transitionKey];
+        this.updateStatus(trackId, newStatus, comment);
       }
     } finally {
       this.validatingTracks.delete(trackId);

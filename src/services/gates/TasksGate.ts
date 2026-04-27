@@ -11,7 +11,7 @@ import path from "node:path";
  * @returns A promise that resolves to a ValidationResult indicating success if
  * the tasks.md file is valid, or failure otherwise.
  */
-export const TasksGate: QualityGateFn = async (
+export const TasksGate: QualityGateFn = (
   trackId: string,
   fs: IFileSystem,
   meridianDir: string,
@@ -19,24 +19,44 @@ export const TasksGate: QualityGateFn = async (
   const tasksPath = path.join(meridianDir, "tracks", trackId, "tasks.md");
 
   if (!fs.exists(tasksPath)) {
-    return {
+    return Promise.resolve({
       success: false,
       gateName: "TasksGate",
       message: `tasks.md not found for track ${trackId}`,
-    };
+    });
   }
 
   const content = fs.readFile(tasksPath);
   const taskRegex = /\[Task\s+\d+\.\d+\]/i;
-  const hasTasks = taskRegex.test(content);
+  const dodRegex = /DoD/i;
 
-  if (!hasTasks) {
-    return {
-      success: false,
-      gateName: "TasksGate",
-      message:
-        "tasks.md must contain at least one task definition (e.g., [Task 1.1])",
-    };
+  const validators: Record<string, { check: boolean; result: ValidationResult }> = {
+    noTasks: {
+      check: !taskRegex.test(content),
+      result: {
+        success: false,
+        gateName: "TasksGate",
+        message:
+          "tasks.md must contain at least one task definition (e.g., [Task 1.1])",
+      },
+    },
+    missingDoD: {
+      check: !dodRegex.test(content),
+      result: {
+        success: false,
+        gateName: "TasksGate",
+        message: "Each task must have a Definition of Done (DoD) entry",
+      },
+    },
+  };
+
+  const failed = Object.values(validators).find(v => v.check);
+  if (failed) {
+    return Promise.resolve(failed.result);
+  }
+
+  return Promise.resolve({ success: true, gateName: "TasksGate" });
+};
   }
 
   // Split content by tasks to check for DoD in each

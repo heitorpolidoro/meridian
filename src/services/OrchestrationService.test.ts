@@ -141,17 +141,17 @@ describe("OrchestrationService", () => {
 
       // Mock validation to pass but take time
       vi.spyOn(validationEngine, "runValidation").mockImplementation(
-        async () => {
+        () => {
           // Change track status to Completed while validation is "running"
           metadataService.updateTrackMetadata("track-1", {
             status: "Completed",
           });
-          return {
+          return Promise.resolve({
             trackId: "track-1",
             phase: "1.1",
             overallSuccess: true,
             results: [],
-          };
+          });
         },
       );
 
@@ -164,7 +164,7 @@ describe("OrchestrationService", () => {
       const spy = vi.spyOn(orchestrationService, "updateStatus");
 
       vi.spyOn(validationEngine, "runValidation").mockImplementation(
-        async () => {
+        () => {
           // Delete metadata while validation is running
           vi.spyOn(metadataService, "getTrackMetadata").mockReturnValue(null);
           return {

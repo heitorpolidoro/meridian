@@ -43,7 +43,14 @@ export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({
             ...props
           }: Record<string, unknown>) {
             const match = /language-(\w+)/.exec((className as string) || "");
-            const lang = match ? match[1] : "";
+            if (inline || !match) {
+              return (
+                <code {...props} className={className as string}>
+                  {children as React.ReactNode}
+                </code>
+              );
+            }
+            const lang = match[1];
             const langMap: Record<string, string> = {
               typescript: "typescript",
               ts: "ts",
@@ -56,12 +63,10 @@ export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({
               html: "html",
             };
             const language = langMap[lang] ?? "text";
-
             const content = React.Children.toArray(children)
               .join("")
               .replace(/\n$/, "");
-
-            return !inline && match ? (
+            return (
               <SyntaxHighlighter
                 {...props}
                 style={vscDarkPlus as Record<string, React.CSSProperties>}
@@ -70,10 +75,6 @@ export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({
               >
                 {content}
               </SyntaxHighlighter>
-            ) : (
-              <code {...props} className={className as string}>
-                {children as React.ReactNode}
-              </code>
             );
           },
           /**
