@@ -99,7 +99,10 @@ export class OrchestrationService {
       )
         return;
 
-      const transitionsMap: Record<string, { status: string; message: string }> = {
+      const transitionsMap: Record<
+        string,
+        { status: string; message: string }
+      > = {
         [`true:InProgress`]: {
           status: "HandoffReady",
           message: "All quality gates passed automatically.",
