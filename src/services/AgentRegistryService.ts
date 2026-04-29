@@ -1,23 +1,28 @@
-import path from 'node:path';
-import { z } from 'zod';
-import { IFileSystem } from './interfaces/ICoreServices';
-import YAML from 'yaml';
+import path from "node:path";
+import { z } from "zod";
+import { IFileSystem } from "./interfaces/ICoreServices";
+import YAML from "yaml";
 
 export const AgentSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   role: z.string().min(1),
-  instruction: z.string().optional().default(''),
-  color: z.string().regex(/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/, 'Invalid Hex Color')
+  instruction: z.string().optional().default(""),
+  color: z
+    .string()
+    .regex(/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/, "Invalid Hex Color"),
 });
 
 export const AgentArraySchema = z.array(AgentSchema);
 export type Agent = z.infer<typeof AgentSchema>;
 
 export class AgentRegistryService {
-  private readonly AGENTS_FILE = '.meridian/agents.json';
+  private readonly AGENTS_FILE = ".meridian/agents.json";
 
-  constructor(private fs: IFileSystem, private rootDir: string) {}
+  constructor(
+    private fs: IFileSystem,
+    private rootDir: string,
+  ) {}
 
   private getFilePath(): string {
     return path.join(this.rootDir, this.AGENTS_FILE);
@@ -31,18 +36,20 @@ export class AgentRegistryService {
       const parsed = JSON.parse(content);
       const result = AgentArraySchema.safeParse(parsed);
       if (!result.success) {
-        console.error('Invalid agent registry schema', result.error);
+        console.error("Invalid agent registry schema", result.error);
         return [];
       }
       return result.data;
     } catch (error) {
-      console.error('Failed to read or parse agents registry', error);
+      console.error("Failed to read or parse agents registry", error);
       return [];
     }
   }
 
   saveAgents(agents: Agent[]): void {
-    const uniqueAgents = Array.from(new Map(agents.map(a => [a.id, a])).values());
+    const uniqueAgents = Array.from(
+      new Map(agents.map((a) => [a.id, a])).values(),
+    );
     const result = AgentArraySchema.safeParse(uniqueAgents);
     if (!result.success) {
       throw new Error(`Invalid agent data: ${result.error.message}`);
@@ -51,26 +58,28 @@ export class AgentRegistryService {
     const filePath = this.getFilePath();
     const dirPath = path.dirname(filePath);
     if (!this.fs.exists(dirPath)) this.fs.mkdir(dirPath);
-    
+
     this.fs.writeFile(filePath, JSON.stringify(result.data, null, 2));
   }
 
   discoverAgents(): Agent[] {
-    const geminiDir = path.join(this.rootDir, '.gemini', 'agents');
+    const geminiDir = path.join(this.rootDir, ".gemini", "agents");
     if (!this.fs.exists(geminiDir)) return this.getAgents();
 
     const currentAgents = this.getAgents();
-    const files = this.fs.readDirectory(geminiDir).filter(f => f.endsWith('.md'));
-    
-    const discoveredAgents: Agent[] = files.map(file => {
+    const files = this.fs
+      .readDirectory(geminiDir)
+      .filter((f) => f.endsWith(".md"));
+
+    const discoveredAgents: Agent[] = files.map((file) => {
       const content = this.fs.readFile(path.join(geminiDir, file));
-      const fileId = file.replace('.md', '');
-      
+      const fileId = file.replace(".md", "");
+
       let name = fileId;
-      let role = 'Specialized Agent';
+      let role = "Specialized Agent";
 
       // Parse Frontmatter
-      const parts = content.split('---');
+      const parts = content.split("---");
       if (parts.length >= 3) {
         try {
           const metadata = YAML.parse(parts[1]);
@@ -79,18 +88,22 @@ export class AgentRegistryService {
             role = metadata.description || role;
           }
         } catch (e) {
-          console.warn(`Failed to parse YAML frontmatter for agent ${fileId}`, e);
+          console.warn(
+            `Failed to parse YAML frontmatter for agent ${fileId}`,
+            e,
+          );
         }
       }
-      
-      const existing = currentAgents.find(a => a.id === fileId);
-      
+
+      const existing = currentAgents.find((a) => a.id === fileId);
+
       return {
         id: fileId,
         name,
         role: existing?.role || role,
-        instruction: existing?.instruction || 'Bootstrap loaded from filesystem.',
-        color: existing?.color || '#00c3ff'
+        instruction:
+          existing?.instruction || "Bootstrap loaded from filesystem.",
+        color: existing?.color || "#00c3ff",
       };
     });
 
@@ -99,14 +112,16 @@ export class AgentRegistryService {
   }
 
   syncToGemini(agents: Agent[]): void {
-    const geminiDir = path.join(this.rootDir, '.gemini', 'agents');
+    const geminiDir = path.join(this.rootDir, ".gemini", "agents");
     if (!this.fs.exists(geminiDir)) this.fs.mkdir(geminiDir);
 
-    const activeIds = new Set(agents.map(a => `${a.id}.md`));
-    const diskFiles = this.fs.readDirectory(geminiDir).filter(f => f.endsWith('.md'));
+    const activeIds = new Set(agents.map((a) => `${a.id}.md`));
+    const diskFiles = this.fs
+      .readDirectory(geminiDir)
+      .filter((f) => f.endsWith(".md"));
 
     // 1. Cleanup orphaned files
-    diskFiles.forEach(file => {
+    diskFiles.forEach((file) => {
       if (!activeIds.has(file)) {
         const filePath = path.join(geminiDir, file);
         this.fs.deleteFile(filePath);
@@ -114,7 +129,7 @@ export class AgentRegistryService {
     });
 
     // 2. Update/Create current agents
-    agents.forEach(agent => {
+    agents.forEach((agent) => {
       const fileName = `${agent.id}.md`;
       const filePath = path.join(geminiDir, fileName);
       const content = `---

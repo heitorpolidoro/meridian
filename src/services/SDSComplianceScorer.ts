@@ -1,9 +1,12 @@
-import { ISDSComplianceScorer, IFileSystem } from './interfaces/ICoreServices';
-import { SDSCompliance } from './IPCSchemas';
-import path from 'node:path';
+import { ISDSComplianceScorer, IFileSystem } from "./interfaces/ICoreServices";
+import { SDSCompliance } from "./IPCSchemas";
+import path from "node:path";
 
 export class SDSComplianceScorer implements ISDSComplianceScorer {
-  constructor(private fileSystem: IFileSystem, private tracksDir: string) {}
+  constructor(
+    private fileSystem: IFileSystem,
+    private tracksDir: string,
+  ) {}
 
   // skipcq: JS-0105
   calculateScore(trackId: string): number {
@@ -13,11 +16,12 @@ export class SDSComplianceScorer implements ISDSComplianceScorer {
 
   getCompliance(trackId: string): SDSCompliance {
     const trackPath = path.join(this.tracksDir, trackId);
-    
-    const hasSpec = this.fileSystem.exists(path.join(trackPath, 'spec.md'));
-    const hasPlan = this.fileSystem.exists(path.join(trackPath, 'plan.md'));
-    const hasTasks = this.fileSystem.exists(path.join(trackPath, 'tasks.md')) || 
-                     this.fileSystem.exists(path.join(trackPath, 'tasks.yaml'));
+
+    const hasSpec = this.fileSystem.exists(path.join(trackPath, "spec.md"));
+    const hasPlan = this.fileSystem.exists(path.join(trackPath, "plan.md"));
+    const hasTasks =
+      this.fileSystem.exists(path.join(trackPath, "tasks.md")) ||
+      this.fileSystem.exists(path.join(trackPath, "tasks.yaml"));
 
     const components = [hasSpec, hasPlan, hasTasks];
     const presentCount = components.filter(Boolean).length;

@@ -28,7 +28,9 @@ export const TasksGate: QualityGateFn = (
           success: false,
           gateName: "TasksGate",
           message: "tasks.yaml has invalid schema",
-          errors: result.error.errors.map((e) => `${e.path.join(".")}: ${e.message}`),
+          errors: result.error.errors.map(
+            (e) => `${e.path.join(".")}: ${e.message}`,
+          ),
         });
       }
 
@@ -58,7 +60,7 @@ export const TasksGate: QualityGateFn = (
   if (fs.exists(mdPath)) {
     const content = fs.readFile(mdPath);
     const hasTasks = /\[Task\s+\d+\.\d+\]/i.test(content);
-    
+
     if (!hasTasks) {
       return Promise.resolve({
         success: false,
@@ -69,7 +71,8 @@ export const TasksGate: QualityGateFn = (
 
     const taskHeaderRegex = /#+.*\[Task\s+\d+\.\d+\].*/i;
     const taskSections = content.split(taskHeaderRegex).slice(1);
-    const dodRegex = /#+\s*(?:Definition of Done|DoD)|(?:Definition of Done|DoD)\s*:/i;
+    const dodRegex =
+      /#+\s*(?:Definition of Done|DoD)|(?:Definition of Done|DoD)\s*:/i;
 
     const invalidTasksCount = taskSections.filter(
       (section) => !dodRegex.test(section),
@@ -79,7 +82,8 @@ export const TasksGate: QualityGateFn = (
       return Promise.resolve({
         success: false,
         gateName: "TasksGate",
-        message: "Legacy tasks.md: Each task must have a 'Definition of Done' (DoD)",
+        message:
+          "Legacy tasks.md: Each task must have a 'Definition of Done' (DoD)",
         errors: [`${invalidTasksCount} task(s) are missing DoD`],
       });
     }
