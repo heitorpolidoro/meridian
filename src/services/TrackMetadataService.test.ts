@@ -75,9 +75,37 @@ describe('TrackMetadataService', () => {
       const result = service.updateTrackMetadata('track-1', { status: 'Completed' });
       expect(result.dates.completed).toBe('2024-01-01T12:00:00.000Z');
     });
+
+    it('removes completed date when status changes from Completed', () => {
+      service.updateTrackMetadata('track-1', { status: 'Completed' });
+      const result = service.updateTrackMetadata('track-1', { status: 'Active' });
+      expect(result.dates.completed).toBeUndefined();
+    });
+
+    it('preserves manually provided dates', () => {
+      const customDate = "2020-01-01T00:00:00.000Z";
+      const result = service.updateTrackMetadata('track-1', { 
+        dates: { created: customDate, updated: customDate } 
+      });
+      expect(result.dates.created).toBe(customDate);
+    });
+
+    it('does nothing to completed date if status remains Completed', () => {
+      service.updateTrackMetadata('t1', { status: 'Completed' });
+      const firstResult = service.getTrackMetadata('t1');
+      const completedDate = firstResult?.dates.completed;
+      
+      const secondResult = service.updateTrackMetadata('t1', { name: 'Updated Name' });
+      expect(secondResult.dates.completed).toBe(completedDate);
+      expect(secondResult.name).toBe('Updated Name');
+    });
   });
 
   describe('listTracksWithMetadata', () => {
+    it('returns empty array if tracks directory does not exist', () => {
+      expect(service.listTracksWithMetadata()).toEqual([]);
+    });
+
     it('returns tracks and initializes missing metadata', () => {
       const tracksPath = path.join(meridianDir, 'tracks');
       fs.mkdir(tracksPath);

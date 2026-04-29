@@ -271,6 +271,32 @@ describe("AgentRegistryService", () => {
     expect(badYaml?.role).toBe("Specialized Agent");
   });
 
+  it("should use default name if metadata exists but name is missing", () => {
+    mockFs.mkdir("/root/.gemini/agents");
+    mockFs.writeFile(
+      "/root/.gemini/agents/no-name.md",
+      "---\ndescription: 'Just description'\n---\n# Content",
+    );
+
+    const discovered = service.discoverAgents();
+    const agent = discovered.find((a) => a.id === "no-name");
+    expect(agent?.name).toBe("no-name");
+    expect(agent?.role).toBe("Just description");
+  });
+
+  it("should use default role if metadata exists but description is missing", () => {
+    mockFs.mkdir("/root/.gemini/agents");
+    mockFs.writeFile(
+      "/root/.gemini/agents/no-desc.md",
+      "---\nname: 'Only Name'\n---\n# Content",
+    );
+
+    const discovered = service.discoverAgents();
+    const agent = discovered.find((a) => a.id === "no-desc");
+    expect(agent?.name).toBe("Only Name");
+    expect(agent?.role).toBe("Specialized Agent");
+  });
+
   it("should preserve existing agent role and instruction during discovery", () => {
     // 1. Setup existing registry
     const existing: Agent[] = [

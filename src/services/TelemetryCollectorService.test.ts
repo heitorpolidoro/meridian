@@ -35,4 +35,12 @@ describe('TelemetryCollectorService', () => {
     expect(summary.p50Latency).toBe(0);
     expect(summary.errorRate).toBe(0);
   });
+
+  it('clears metrics when clearMetrics is called', () => {
+    service.recordMetric('latency', 100);
+    service.clearMetrics();
+    const summary = service.getSummary();
+    expect(summary.history).toHaveLength(0);
+    expect(summary.totalTokens).toBe(0);
+  });
 });

@@ -39,14 +39,41 @@ describe('NodeFileSystem (Concrete)', () => {
     expect(fs.appendFileSync).toHaveBeenCalled();
   });
 
-  it('should call unlinkSync in deleteFile', () => {
+  it('should call unlinkSync in deleteFile only if file exists', () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     nfs.deleteFile('test.txt');
-    expect(fs.unlinkSync).toHaveBeenCalled();
+    expect(fs.unlinkSync).toHaveBeenCalledWith('test.txt');
+
+    vi.clearAllMocks();
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+    nfs.deleteFile('test.txt');
+    expect(fs.unlinkSync).not.toHaveBeenCalled();
   });
 
   it('should call existsSync', () => {
     nfs.exists('test.txt');
-    expect(fs.existsSync).toHaveBeenCalled();
+    expect(fs.existsSync).toHaveBeenCalledWith('test.txt');
+  });
+
+  it('should call readdirSync in readDirectory', () => {
+    vi.mocked(fs.readdirSync).mockReturnValue(['file1.txt'] as any);
+    const result = nfs.readDirectory('dir');
+    expect(fs.readdirSync).toHaveBeenCalledWith('dir');
+    expect(result).toEqual(['file1.txt']);
+  });
+
+  it('should call statSync in isDirectory', () => {
+    const isDirectoryMock = vi.fn().mockReturnValue(true);
+    vi.mocked(fs.statSync).mockReturnValue({ isDirectory: isDirectoryMock } as any);
+    
+    const result = nfs.isDirectory('dir');
+    expect(fs.statSync).toHaveBeenCalledWith('dir');
+    expect(isDirectoryMock).toHaveBeenCalled();
+    expect(result).toBe(true);
+  });
+
+  it('should call mkdirSync in mkdir', () => {
+    nfs.mkdir('new-dir');
+    expect(fs.mkdirSync).toHaveBeenCalledWith('new-dir', { recursive: true });
   });
 });
