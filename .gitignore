@@ -46,6 +46,7 @@ Thumbs.db
 # --- Temporary Files ---
 tmp/
 coverage/
+.scannerwork/
 .next/
 .server/
 .client/

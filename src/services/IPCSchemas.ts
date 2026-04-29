@@ -32,6 +32,21 @@ export const SyncConflictSchema = z.object({
   timestamp: z.string(),
 });
 
+export const TaskSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  dod: z.string(),
+  status: z.enum(["todo", "in-progress", "completed"]),
+});
+
+export const TrackTasksSchema = z.object({
+  trackId: z.string(),
+  tasks: z.array(TaskSchema),
+});
+
+export type Task = z.infer<typeof TaskSchema>;
+export type TrackTasks = z.infer<typeof TrackTasksSchema>;
+
 export const IPCEventSchema = z.discriminatedUnion("event", [
   z.object({
     event: z.literal("telemetry-update"),
