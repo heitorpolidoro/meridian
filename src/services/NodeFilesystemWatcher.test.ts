@@ -74,6 +74,21 @@ describe('NodeFilesystemWatcher', () => {
     expect(callback).toHaveBeenCalledWith('change', 'test.md');
   });
 
+  it('does not trigger callback if filename is null', () => {
+    const callback = vi.fn();
+    let watchCallback: (event: string, filename: string | null) => void = () => {};
+    
+    vi.mocked(fs.watch).mockImplementation((_path: fs.PathLike, _options: fs.WatchOptions | string | undefined | null, cb?: (event: string, filename: string | null) => void) => {
+      if (cb) watchCallback = cb;
+      return { close: vi.fn() } as unknown as fs.FSWatcher;
+    });
+
+    watcher.watch('/test/path', callback);
+    watchCallback('change', null);
+
+    expect(callback).not.toHaveBeenCalled();
+  });
+
   it('handles errors when starting watcher', () => {
     const error = new Error('Test error');
     // Using mockImplementationOnce for isolation and avoid leakage to other tests

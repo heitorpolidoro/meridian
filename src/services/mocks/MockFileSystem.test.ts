@@ -51,4 +51,10 @@ describe('MockFileSystem', () => {
     expect(contents).toContain('file2.txt');
     expect(contents).toContain('subdir');
   });
+
+  it('should handle paths already ending with / in readDirectory', () => {
+    fs.writeFile('/dir/file.txt', 'data');
+    const contents = fs.readDirectory('/dir/');
+    expect(contents).toEqual(['file.txt']);
+  });
 });

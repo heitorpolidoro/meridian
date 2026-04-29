@@ -98,6 +98,17 @@ describe("ValidationEngine", () => {
     expect(report.results[0].gateName).toBe("MyNamedGate");
   });
 
+  it("uses 'Quality Gate' as fallback if gate function has no name", async () => {
+    // We use an anonymous function and force its name to be empty if necessary,
+    // though usually a lambda assigned to a variable has the variable name.
+    // A direct anonymous function in registerGate might work.
+    engine.registerGate("1.1", () => {
+      throw new Error("Anonymous Fail");
+    });
+    const report = await engine.runValidation("track-1", "1.1");
+    expect(report.results[0].gateName).toBe("Quality Gate");
+  });
+
   it("passes necessary parameters to gates", async () => {
     const spyGate = vi
       .fn()
