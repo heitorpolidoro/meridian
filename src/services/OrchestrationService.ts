@@ -83,7 +83,7 @@ export class OrchestrationService {
 
     try {
       const metadata = this.trackMetadataService.getTrackMetadata(trackId);
-      if (!metadata || metadata.orchestration.status === "Completed") return;
+      if (!metadata || metadata.status === "Completed") return;
 
       const currentPhase = metadata.orchestration.currentPhase;
       const report = await this.validationEngine.runValidation(

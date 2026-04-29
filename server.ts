@@ -259,7 +259,11 @@ io.on("connection", (socket) => {
       {
         stdio: ["pipe", "pipe", "pipe"],
         cwd: rootDir,
-        env: { ...process.env, PYTHONUNBUFFERED: "1" },
+        env: {
+          ...process.env,
+          PYTHONUNBUFFERED: "1",
+          PATH: "/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin",
+        },
       },
     );
 

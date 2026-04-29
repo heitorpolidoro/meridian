@@ -467,6 +467,22 @@ describe("OrchestrationService", () => {
       expect(spy).not.toHaveBeenCalled();
     });
 
+    it("runAutoValidation returns early if metadata is missing", async () => {
+      vi.spyOn(metadataService, "getTrackMetadata").mockReturnValue(null);
+      const spy = vi.spyOn(validationEngine, "runValidation");
+
+      await orchestrationService.runAutoValidation("non-existent");
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it("runAutoValidation returns early if track is already Completed", async () => {
+      metadataService.updateTrackMetadata("track-1", { status: "Completed" });
+      const spy = vi.spyOn(validationEngine, "runValidation");
+
+      await orchestrationService.runAutoValidation("track-1");
+      expect(spy).not.toHaveBeenCalled();
+    });
+
     it("handles invalid trackId segments in watcher callback", () => {
       const watchMock = mockWatcher.watch as Mock<
         [string, (eventType: string, filePath: string) => void],

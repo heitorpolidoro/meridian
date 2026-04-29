@@ -37,7 +37,11 @@ function runBridge() {
 
     const gemini = spawn(GEMINI_CMD, GEMINI_ARGS, {
         stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env, PYTHONUNBUFFERED: '1' }
+        env: { 
+            ...process.env, 
+            PYTHONUNBUFFERED: '1',
+            PATH: '/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin'
+        }
     });
 
     const geminiOut = readline.createInterface({ input: gemini.stdout });
