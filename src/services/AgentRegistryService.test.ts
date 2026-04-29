@@ -112,10 +112,105 @@ describe("AgentRegistryService", () => {
     service.syncToGemini(mockAgents);
     const filePath = "/root/.gemini/agents/gemini-agent.md";
     expect(mockFs.exists(filePath)).toBe(true);
-    expect(mockFs.readFile(filePath)).toContain("name: Gemini Agent");
-  });
+    expect(mockFs.readFile(filePath)).toContain('name: Gemini Agent');
+    });
 
-  it("should discover agents from filesystem with YAML frontmatter", () => {
+    it('should cleanup orphaned files in gemini .md directory', () => {
+    mockFs.mkdir('/root/.gemini/agents');
+    mockFs.writeFile('/root/.gemini/agents/orphan.md', 'some content');
+
+    const activeAgents: Agent[] = [
+      { id: 'active', name: 'Active', role: 'AI', instruction: 'Focus', color: '#ffffff' }
+    ];
+
+    service.syncToGemini(activeAgents);
+
+    expect(mockFs.exists('/root/.gemini/agents/active.md')).toBe(true);
+    expect(mockFs.exists('/root/.gemini/agents/orphan.md')).toBe(false);
+    });
+
+    it('should NOT cleanup active files in gemini .md directory', () => {
+    mockFs.mkdir('/root/.gemini/agents');
+    mockFs.writeFile('/root/.gemini/agents/active.md', 'some content');
+
+    const activeAgents: Agent[] = [
+      { id: 'active', name: 'Active', role: 'AI', instruction: 'Focus', color: '#ffffff' }
+    ];
+
+    service.syncToGemini(activeAgents);
+
+    expect(mockFs.exists('/root/.gemini/agents/active.md')).toBe(true);
+    });
+
+    it('should fallback to ID if metadata exists but name/description are missing', () => {
+    mockFs.mkdir('/root/.gemini/agents');
+    mockFs.writeFile('/root/.gemini/agents/no-fields.md', '---\nother: field\n---\n# Content');
+
+    const discovered = service.discoverAgents();
+    const agent = discovered.find(a => a.id === 'no-fields');
+    expect(agent?.name).toBe('no-fields');
+    expect(agent?.role).toBe('Specialized Agent');
+    });
+
+    it("should create gemini agents directory if it does not exist during sync", () => {
+
+    const mockAgents: Agent[] = [
+      { id: "1", name: "Test", role: "Dev", instruction: "Test", color: "#000000" },
+    ];
+    service.syncToGemini(mockAgents);
+    expect(mockFs.exists("/root/.gemini/agents")).toBe(true);
+    });
+
+    it("should return agents from registry if gemini directory does not exist during discovery", () => {
+    const mockAgents: Agent[] = [
+      { id: "1", name: "Test", role: "Dev", instruction: "Test", color: "#000000" },
+    ];
+    service.saveAgents(mockAgents);
+    const discovered = service.discoverAgents();
+    expect(discovered).toHaveLength(1);
+    expect(discovered[0].id).toBe("1");
+    });
+
+    it("should use partial fallback for existing agents in discoverAgents", () => {
+    // Agent exists but instruction is empty string (default)
+    const existing: Agent[] = [
+      {
+        id: "existing",
+        name: "Old Name",
+        role: "Custom Role",
+        instruction: "",
+        color: "#ff0000",
+      },
+    ];
+    service.saveAgents(existing);
+
+    mockFs.mkdir("/root/.gemini/agents");
+    mockFs.writeFile(
+      "/root/.gemini/agents/existing.md",
+      "---\nname: New Name\n---\n# Content",
+    );
+
+    const discovered = service.discoverAgents();
+    const agent = discovered.find((a) => a.id === "existing");
+
+    expect(agent?.name).toBe("New Name");
+    expect(agent?.role).toBe("Custom Role");
+    expect(agent?.instruction).toBe("Bootstrap loaded from filesystem."); // Falls back because instruction was ''
+    expect(agent?.color).toBe("#ff0000");
+    });
+
+    it("should handle null metadata from YAML parse in discoverAgents", () => {
+
+    mockFs.mkdir('/root/.gemini/agents');
+    mockFs.writeFile('/root/.gemini/agents/empty.md', '---\n---');
+
+    const discovered = service.discoverAgents();
+    expect(discovered[0].name).toBe('empty');
+    expect(discovered[0].role).toBe('Specialized Agent');
+    });
+
+    it('should discover agents from filesystem with YAML frontmatter', () => {
+
     mockFs.mkdir("/root/.gemini/agents");
     mockFs.writeFile(
       "/root/.gemini/agents/piter.md",

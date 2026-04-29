@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { TasksGate } from "./TasksGate";
 import { MockFileSystem } from "../mocks/MockFileSystem";
 import path from "node:path";
+import YAML from "yaml";
 
 describe("TasksGate", () => {
   let fs: MockFileSystem;
@@ -62,6 +63,28 @@ tasks: []
       const result = await TasksGate(trackId, fs, meridianDir);
       expect(result.success).toBe(false);
       expect(result.message).toContain("must contain at least one task");
+    });
+
+    it("fails with a parsing error in tasks.yaml", async () => {
+      // YAML.parse will throw on this invalid YAML structure
+      const content = "tasks: [unclosed bracket";
+      fs.writeFile(tasksPathYaml, content);
+
+      const result = await TasksGate(trackId, fs, meridianDir);
+      expect(result.success).toBe(false);
+      expect(result.message).toContain("Error parsing tasks.yaml");
+    });
+
+    it("handles non-Error objects thrown during YAML parsing", async () => {
+      fs.writeFile(tasksPathYaml, "some: yaml");
+      const spy = vi.spyOn(YAML, "parse").mockImplementationOnce(() => {
+        throw "string error";
+      });
+
+      const result = await TasksGate(trackId, fs, meridianDir);
+      expect(result.success).toBe(false);
+      expect(result.message).toContain("Error parsing tasks.yaml: string error");
+      spy.mockRestore();
     });
   });
 
