@@ -98,22 +98,6 @@ interface GeminiContext {
 }
 
 /**
- * Main handler for Gemini output.
- */
-export function handleGeminiStream(
-  data: Buffer,
-  ctx: GeminiContext,
-  sendACP: (msg: unknown) => void,
-) {
-  const lines = data.toString().split("\n");
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    processGeminiOutput(trimmed, ctx, sendACP);
-  }
-}
-
-/**
  * Parses and dispatches Gemini JSON outputs.
  */
 export function processGeminiOutput(
@@ -206,6 +190,7 @@ io.on("connection", (socket) => {
   let sessionId: string | null = null;
   let requestId = 3;
   let promptStartTime: number | null = null;
+  let lineBuffer = ""; // Buffer to accumulate partial lines
 
   const ctx: GeminiContext = {
     globalContent: "",
@@ -224,17 +209,27 @@ io.on("connection", (socket) => {
 
   /**
    * Sends a message to the Gemini child process and logs it.
-   * @param msg - The message object to send.
    */
   const sendACP = (msg: unknown) => {
-    if (gemini?.stdin) {
+    if (gemini?.stdin && gemini.stdin.writable) {
       gemini.stdin.write(`${JSON.stringify(msg)}\n`);
       log(JSON.stringify(msg), "OUT");
     }
   };
 
+  const cleanup = () => {
+    if (gemini) {
+      log("Cleaning up Gemini process...", "INFO");
+      gemini.kill();
+      gemini = null;
+    }
+  };
+
+  socket.on("disconnect", cleanup);
+
   socket.on("start-session", () => {
-    if (gemini) gemini.kill();
+    cleanup();
+    lineBuffer = "";
     const { rootDir, meridianDir, agentRegistry, bootstrappingService } =
       getContextServices();
     const agents = agentRegistry.getAgents();
@@ -268,9 +263,34 @@ io.on("connection", (socket) => {
       },
     );
 
-    gemini.stdout?.on("data", (data: Buffer) =>
-      handleGeminiStream(data, { ...ctx, gemini }, sendACP),
-    );
+    gemini.stdout?.on("data", (data: Buffer) => {
+      lineBuffer += data.toString();
+      const lines = lineBuffer.split("\n");
+      // Keep the last partial line in the buffer
+      lineBuffer = lines.pop() || "";
+      
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed) processGeminiOutput(trimmed, { ...ctx, gemini }, sendACP);
+      }
+    });
+
+    gemini.stderr?.on("data", (data: Buffer) => {
+      log(data.toString(), "ERROR");
+    });
+
+    gemini.on("error", (err) => {
+      log(`Failed to start Gemini process: ${err.message}`, "ERROR");
+      socket.emit("status", "Error: Failed to start Gemini CLI");
+    });
+
+    gemini.on("exit", (code) => {
+      log(`Gemini process exited with code ${code}`, "INFO");
+      if (code !== 0 && code !== null) {
+        socket.emit("status", `Process crashed (code ${code})`);
+      }
+    });
+
     socket.emit("status", "Initializing...");
     sendACP({
       jsonrpc: "2.0",
