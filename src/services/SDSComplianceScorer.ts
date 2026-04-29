@@ -4,8 +4,8 @@ import path from "node:path";
 
 export class SDSComplianceScorer implements ISDSComplianceScorer {
   constructor(
-    private fileSystem: IFileSystem,
-    private tracksDir: string,
+    private readonly fileSystem: IFileSystem,
+    private readonly tracksDir: string,
   ) {}
 
   // skipcq: JS-0105

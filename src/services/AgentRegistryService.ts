@@ -20,8 +20,8 @@ export class AgentRegistryService {
   private readonly AGENTS_FILE = ".meridian/agents.json";
 
   constructor(
-    private fs: IFileSystem,
-    private rootDir: string,
+    private readonly fs: IFileSystem,
+    private readonly rootDir: string,
   ) {}
 
   private getFilePath(): string {
