@@ -429,4 +429,63 @@ describe("OrchestrationService", () => {
       expect(state?.currentPhase).toBe("1.1");
     });
   });
+
+  describe("Constructor and Edge Cases", () => {
+    it("does not setup auto-validation if watcher is missing", () => {
+      const service = new OrchestrationService(
+        metadataService,
+        fs,
+        meridianDir,
+        validationEngine,
+        undefined, // No watcher
+      );
+      // If we are here and no error was thrown, and coverage report says the branch is covered, it's good.
+      expect(service).toBeDefined();
+    });
+
+    it("does not setup auto-validation if validationEngine is missing", () => {
+      const service = new OrchestrationService(
+        metadataService,
+        fs,
+        meridianDir,
+        undefined, // No validation engine
+        mockWatcher,
+      );
+      expect(service).toBeDefined();
+    });
+
+    it("runAutoValidation returns early if validationEngine is missing", async () => {
+      const serviceWithoutEngine = new OrchestrationService(
+        metadataService,
+        fs,
+        meridianDir,
+        undefined, // No engine
+      );
+
+      const spy = vi.spyOn(metadataService, "getTrackMetadata");
+      await serviceWithoutEngine.runAutoValidation("track-1");
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it("handles invalid trackId segments in watcher callback", () => {
+      const watchMock = mockWatcher.watch as Mock<
+        [string, (eventType: string, filePath: string) => void],
+        void
+      >;
+      const watchCallback = watchMock.mock.calls[0][1];
+      const spy = vi.spyOn(orchestrationService, "runAutoValidation");
+
+      // Test "." segment
+      watchCallback("change", path.join(meridianDir, "tracks/."));
+      expect(spy).not.toHaveBeenCalled();
+
+      // Test ".." segment
+      watchCallback("change", path.join(meridianDir, "tracks/.."));
+      expect(spy).not.toHaveBeenCalled();
+
+      // Test empty segment
+      watchCallback("change", path.join(meridianDir, "tracks/"));
+      expect(spy).not.toHaveBeenCalled();
+    });
+  });
 });

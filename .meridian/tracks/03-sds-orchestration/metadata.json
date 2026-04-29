@@ -1,10 +1,16 @@
 {
   "id": "03-sds-orchestration",
   "name": "03-sds-orchestration",
-  "status": "Draft",
-  "progress": 0,
+  "status": "Active",
+  "progress": 50,
   "dates": {
     "created": "2026-04-16T12:01:19.001Z",
-    "updated": "2026-04-16T12:01:19.001Z"
+    "updated": "2026-04-29T10:00:00.000Z"
+  },
+  "orchestration": {
+    "currentPhase": "2.1",
+    "status": "InProgress",
+    "assignedAgent": "software-engineer",
+    "logs": []
   }
 }
