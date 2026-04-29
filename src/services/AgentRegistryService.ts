@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { z } from 'zod';
 import { IFileSystem } from './interfaces/ICoreServices';
+import YAML from 'yaml';
 
 export const AgentSchema = z.object({
   id: z.string().min(1),
@@ -65,11 +66,22 @@ export class AgentRegistryService {
       const content = this.fs.readFile(path.join(geminiDir, file));
       const fileId = file.replace('.md', '');
       
-      const nameMatch = content.match(/name:\s*(.*)/);
-      const descMatch = content.match(/description:\s*"(.*)"/);
-      
-      const name = nameMatch ? nameMatch[1].trim() : fileId;
-      const role = descMatch ? descMatch[1].trim() : 'Specialized Agent';
+      let name = fileId;
+      let role = 'Specialized Agent';
+
+      // Parse Frontmatter
+      const parts = content.split('---');
+      if (parts.length >= 3) {
+        try {
+          const metadata = YAML.parse(parts[1]);
+          if (metadata) {
+            name = metadata.name || name;
+            role = metadata.description || role;
+          }
+        } catch (e) {
+          console.warn(`Failed to parse YAML frontmatter for agent ${fileId}`, e);
+        }
+      }
       
       const existing = currentAgents.find(a => a.id === fileId);
       

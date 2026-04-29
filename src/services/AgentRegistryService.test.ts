@@ -76,13 +76,55 @@ describe('AgentRegistryService', () => {
     expect(mockFs.readFile(filePath)).toContain('name: Gemini Agent');
   });
 
-  it('should discover agents from filesystem', () => {
+  it('should discover agents from filesystem with YAML frontmatter', () => {
     mockFs.mkdir('/root/.gemini/agents');
-    mockFs.writeFile('/root/.gemini/agents/piter.md', '---\nname: Piter\ndescription: "Specialized"\n---\n# Content');
+    mockFs.writeFile('/root/.gemini/agents/piter.md', '---\nname: Piter Parker\ndescription: Friendly Neighborhood Spider-Man\n---\n# Content');
     
     const discovered = service.discoverAgents();
     expect(discovered).toHaveLength(1);
-    expect(discovered[0].name).toBe('Piter');
+    expect(discovered[0].name).toBe('Piter Parker');
+    expect(discovered[0].role).toBe('Friendly Neighborhood Spider-Man');
     expect(discovered[0].id).toBe('piter');
+  });
+
+  it('should fallback to default values when frontmatter is missing or malformed', () => {
+    mockFs.mkdir('/root/.gemini/agents');
+    mockFs.writeFile('/root/.gemini/agents/malformed.md', 'No frontmatter here');
+    mockFs.writeFile('/root/.gemini/agents/bad-yaml.md', '---\nname: [unclosed bracket\n---\n# Content');
+    
+    const discovered = service.discoverAgents();
+    expect(discovered).toHaveLength(2);
+    
+    const malformed = discovered.find(a => a.id === 'malformed');
+    expect(malformed?.name).toBe('malformed');
+    expect(malformed?.role).toBe('Specialized Agent');
+
+    const badYaml = discovered.find(a => a.id === 'bad-yaml');
+    expect(badYaml?.name).toBe('bad-yaml');
+    expect(badYaml?.role).toBe('Specialized Agent');
+  });
+
+  it('should preserve existing agent role and instruction during discovery', () => {
+    // 1. Setup existing registry
+    const existing: Agent[] = [{ 
+      id: 'existing', 
+      name: 'Old Name', 
+      role: 'Custom Role', 
+      instruction: 'Custom Instruction', 
+      color: '#ff0000' 
+    }];
+    service.saveAgents(existing);
+
+    // 2. Discover from file with different info
+    mockFs.mkdir('/root/.gemini/agents');
+    mockFs.writeFile('/root/.gemini/agents/existing.md', '---\nname: New Name\ndescription: "New Role"\n---\n# Content');
+
+    const discovered = service.discoverAgents();
+    const agent = discovered.find(a => a.id === 'existing');
+    
+    expect(agent?.name).toBe('New Name'); // Name comes from file
+    expect(agent?.role).toBe('Custom Role'); // Role is preserved from registry
+    expect(agent?.instruction).toBe('Custom Instruction'); // Instruction is preserved
+    expect(agent?.color).toBe('#ff0000'); // Color is preserved
   });
 });

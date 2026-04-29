@@ -30,10 +30,7 @@ export const PlanGate: QualityGateFn = (
   // Declarative validation checks
   const checks = [
     {
-      condition: !(
-        /\[.*spec\.md\]\(.*\)/i.test(content) ||
-        content.toLowerCase().includes("spec.md")
-      ),
+      condition: !content.toLowerCase().includes("spec.md"),
       error: 'Reference to "spec.md" is missing',
     },
     ...["Proposed Architecture", "Requirements Mapping"].map((section) => ({

@@ -16,7 +16,8 @@ export class SDSComplianceScorer implements ISDSComplianceScorer {
     
     const hasSpec = this.fileSystem.exists(path.join(trackPath, 'spec.md'));
     const hasPlan = this.fileSystem.exists(path.join(trackPath, 'plan.md'));
-    const hasTasks = this.fileSystem.exists(path.join(trackPath, 'tasks.md'));
+    const hasTasks = this.fileSystem.exists(path.join(trackPath, 'tasks.md')) || 
+                     this.fileSystem.exists(path.join(trackPath, 'tasks.yaml'));
 
     const components = [hasSpec, hasPlan, hasTasks];
     const presentCount = components.filter(Boolean).length;
