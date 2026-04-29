@@ -8,20 +8,19 @@ describe("TasksGate", () => {
   let fs: MockFileSystem;
   const meridianDir = "/test/.meridian";
   const trackId = "track-1";
-  const tasksPathMd = path.join(meridianDir, "tracks", trackId, "tasks.md");
   const tasksPathYaml = path.join(meridianDir, "tracks", trackId, "tasks.yaml");
 
   beforeEach(() => {
     fs = new MockFileSystem();
   });
 
-  it("fails if neither tasks.md nor tasks.yaml exist", async () => {
+  it("fails if tasks.yaml does not exist", async () => {
     const result = await TasksGate(trackId, fs, meridianDir);
     expect(result.success).toBe(false);
-    expect(result.message).toContain("Neither tasks.yaml nor tasks.md found");
+    expect(result.message).toContain("tasks.yaml not found");
   });
 
-  describe("YAML support", () => {
+  describe("YAML validation", () => {
     it("succeeds with a valid tasks.yaml", async () => {
       const content = `
 trackId: "track-1"
@@ -66,7 +65,6 @@ tasks: []
     });
 
     it("fails with a parsing error in tasks.yaml", async () => {
-      // YAML.parse will throw on this invalid YAML structure
       const content = "tasks: [unclosed bracket";
       fs.writeFile(tasksPathYaml, content);
 
@@ -83,51 +81,8 @@ tasks: []
 
       const result = await TasksGate(trackId, fs, meridianDir);
       expect(result.success).toBe(false);
-      expect(result.message).toContain(
-        "Error parsing tasks.yaml: string error",
-      );
+      expect(result.message).toContain("Error parsing tasks.yaml: string error");
       spy.mockRestore();
-    });
-  });
-
-  describe("Legacy Markdown support", () => {
-    it("fails if no tasks are defined in .md", async () => {
-      const content = "# Tasks\n\nNo tasks yet.";
-      fs.writeFile(tasksPathMd, content);
-
-      const result = await TasksGate(trackId, fs, meridianDir);
-      expect(result.success).toBe(false);
-      expect(result.message).toContain("at least one [Task X.X]");
-    });
-
-    it("fails if a task is missing DoD in .md", async () => {
-      const content = `
-# Tasks
-## [Task 1.1] Setup
-Description here. No criteria defined.
-## [Task 1.2] Implementation
-Definition of Done: Code written.
-      `;
-      fs.writeFile(tasksPathMd, content);
-
-      const result = await TasksGate(trackId, fs, meridianDir);
-      expect(result.success).toBe(false);
-      expect(result.errors).toContain("1 task(s) are missing DoD");
-    });
-
-    it("succeeds if all tasks have DoD in .md", async () => {
-      const content = `
-# Tasks
-## [Task 1.1] Setup
-DoD: Workspace ready.
-## [Task 1.2] Implementation
-Definition of Done: Tests pass.
-      `;
-      fs.writeFile(tasksPathMd, content);
-
-      const result = await TasksGate(trackId, fs, meridianDir);
-      expect(result.success).toBe(true);
-      expect(result.message).toContain("Legacy tasks.md is valid");
     });
   });
 });
