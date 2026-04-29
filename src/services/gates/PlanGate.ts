@@ -34,7 +34,7 @@ export const PlanGate: QualityGateFn = (
       error: 'Reference to "spec.md" is missing',
     },
     ...["Proposed Architecture", "Requirements Mapping"].map((section) => ({
-      condition: !new RegExp(`^#+\\s+.*${section}.*`, "mi").test(content),
+      condition: !new RegExp(String.raw`^#+\s+.*${section}.*`, "mi").test(content),
       error: `Section "${section}" is missing`,
     })),
   ];
