@@ -83,7 +83,9 @@ tasks: []
 
       const result = await TasksGate(trackId, fs, meridianDir);
       expect(result.success).toBe(false);
-      expect(result.message).toContain("Error parsing tasks.yaml: string error");
+      expect(result.message).toContain(
+        "Error parsing tasks.yaml: string error",
+      );
       spy.mockRestore();
     });
   });
