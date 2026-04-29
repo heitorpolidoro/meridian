@@ -211,7 +211,7 @@ io.on("connection", (socket) => {
    * Sends a message to the Gemini child process and logs it.
    */
   const sendACP = (msg: unknown) => {
-    if (gemini?.stdin && gemini.stdin.writable) {
+    if (gemini?.stdin?.writable) {
       gemini.stdin.write(`${JSON.stringify(msg)}\n`);
       log(JSON.stringify(msg), "OUT");
     }
