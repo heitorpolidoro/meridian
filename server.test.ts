@@ -531,4 +531,18 @@ describe("server.ts", () => {
       expect(mChildProcess.stdin.write).not.toHaveBeenCalled();
     });
   });
+
+  describe("Module initialization", () => {
+    it("does not create SETTINGS_DIR if it already exists", async () => {
+      vi.resetModules();
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.mkdirSync).mockClear();
+      
+      await import("./server");
+      
+      // The exact call with SETTINGS_DIR should not have happened
+      const mkdirCalls = vi.mocked(fs.mkdirSync).mock.calls;
+      expect(mkdirCalls.length).toBe(0);
+    });
+  });
 });

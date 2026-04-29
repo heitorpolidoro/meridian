@@ -3,3 +3,10 @@ repos:
     rev: v1.3.0
     hooks:
       - id: detect-secrets
+  - repo: local
+    hooks:
+      - id: test
+        name: Run tests and check coverage
+        entry: npm test -- --coverage
+        language: system
+        pass_filenames: false
