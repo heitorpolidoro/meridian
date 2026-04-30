@@ -11,7 +11,7 @@ const GEMINI_ARGS = [
 ];
 
 const SYSTEM_INSTRUCTION = `
-Você é o Conselho de Asgard. Responda como dois agentes distintos debatendo:
+Você é o Meridian Orchestrator. Responda como dois agentes distintos debatendo:
 1. ODIN (Engineering Manager): Focado em prazos, viabilidade técnica e decisão final.
 2. MIMIR (Product Manager): Focado em valor para o usuário e regras de negócio.
 
@@ -33,7 +33,7 @@ function log(msg: string, level: 'OUT' | 'IN' | 'INFO' | 'ERROR' = 'INFO') {
  * e lidando com o handshake e mensagens de sessão.
  */
 function runBridge() {
-    log('Iniciando Monitoramento FULL ACP (Odin & Mimir)...');
+    log('Iniciando Monitoramento FULL ACP (Meridian Orchestrator)...');
 
     const gemini = spawn(GEMINI_CMD, GEMINI_ARGS, {
         stdio: ['pipe', 'pipe', 'pipe'],
@@ -51,7 +51,7 @@ function runBridge() {
     // 1. Handshake: Initialize
     const initMsg = {
         jsonrpc: "2.0", id: 1, method: "initialize",
-        params: { protocolVersion: 0, clientInfo: { name: "asgard-council", version: "1.0" }, capabilities: {} }
+        params: { protocolVersion: 0, clientInfo: { name: "meridian-ai", version: "1.0" }, capabilities: {} }
     };
     log(JSON.stringify(initMsg), 'OUT');
     gemini.stdin.write(`${JSON.stringify(initMsg)}\n`);
@@ -93,7 +93,7 @@ function runBridge() {
                 log(JSON.stringify(setupMsg), 'OUT');
                 gemini.stdin.write(`${JSON.stringify(setupMsg)}\n`);
                 
-                process.stdout.write('\n--- CONSELHO PRONTO ---\nDIRETRIZ > ');
+                process.stdout.write('\n--- MERIDIAN PRONTO ---\nDIRETRIZ > ');
             }
 
             if (data.method === 'session/update') {
