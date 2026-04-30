@@ -26,7 +26,7 @@ export type QualityGateFn = (
  * It maintains a registry of phase-specific validation functions and processes them.
  */
 export class ValidationEngine {
-  private gates: Map<SDSPhase, QualityGateFn[]> = new Map();
+  private readonly gates: Map<SDSPhase, QualityGateFn[]> = new Map();
 
   /**
    * Creates a new ValidationEngine.
@@ -35,8 +35,8 @@ export class ValidationEngine {
    * @param meridianDir - Directory path for meridian resources.
    */
   constructor(
-    private fs: IFileSystem,
-    private meridianDir: string,
+    private readonly fs: IFileSystem,
+    private readonly meridianDir: string,
   ) {}
 
   /**
