@@ -244,6 +244,17 @@ io.on("connection", (socket) => {
       )
       .join("\n\n---\n\n");
 
+    const binDir = path.join(rootDir, "bin");
+    const restrictedPath = [
+      "/usr/bin",
+      "/bin",
+      "/usr/sbin",
+      "/sbin",
+      fs.existsSync(binDir) ? binDir : "",
+    ]
+      .filter(Boolean)
+      .join(path.delimiter);
+
     gemini = spawn(
       GEMINI_CMD,
       [
@@ -260,9 +271,8 @@ io.on("connection", (socket) => {
         stdio: ["pipe", "pipe", "pipe"],
         cwd: rootDir,
         env: {
-          ...process.env,
           PYTHONUNBUFFERED: "1",
-          PATH: "/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin",
+          PATH: restrictedPath,
         },
       },
     );
