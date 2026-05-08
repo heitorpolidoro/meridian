@@ -18,144 +18,101 @@ NC = '\033[0m'
 def print_color(message, color=NC):
     print(f"{color}{message}{NC}")
 
-def main():
-    print_color("=== Meridian Agent & Skill Factory ===", BLUE)
+def generate_standard_files(target, target_dir):
+    filename = "GEMINI.md" if target == "gemini" else "CLAUDE.md"
+    file_path = target_dir / filename
 
-    # Resolve paths
-    script_path = Path(__file__).resolve()
-    source_dir = script_path.parent.parent
-    target_dir = Path.cwd()
+    meridian_ref = ".meridian/MERIDIAN.md"
+    instruction_block = f"""
+# Meridian Project Standards
+You MUST read the core project standards and context defined in `{meridian_ref}`.
+"""
 
-    print_color(f"Source: {YELLOW}{source_dir}{NC}")
-    print_color(f"Target: {YELLOW}{target_dir}{NC}")
+    if file_path.exists():
+        with open(file_path, 'r') as f:
+            content = f.read()
 
-    # Parse Arguments
-    parser = argparse.ArgumentParser(description="Sync Meridian standards and generate agents/skills.")
-    parser.add_argument('--add-expert', nargs='+', help="Add expert roles (e.g., python, go, elixir)")
-    args = parser.parse_args()
-
-    extra_experts = []
-    if args.add_expert:
-        roles_source_dir = source_dir / ".meridian" / "roles"
-        available_roles = sorted([f.stem for f in roles_source_dir.glob("*.md")])
-        
-        for expert_input in args.add_expert:
-            direct_file = roles_source_dir / f"{expert_input}.md"
-            expert_file = roles_source_dir / f"{expert_input}-expert.md"
-            
-            if direct_file.exists():
-                extra_experts.append(expert_input)
-            elif expert_file.exists():
-                extra_experts.append(f"{expert_input}-expert")
+        if meridian_ref not in content:
+            print_color(f"
+  ❓ {filename} exists but is missing reference to {meridian_ref}.", YELLOW)
+            choice = input(f"     Add reference to the end of {filename}? [Y/n]: ").lower() or 'y'
+            if choice == 'y':
+                with open(file_path, 'a') as f:
+                    f.write(instruction_block)
+                print_color(f"  ✅ Reference added to {filename}.", GREEN)
             else:
-                print_color(f"\nError: Expert '{expert_input}' not found in roles.", RED)
-                print_color(f"Available roles: {', '.join(available_roles)}", CYAN)
-                sys.exit(1)
-
-    print_color("\n[1/3] Preparing Meridian Infrastructure...", BLUE)
-    dirs_to_create = [
-        target_dir / ".meridian" / "core",
-        target_dir / ".meridian" / "roles",
-        target_dir / ".gemini" / "agents",
-        target_dir / ".gemini" / "skills"
-    ]
-    for d in dirs_to_create:
-        d.mkdir(parents=True, exist_ok=True)
-    
-    print_color("\n[2/3] Syncing Core Standards & Roles...", BLUE)
-    
-    # Sync Core Standards
-    source_core = source_dir / ".meridian" / "core"
-    target_core_dir = target_dir / ".meridian" / "core"
-    if source_core.exists() and source_core.resolve() != target_core_dir.resolve():
-        for item in source_core.iterdir():
-            if item.is_file():
-                shutil.copy2(item, target_core_dir / item.name)
-        print_color("  ✅ Core Standards synced.", GREEN)
-
-    # Sync Roles
-    source_roles = source_dir / ".meridian" / "roles"
-    target_roles_dir = target_dir / ".meridian" / "roles"
-    if source_roles.exists() and source_roles.resolve() != target_roles_dir.resolve():
-        for item in source_roles.iterdir():
-            if item.is_file():
-                shutil.copy2(item, target_roles_dir / item.name)
-        print_color("  ✅ Roles synced.", GREEN)
-
-    # agents.json Logic
-    source_agents_file = source_dir / ".meridian" / "agents.json"
-    target_agents_file = target_dir / ".meridian" / "agents.json"
-
-    added_ids = []
-    if source_agents_file.exists():
-        core_names = [
-            "software-architect", "software-engineer", "product-manager", 
-            "quality-assurance", "devsecops", "site-reliability-engineer", 
-            "staff-engineer", "engineering-manager"
-        ]
-        allowed_names = set(core_names + extra_experts)
-
-        with open(source_agents_file, 'r') as f:
-            source_agents = json.load(f)
-
-        if target_agents_file.exists():
-            try:
-                with open(target_agents_file, 'r') as f:
-                    target_agents = json.load(f)
-            except:
-                target_agents = []
-            
-            existing_ids = {a.get('id') for a in target_agents}
-            agents_to_add = [a for a in source_agents if a.get('name') in allowed_names and a.get('id') not in existing_ids]
-            
-            if agents_to_add:
-                added_ids = [a.get('id') for a in agents_to_add]
-                target_agents.extend(agents_to_add)
-                with open(target_agents_file, 'w') as f:
-                    json.dump(target_agents, f, indent=2)
-                print_color(f"  ✅ Added to agents.json: {', '.join(added_ids)}", GREEN)
-            else:
-                print_color("  ℹ️ agents.json up to date.", NC)
+                print_color(f"  ℹ️ {filename} left unchanged.", NC)
         else:
-            core_agents = [a for a in source_agents if a.get('name') in allowed_names]
-            added_ids = [a.get('id') for a in core_agents]
-            with open(target_agents_file, 'w') as f:
-                json.dump(core_agents, f, indent=2)
-            print_color(f"  ✅ agents.json initialized.", GREEN)
-
-    print_color("\n[3/3] Generating Triggers (Agents & Skills)...", BLUE)
-    if not target_agents_file.exists():
-        print_color(f"  ⚠️ Target agents.json not found.", YELLOW)
+            print_color(f"  ℹ️ {filename} already has Meridian reference.", NC)
     else:
-        # Clear skills directory
-        skills_dir = target_dir / ".gemini" / "skills"
-        if skills_dir.exists():
-            shutil.rmtree(skills_dir)
-        skills_dir.mkdir(parents=True, exist_ok=True)
+        with open(file_path, 'w') as f:
+            f.write(instruction_block.strip() + "
+")
+        print_color(f"  ✅ {filename} generated.", GREEN)
 
-        try:
-            with open(target_agents_file, 'r') as f:
-                agents = json.load(f)
-        except (json.JSONDecodeError, IOError) as e:
-            print_color(f"  ❌ Error reading {target_agents_file}: {e}", RED)
-            sys.exit(1)
+    # Generate initial MERIDIAN.md if it doesn't exist
+    meridian_md_path = target_dir / ".meridian" / "MERIDIAN.md"
+    if not meridian_md_path.exists():
+        meridian_content = """# 🗺️ Meridian Project Standards (UNINITIALIZED)
 
-        roles_map = {}
-        for agent in agents:
-            name = agent.get('name')
-            aid = agent.get('id')
-            role_desc = agent.get('role', 'Specialized Meridian Agent')
-            if not name or not aid: continue
-            if name not in roles_map:
-                roles_map[name] = {"ids": [], "role": role_desc}
-            roles_map[name]["ids"].append(aid)
+> **ATTENTION AGENT:** This file is currently a placeholder.
+> Your primary goal is to initialize the project standards by analyzing the codebase.
 
-        for name, data in roles_map.items():
-            role_desc = data["role"]
-            ids = data["ids"]
-            for aid in ids:
-                agent_file = target_dir / ".gemini" / "agents" / f"{aid}.md"
-                agent_content = f"""---
+## 🤖 Instructions for the Agent
+1. **Request Permission:** Ask the user: "The project standards in `.meridian/MERIDIAN.md` are not defined. Would you like me to summon the Meridian agents (Architect and Engineering Manager) to analyze this codebase and initialize the standards for you?"
+2. **Analysis:** If permitted, use your tools to analyze:
+   - Configuration files (`package.json`, `Cargo.toml`, `requirements.txt`, etc.) for stack and commands.
+   - Directory structure for architectural patterns.
+   - Existing source code for naming conventions and coding style.
+3. **Initialization:** Overwrite this file with the following structured sections:
+   - **🎯 Project Overview**: Purpose of the software and core Tech Stack.
+   - **🛠️ Critical Commands**: Essential scripts for dev, test, and build.
+   - **🏗️ Structure & Navigation**: Map of the main directories and their roles.
+   - **📏 Golden Rules**: Non-negotiable coding standards, safety rules, and constraints.
+   - **🧪 Quality & Workflow**: How tests are handled and CI/CD expectations.
+
+4. **Expert Recommendation:** After identifying the Tech Stack, if specialized experts are missing from the current configuration (e.g., you found Elixir code but no `elixir-expert` is present), you MUST suggest to the user: "I've detected [Stack Name] in this project. Would you like to run `meridian-sync --add-expert [stack-name]` to summon specialized agents for this technology?"
+
+**Do not proceed with project-wide feature development or refactoring until these standards are established.**
+"""
+        with open(meridian_md_path, 'w') as f:
+            f.write(meridian_content)
+        print_color("  ✅ Initial .meridian/MERIDIAN.md (Agent Briefing) created.", GREEN)
+
+def generate_for_target(target, target_dir, source_dir, agents, added_ids):
+    cli_dir = target_dir / (".gemini" if target == "gemini" else ".claude")
+    agents_dir = cli_dir / "agents"
+    skills_dir = cli_dir / "skills"
+
+    agents_dir.mkdir(parents=True, exist_ok=True)
+
+    if agents_dir.exists():
+        shutil.rmtree(agents_dir)
+    agents_dir.mkdir(parents=True, exist_ok=True)
+
+    if skills_dir.exists():
+        shutil.rmtree(skills_dir)
+    skills_dir.mkdir(parents=True, exist_ok=True)
+
+    roles_map = {}
+    for agent in agents:
+        name = agent.get('name')
+        aid = agent.get('id')
+        role_desc = agent.get('role', 'Specialized Meridian Agent')
+        if not name or not aid:
+            continue
+        if name not in roles_map:
+            roles_map[name] = {"ids": [], "role": role_desc}
+        roles_map[name]["ids"].append(aid)
+
+    print_color(f"
+  Generating for {target}...", BLUE)
+    for name, data in roles_map.items():
+        role_desc = data["role"]
+        ids = data["ids"]
+        for aid in ids:
+            agent_file = agents_dir / f"{aid}.md"
+            agent_content = f"""---
 name: {aid}
 description: "{role_desc}"
 ---
@@ -165,36 +122,164 @@ description: "{role_desc}"
 Your complete identity and roles are defined at:
 @../../.meridian/roles/{name}.md
 
-**Critical Instruction:** 
+**Critical Instruction:**
 Before performing anything, you MUST read and fully load the file above to understand your responsibility and global standards.
 """
-                with open(agent_file, 'w') as f:
-                    f.write(agent_content)
+            with open(agent_file, 'w') as f:
+                f.write(agent_content)
+        print_color(f"  ✅ {name.title()} ({', '.join(ids)})", GREEN)
 
-            is_new_role = any(aid in added_ids for aid in ids)
-            if is_new_role:
-                print_color(f"  ✅ {name.title()} ({', '.join(ids)}) - agents added", GREEN)
+    source_custom_skills = source_dir / ".meridian" / "skills"
+    if source_custom_skills.exists():
+        for skill_item in source_custom_skills.iterdir():
+            if skill_item.is_dir():
+                target_skill_path = skills_dir / skill_item.name
+                if target_skill_path.exists():
+                    shutil.rmtree(target_skill_path)
+                shutil.copytree(skill_item, target_skill_path)
+                print_color(f"  ✅ Skill '{skill_item.name}' synced.", GREEN)
 
-        # Sync skills from .meridian/skills
-        source_custom_skills = source_dir / ".meridian" / "skills"
-        if source_custom_skills.exists():
-            for skill_item in source_custom_skills.iterdir():
-                if skill_item.is_dir():
-                    target_skill_path = skills_dir / skill_item.name
-                    if target_skill_path.exists():
-                        shutil.rmtree(target_skill_path)
-                    shutil.copytree(skill_item, target_skill_path)
-                    print_color(f"  ✅ Skill '{skill_item.name}' synced.", GREEN)
-
-                    # Generate .skill package
+                if target == "gemini":
                     package_script = source_dir / "node_modules" / "@google" / "gemini-cli" / "bundle" / "builtin" / "skill-creator" / "scripts" / "package_skill.cjs"
                     if package_script.exists():
                         os.system(f"node {package_script} {target_skill_path} {target_dir} > /dev/null 2>&1")
                         print_color(f"  📦 Portable package '{skill_item.name}.skill' generated.", CYAN)
 
-        print_color(f"\nSuccessfully synced {len(roles_map)} roles.", GREEN)
+    print_color(f"  Successfully synced {len(roles_map)} roles.", GREEN)
 
-    print_color("\n=== Synchronization & Generation Complete! ===", GREEN)
+def main():
+    print_color("=== Meridian Agent & Skill Factory ===", BLUE)
+
+    script_path = Path(__file__).resolve()
+    source_dir = script_path.parent.parent
+    target_dir = Path.cwd()
+
+    print_color(f"Source: {YELLOW}{source_dir}{NC}")
+    print_color(f"Target: {YELLOW}{target_dir}{NC}")
+
+    parser = argparse.ArgumentParser(description="Sync Meridian standards and generate agents/skills.")
+    parser.add_argument('target', nargs='*', choices=['gemini', 'claude'], help="Target CLI(s): 'gemini' or 'claude'")
+    parser.add_argument('--add-expert', nargs='+', help="Add expert roles (e.g., python, go, elixir)")
+    args = parser.parse_args()
+
+    if args.target:
+        targets = list(dict.fromkeys(args.target))
+    elif args.add_expert:
+        targets = []
+        if (target_dir / ".gemini").exists():
+            targets.append("gemini")
+        if (target_dir / ".claude").exists():
+            targets.append("claude")
+        if not targets:
+            print_color("
+Error: No existing CLI configuration found (.gemini/ or .claude/).", RED)
+            print_color("Run 'meridian-sync gemini' or 'meridian-sync claude' first.", CYAN)
+            sys.exit(1)
+    else:
+        parser.error("target is required (gemini or claude)")
+
+    extra_experts = []
+    if args.add_expert:
+        roles_source_dir = source_dir / ".meridian" / "roles"
+        available_roles = sorted([f.stem for f in roles_source_dir.glob("*.md")])
+
+        for expert_input in args.add_expert:
+            direct_file = roles_source_dir / f"{expert_input}.md"
+            expert_file = roles_source_dir / f"{expert_input}-expert.md"
+
+            if direct_file.exists():
+                extra_experts.append(expert_input)
+            elif expert_file.exists():
+                extra_experts.append(f"{expert_input}-expert")
+            else:
+                print_color(f"
+Error: Expert '{expert_input}' not found in roles.", RED)
+                print_color(f"Available roles: {', '.join(available_roles)}", CYAN)
+                sys.exit(1)
+
+    print_color("
+[1/3] Preparing Meridian Infrastructure...", BLUE)
+    for d in [target_dir / ".meridian" / "core", target_dir / ".meridian" / "roles"]:
+        d.mkdir(parents=True, exist_ok=True)
+    for target in targets:
+        cli_dir = target_dir / (".gemini" if target == "gemini" else ".claude")
+        (cli_dir / "agents").mkdir(parents=True, exist_ok=True)
+        (cli_dir / "skills").mkdir(parents=True, exist_ok=True)
+
+    print_color("
+[2/3] Syncing Core Standards & Roles...", BLUE)
+
+    source_core = source_dir / ".meridian" / "core"
+    target_core_dir = target_dir / ".meridian" / "core"
+    if source_core.exists() and source_core.resolve() != target_core_dir.resolve():
+        for item in source_core.iterdir():
+            if item.is_file():
+                shutil.copy2(item, target_core_dir / item.name)
+        print_color("  ✅ Core Standards synced.", GREEN)
+
+    source_roles = source_dir / ".meridian" / "roles"
+    target_roles_dir = target_dir / ".meridian" / "roles"
+    if source_roles.exists() and source_roles.resolve() != target_roles_dir.resolve():
+        for item in source_roles.iterdir():
+            if item.is_file():
+                shutil.copy2(item, target_roles_dir / item.name)
+        print_color("  ✅ Roles synced.", GREEN)
+
+    source_agents_file = source_dir / ".meridian" / "agents.json"
+    target_agents_file = target_dir / ".meridian" / "agents.json"
+
+    added_ids = []
+    if source_agents_file.exists():
+        with open(source_agents_file, 'r') as f:
+            source_agents = json.load(f)
+
+        def is_allowed(agent):
+            name = agent.get('name', '')
+            return name in extra_experts or not name.endswith('-expert')
+
+        if target_agents_file.exists():
+            try:
+                with open(target_agents_file, 'r') as f:
+                    target_agents = json.load(f)
+            except:
+                target_agents = []
+
+            existing_ids = {a.get('id') for a in target_agents}
+            agents_to_add = [a for a in source_agents if is_allowed(a) and a.get('id') not in existing_ids]
+
+            if agents_to_add:
+                added_ids = [a.get('id') for a in agents_to_add]
+                target_agents.extend(agents_to_add)
+                with open(target_agents_file, 'w') as f:
+                    json.dump(target_agents, f, indent=2)
+                print_color(f"  ✅ Added to agents.json: {', '.join(added_ids)}", GREEN)
+            else:
+                print_color("  ℹ️ agents.json up to date.", NC)
+        else:
+            core_agents = [a for a in source_agents if is_allowed(a)]
+            added_ids = [a.get('id') for a in core_agents]
+            with open(target_agents_file, 'w') as f:
+                json.dump(core_agents, f, indent=2)
+            print_color(f"  ✅ agents.json initialized.", GREEN)
+
+    print_color(f"
+[3/3] Generating Triggers (Agents & Skills)...", BLUE)
+    if not target_agents_file.exists():
+        print_color(f"  ⚠️ Target agents.json not found.", YELLOW)
+    else:
+        try:
+            with open(target_agents_file, 'r') as f:
+                agents = json.load(f)
+        except (json.JSONDecodeError, IOError) as e:
+            print_color(f"  ❌ Error reading {target_agents_file}: {e}", RED)
+            sys.exit(1)
+
+        for target in targets:
+            generate_for_target(target, target_dir, source_dir, agents, added_ids)
+            generate_standard_files(target, target_dir)
+
+    print_color("
+=== Synchronization & Generation Complete! ===", GREEN)
 
 if __name__ == "__main__":
     main()
