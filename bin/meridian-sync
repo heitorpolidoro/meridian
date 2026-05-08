@@ -33,8 +33,7 @@ You MUST read the core project standards and context defined in `{meridian_ref}`
             content = f.read()
 
         if meridian_ref not in content:
-            print_color(f"
-  ❓ {filename} exists but is missing reference to {meridian_ref}.", YELLOW)
+            print_color(f"  ❓ {filename} exists but is missing reference to {meridian_ref}.", YELLOW)
             choice = input(f"     Add reference to the end of {filename}? [Y/n]: ").lower() or 'y'
             if choice == 'y':
                 with open(file_path, 'a') as f:
@@ -46,8 +45,7 @@ You MUST read the core project standards and context defined in `{meridian_ref}`
             print_color(f"  ℹ️ {filename} already has Meridian reference.", NC)
     else:
         with open(file_path, 'w') as f:
-            f.write(instruction_block.strip() + "
-")
+            f.write(instruction_block.strip() + "\n")
         print_color(f"  ✅ {filename} generated.", GREEN)
 
     # Generate initial MERIDIAN.md if it doesn't exist
@@ -105,8 +103,7 @@ def generate_for_target(target, target_dir, source_dir, agents, added_ids):
             roles_map[name] = {"ids": [], "role": role_desc}
         roles_map[name]["ids"].append(aid)
 
-    print_color(f"
-  Generating for {target}...", BLUE)
+    print_color(f"  Generating for {target}...", BLUE)
     for name, data in roles_map.items():
         role_desc = data["role"]
         ids = data["ids"]
@@ -171,8 +168,7 @@ def main():
         if (target_dir / ".claude").exists():
             targets.append("claude")
         if not targets:
-            print_color("
-Error: No existing CLI configuration found (.gemini/ or .claude/).", RED)
+            print_color("Error: No existing CLI configuration found (.gemini/ or .claude/).", RED)
             print_color("Run 'meridian-sync gemini' or 'meridian-sync claude' first.", CYAN)
             sys.exit(1)
     else:
@@ -192,13 +188,11 @@ Error: No existing CLI configuration found (.gemini/ or .claude/).", RED)
             elif expert_file.exists():
                 extra_experts.append(f"{expert_input}-expert")
             else:
-                print_color(f"
-Error: Expert '{expert_input}' not found in roles.", RED)
+                print_color(f"Error: Expert '{expert_input}' not found in roles.", RED)
                 print_color(f"Available roles: {', '.join(available_roles)}", CYAN)
                 sys.exit(1)
 
-    print_color("
-[1/3] Preparing Meridian Infrastructure...", BLUE)
+    print_color("[1/3] Preparing Meridian Infrastructure...", BLUE)
     for d in [target_dir / ".meridian" / "core", target_dir / ".meridian" / "roles"]:
         d.mkdir(parents=True, exist_ok=True)
     for target in targets:
@@ -206,9 +200,7 @@ Error: Expert '{expert_input}' not found in roles.", RED)
         (cli_dir / "agents").mkdir(parents=True, exist_ok=True)
         (cli_dir / "skills").mkdir(parents=True, exist_ok=True)
 
-    print_color("
-[2/3] Syncing Core Standards & Roles...", BLUE)
-
+    print_color("[2/3] Syncing Core Standards & Roles...", BLUE)
     source_core = source_dir / ".meridian" / "core"
     target_core_dir = target_dir / ".meridian" / "core"
     if source_core.exists() and source_core.resolve() != target_core_dir.resolve():
@@ -262,8 +254,7 @@ Error: Expert '{expert_input}' not found in roles.", RED)
                 json.dump(core_agents, f, indent=2)
             print_color(f"  ✅ agents.json initialized.", GREEN)
 
-    print_color(f"
-[3/3] Generating Triggers (Agents & Skills)...", BLUE)
+    print_color("[3/3] Generating Triggers (Agents & Skills)...", BLUE)
     if not target_agents_file.exists():
         print_color(f"  ⚠️ Target agents.json not found.", YELLOW)
     else:
@@ -278,8 +269,7 @@ Error: Expert '{expert_input}' not found in roles.", RED)
             generate_for_target(target, target_dir, source_dir, agents, added_ids)
             generate_standard_files(target, target_dir)
 
-    print_color("
-=== Synchronization & Generation Complete! ===", GREEN)
+    print_color("=== Synchronization & Generation Complete! ===", GREEN)
 
 if __name__ == "__main__":
     main()
