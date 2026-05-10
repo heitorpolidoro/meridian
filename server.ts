@@ -114,7 +114,7 @@ const io = new Server(httpServer);
 const PORT = 3000;
 const GEMINI_CMD = "gemini";
 
-interface GeminiContext {
+export interface GeminiContext {
   globalContent: string;
   agentInstructions: string;
   rootDir: string;

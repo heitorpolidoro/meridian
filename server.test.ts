@@ -1,13 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { spawn } from "node:child_process";
-import * as server from "./server";
+import {
+  getSettings,
+  getContextServices,
+  log,
+  handleSessionUpdate,
+  handleInitialize,
+  handleRequestComplete,
+  processGeminiOutput,
+  type GeminiContext,
+} from "./server";
 import fs from "node:fs";
 import { Socket } from "socket.io";
 import { TelemetryCollectorService } from "./src/services/TelemetryCollectorService";
-import { AgentRegistryService } from "./src/services/AgentRegistryService";
+import { AgentRegistryService, type Agent } from "./src/services/AgentRegistryService";
 import { BootstrappingService } from "./src/services/BootstrappingService";
-import { TrackMetadataService } from "./src/services/TrackMetadataService";
-import { ProjectService } from "./src/services/ProjectService";
+import { TrackMetadataService, type TrackMetadata } from "./src/services/TrackMetadataService";
+import { ProjectService, type Project } from "./src/services/ProjectService";
 import { NodeFileSystem } from "./src/services/implementations/NodeFileSystem";
 
 // Mock services and modules
@@ -23,7 +31,7 @@ vi.mock("node:fs", () => ({
 const { mSocket, mIO, mChildProcess, state, mSpawn, mExec } = vi.hoisted(() => ({
   mSpawn: vi.fn(),
   mExec: vi.fn(),
-  state: { connectionHandler: null as any },
+  state: { connectionHandler: null as ((socket: unknown) => void) | null },
   mSocket: {
     on: vi.fn(),
     emit: vi.fn(),
@@ -52,7 +60,7 @@ const { mSocket, mIO, mChildProcess, state, mSpawn, mExec } = vi.hoisted(() => (
 vi.mock("socket.io", () => {
   return {
     Server: vi.fn(function () {
-      mIO.on.mockImplementation((event: string, handler: any) => {
+      mIO.on.mockImplementation((event: string, handler: (socket: unknown) => void) => {
         if (event === "connection") state.connectionHandler = handler;
       });
       return mIO;
@@ -73,7 +81,7 @@ const { mApp } = vi.hoisted(() => ({
 }));
 
 vi.mock("express", () => {
-  const mExpress: any = vi.fn(() => mApp);
+  const mExpress = vi.fn(() => mApp) as ReturnType<typeof vi.fn> & { static: ReturnType<typeof vi.fn> };
   mExpress.static = vi.fn();
   return {
     default: mExpress,
@@ -114,6 +122,20 @@ vi.mock("./src/services/SDSComplianceScorer");
 vi.mock("./src/services/TelemetryCollectorService");
 vi.mock("./src/services/ProjectService");
 
+function makeCtx(overrides: Partial<GeminiContext>): GeminiContext {
+  return {
+    globalContent: "",
+    agentInstructions: "",
+    rootDir: "",
+    socket: { emit: vi.fn() } as unknown as Socket,
+    telemetryCollector: new TelemetryCollectorService(),
+    setSessionId: vi.fn(),
+    setPromptStartTime: vi.fn(),
+    getPromptStartTime: vi.fn().mockReturnValue(null),
+    ...overrides,
+  };
+}
+
 describe("server.ts", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -122,7 +144,7 @@ describe("server.ts", () => {
   describe("getSettings", () => {
     it("returns default settings if file does not exist", () => {
       vi.mocked(fs.existsSync).mockReturnValue(false);
-      const settings = server.getSettings();
+      const settings = getSettings();
       expect(settings).toEqual({ rootDir: process.cwd() });
       expect(fs.writeFileSync).toHaveBeenCalled();
     });
@@ -132,14 +154,14 @@ describe("server.ts", () => {
       vi.mocked(fs.readFileSync).mockReturnValue(
         JSON.stringify({ rootDir: "/custom" }),
       );
-      const settings = server.getSettings();
+      const settings = getSettings();
       expect(settings.rootDir).toBe("/custom");
     });
 
     it("returns default settings if parsing fails", () => {
       vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.readFileSync).mockReturnValue("invalid json");
-      const settings = server.getSettings();
+      const settings = getSettings();
       expect(settings).toEqual({ rootDir: process.cwd() });
     });
 
@@ -151,7 +173,7 @@ describe("server.ts", () => {
         JSON.stringify({ rootDir: "/custom" }),
       );
       
-      const settings = server.getSettings();
+      const settings = getSettings();
       expect(settings.rootDir).toBe("/env/root");
       
       if (originalRoot === undefined) {
@@ -168,7 +190,7 @@ describe("server.ts", () => {
       vi.mocked(fs.readFileSync).mockReturnValue(
         JSON.stringify({ rootDir: "/test" }),
       );
-      const services = server.getContextServices();
+      const services = getContextServices();
       expect(services.rootDir).toBe("/test");
       expect(services.agentRegistry).toBeDefined();
       expect(services.trackMetadataService).toBeDefined();
@@ -177,8 +199,8 @@ describe("server.ts", () => {
 
   describe("log", () => {
     it("logs messages to console.error", () => {
-      const spy = vi.spyOn(console, "error").mockImplementation(() => {});
-      server.log("test message", "INFO");
+      const spy = vi.spyOn(console, "error").mockReturnValue(undefined);
+      log("test message", "INFO");
       expect(spy).toHaveBeenCalledWith(expect.stringContaining("test message"));
       spy.mockRestore();
     });
@@ -197,7 +219,7 @@ describe("server.ts", () => {
         },
       };
 
-      server.handleSessionUpdate(message, socketMock, telemetryMock);
+      handleSessionUpdate(message, socketMock, telemetryMock);
 
       expect(telemetryMock.recordMetric).toHaveBeenCalledWith("tokens", 2);
       expect(socketMock.emit).toHaveBeenCalledWith("chunk", "hello");
@@ -215,7 +237,7 @@ describe("server.ts", () => {
         },
       };
 
-      server.handleSessionUpdate(message, socketMock, telemetryMock);
+      handleSessionUpdate(message, socketMock, telemetryMock);
 
       expect(telemetryMock.recordMetric).toHaveBeenCalledWith("tokens", 0);
       expect(socketMock.emit).toHaveBeenCalledWith("chunk", "");
@@ -224,7 +246,7 @@ describe("server.ts", () => {
     it("does nothing for other session updates", () => {
       const socketMock = { emit: vi.fn() } as unknown as Socket;
       const telemetryMock = new TelemetryCollectorService();
-      server.handleSessionUpdate(
+      handleSessionUpdate(
         { params: { update: { sessionUpdate: "other" } } },
         socketMock,
         telemetryMock,
@@ -236,13 +258,13 @@ describe("server.ts", () => {
   describe("handleInitialize", () => {
     it("sends session/new message via sendACP", () => {
       const sendACP = vi.fn();
-      const ctx = {
+      const ctx = makeCtx({
         rootDir: "/root",
         globalContent: "global",
         agentInstructions: "instruct",
-      } as any;
+      });
 
-      server.handleInitialize(sendACP, ctx);
+      handleInitialize(sendACP, ctx);
 
       expect(sendACP).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -259,16 +281,16 @@ describe("server.ts", () => {
     it("records latency and emits done", () => {
       const telemetryMock = new TelemetryCollectorService();
       const socketMock = { emit: vi.fn() } as unknown as Socket;
-      const ctx = {
+      const ctx = makeCtx({
         getPromptStartTime: () => 1000,
         setPromptStartTime: vi.fn(),
         telemetryCollector: telemetryMock,
         socket: socketMock,
-      } as any;
+      });
 
       vi.spyOn(Date, "now").mockReturnValue(2000);
 
-      server.handleRequestComplete(ctx);
+      handleRequestComplete(ctx);
 
       expect(telemetryMock.recordMetric).toHaveBeenCalledWith("latency", 1000);
       expect(ctx.setPromptStartTime).toHaveBeenCalledWith(null);
@@ -277,29 +299,29 @@ describe("server.ts", () => {
 
     it("emits done even if start time is missing", () => {
       const socketMock = { emit: vi.fn() } as unknown as Socket;
-      const ctx = {
+      const ctx = makeCtx({
         getPromptStartTime: () => null,
         socket: socketMock,
-      } as any;
+      });
 
-      server.handleRequestComplete(ctx);
+      handleRequestComplete(ctx);
       expect(socketMock.emit).toHaveBeenCalledWith("done");
     });
   });
 
   describe("processGeminiOutput", () => {
     it("ignores malformed JSON", () => {
-      const ctx = {} as any;
+      const ctx = makeCtx({});
       const sendACP = vi.fn();
       expect(() =>
-        server.processGeminiOutput("invalid", ctx, sendACP),
+        processGeminiOutput("invalid", ctx, sendACP),
       ).not.toThrow();
     });
 
     it("calls handleSessionUpdate for session/update method", () => {
       const socketMock = { emit: vi.fn() } as unknown as Socket;
       const telemetryMock = new TelemetryCollectorService();
-      const ctx = { socket: socketMock, telemetryCollector: telemetryMock };
+      const ctx = makeCtx({ socket: socketMock, telemetryCollector: telemetryMock });
       const sendACP = vi.fn();
       const line = JSON.stringify({
         method: "session/update",
@@ -311,16 +333,16 @@ describe("server.ts", () => {
         },
       });
 
-      server.processGeminiOutput(line, ctx as any, sendACP);
+      processGeminiOutput(line, ctx, sendACP);
       expect(socketMock.emit).toHaveBeenCalledWith("chunk", "hi");
     });
 
     it("calls handleInitialize for message with ID 1", () => {
       const sendACP = vi.fn();
-      const ctx = { rootDir: "/r", globalContent: "g", agentInstructions: "i" };
+      const ctx = makeCtx({ rootDir: "/r", globalContent: "g", agentInstructions: "i" });
       const line = JSON.stringify({ id: 1, result: {} });
 
-      server.processGeminiOutput(line, ctx as any, sendACP);
+      processGeminiOutput(line, ctx, sendACP);
       expect(sendACP).toHaveBeenCalledWith(
         expect.objectContaining({ method: "session/new" }),
       );
@@ -329,10 +351,10 @@ describe("server.ts", () => {
     it("sets sessionId and emits ready for message with ID 2", () => {
       const socketMock = { emit: vi.fn() } as unknown as Socket;
       const setSessionId = vi.fn();
-      const ctx = { socket: socketMock, setSessionId };
+      const ctx = makeCtx({ socket: socketMock, setSessionId });
       const line = JSON.stringify({ id: 2, result: { sessionId: "sess-123" } });
 
-      server.processGeminiOutput(line, ctx as any, vi.fn());
+      processGeminiOutput(line, ctx, vi.fn());
       expect(setSessionId).toHaveBeenCalledWith("sess-123");
       expect(socketMock.emit).toHaveBeenCalledWith("ready");
     });
@@ -340,24 +362,24 @@ describe("server.ts", () => {
     it("does nothing for message with ID 2 if sessionId is missing", () => {
       const socketMock = { emit: vi.fn() } as unknown as Socket;
       const setSessionId = vi.fn();
-      const ctx = { socket: socketMock, setSessionId };
+      const ctx = makeCtx({ socket: socketMock, setSessionId });
       const line = JSON.stringify({ id: 2, result: {} }); // Missing sessionId
 
-      server.processGeminiOutput(line, ctx as any, vi.fn());
+      processGeminiOutput(line, ctx, vi.fn());
       expect(setSessionId).not.toHaveBeenCalled();
       expect(socketMock.emit).not.toHaveBeenCalled();
     });
 
     it("calls handleRequestComplete for message with ID >= 3 and result", () => {
       const socketMock = { emit: vi.fn() } as unknown as Socket;
-      const ctx = {
+      const ctx = makeCtx({
         socket: socketMock,
         getPromptStartTime: () => null,
         setPromptStartTime: vi.fn(),
-      };
+      });
       const line = JSON.stringify({ id: 3, result: {} });
 
-      server.processGeminiOutput(line, ctx as any, vi.fn());
+      processGeminiOutput(line, ctx, vi.fn());
       expect(socketMock.emit).toHaveBeenCalledWith("done");
     });
   });
@@ -416,7 +438,7 @@ describe("server.ts", () => {
       startSessionHandler();
 
       const stderrOnHandler = vi.mocked(mChildProcess.stderr.on).mock.calls.find(call => call[0] === "data")?.[1];
-      const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const spy = vi.spyOn(console, "error").mockReturnValue(undefined);
       
       stderrOnHandler(Buffer.from("some error"));
       expect(spy).toHaveBeenCalled();
@@ -496,7 +518,7 @@ describe("server.ts", () => {
       mChildProcess.stdin.write.mockClear();
       const stdoutOnHandler = vi.mocked(mChildProcess.stdout.on).mock.calls.find(call => call[0] === "data")?.[1];
       
-      const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+      const spy = vi.spyOn(console, "error").mockReturnValue(undefined);
       stdoutOnHandler(Buffer.from('{"id": 1, "result": {}}\n'));
 
       // Check if sendACP was called
@@ -561,7 +583,7 @@ describe("server.ts", () => {
     });
 
     describe("New Handlers", () => {
-      let socket: any;
+      let socket: { on: ReturnType<typeof vi.fn>; emit: ReturnType<typeof vi.fn> };
 
       beforeEach(() => {
         socket = { on: vi.fn(), emit: vi.fn() };
@@ -605,7 +627,7 @@ describe("server.ts", () => {
         const handler = vi.mocked(socket.on).mock.calls.find(call => call[0] === "list-dir-contents")?.[1];
         
         vi.mocked(NodeFileSystem.prototype.exists).mockImplementation(() => { throw new Error("FS Error"); });
-        const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+        const spy = vi.spyOn(console, "error").mockReturnValue(undefined);
 
         handler("/error");
 
@@ -658,7 +680,7 @@ describe("server.ts", () => {
       it("handles get-agents", () => {
         const handler = vi.mocked(socket.on).mock.calls.find(call => call[0] === "get-agents")?.[1];
         const agents = [{ id: "1", name: "A1" }];
-        vi.mocked(AgentRegistryService.prototype.getAgents).mockReturnValue(agents as any);
+        vi.mocked(AgentRegistryService.prototype.getAgents).mockReturnValue(agents as Agent[]);
 
         handler();
 
@@ -678,7 +700,7 @@ describe("server.ts", () => {
       it("handles get-tracks", () => {
         const handler = vi.mocked(socket.on).mock.calls.find(call => call[0] === "get-tracks")?.[1];
         const tracks = [{ id: "t1", name: "Track 1" }];
-        vi.mocked(TrackMetadataService.prototype.listTracksWithMetadata).mockReturnValue(tracks as any);
+        vi.mocked(TrackMetadataService.prototype.listTracksWithMetadata).mockReturnValue(tracks as TrackMetadata[]);
 
         handler();
 
@@ -688,7 +710,7 @@ describe("server.ts", () => {
       it("handles get-projects", () => {
         const handler = vi.mocked(socket.on).mock.calls.find(call => call[0] === "get-projects")?.[1];
         const projects = [{ id: "p1", name: "Proj 1" }];
-        vi.mocked(ProjectService.prototype.listProjects).mockReturnValue(projects as any);
+        vi.mocked(ProjectService.prototype.listProjects).mockReturnValue(projects as Project[]);
 
         handler();
 
@@ -699,7 +721,7 @@ describe("server.ts", () => {
         const handler = vi.mocked(socket.on).mock.calls.find(call => call[0] === "save-project-config")?.[1];
         const config = { name: "New Proj" };
         const projects = [{ id: "p1", name: "New Proj" }];
-        vi.mocked(ProjectService.prototype.listProjects).mockReturnValue(projects as any);
+        vi.mocked(ProjectService.prototype.listProjects).mockReturnValue(projects as Project[]);
 
         handler({ projectPath: "/proj", config });
 
@@ -714,7 +736,7 @@ describe("server.ts", () => {
         vi.mocked(ProjectService.prototype.saveProjectConfig).mockImplementation(() => {
           throw new Error("test error");
         });
-        const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+        const consoleSpy = vi.spyOn(console, "error").mockReturnValue(undefined);
 
         handler({ projectPath: "/proj", config });
 
