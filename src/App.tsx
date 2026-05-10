@@ -47,7 +47,7 @@ function App() {
   const [flashes, setFlashes] = useState<{ id: number; text: string }[]>([]);
   const [telemetry, setTelemetry] = useState<TelemetrySummary | null>(null);
   const [compliance, setCompliance] = useState<SDSCompliance[]>([]);
-  const [conflicts, setConflicts] = useState<SyncConflict[]>([]);
+  const [_conflicts, setConflicts] = useState<SyncConflict[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   
@@ -88,6 +88,7 @@ function App() {
     socket.on('projects', (p) => {
       setProjects(p);
     });
+    socket.on('tracks', (data) => setTracks(data));
     
     socket.on('telemetry-update', (data) => setTelemetry(data));
     socket.on('compliance-update', (data) => setCompliance(data));
@@ -279,7 +280,6 @@ function App() {
   };
 
   /** Renders the projects discovery view. */
-  /** Renders the projects discovery view. */
   const renderProjectsView = () => (
     <div className="view projects-view">
       <header><h1>Projects Discovery</h1></header>
@@ -456,7 +456,6 @@ function App() {
   };
 
   /** Renders the active squad agent management view. */
-  // skipcq: JS-0415
   const renderAgentsView = () => (
     <div className="view">
       <header><h1>Active Squad</h1></header>
@@ -514,6 +513,8 @@ function App() {
     switch (view) {
       case 'dashboard': return renderDashboardView();
       case 'tracks': return renderTracksView();
+      case 'agents': return renderAgentsView();
+      case 'projects': return renderProjectsView();
       case 'warroom': return renderWarRoomView();
       case 'settings': return renderSettingsView();
       case 'project-home': return (
@@ -549,8 +550,6 @@ function App() {
       default: return renderDashboardView();
     }
   };
-
-  const activeProject = projects.find(p => p.path === settings.rootDir);
 
   return (
     <div className="app-container">
