@@ -92,19 +92,11 @@ const isDev = process.env.NODE_ENV !== "production";
 
 if (isDev) {
   log("Running in development mode - access the frontend via Vite on port 5174", "INFO");
-  
-  // In development, redirect root or any non-socket request to the Vite server
-  app.get(/^(?!\/socket\.io).+/, (req, res) => {
-    // Use .pathname setter (not URL constructor with user input) so the host can never be overridden
-    const viteDevUrl = new URL("http://localhost:5174");
-    viteDevUrl.pathname = req.path;
-    res.redirect(viteDevUrl.href);
-  });
 } else {
   app.use(express.static("dist"));
 
   // Fallback to index.html for SPA routing using a Regex to bypass Express 5 string parsing quirks
-  app.get(/^(?!\/socket\.io).+/, (req, res) => {
+  app.get(/^(?!\/socket\.io).+/, (_req, res) => {
     res.sendFile(path.join(__dirname, "dist", "index.html"));
   });
 }

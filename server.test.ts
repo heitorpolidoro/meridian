@@ -825,23 +825,12 @@ describe("server.ts", () => {
       expect(mockRes.sendFile).toHaveBeenCalledWith(expect.stringContaining("index.html"));
     });
 
-    it("registers fallback route to redirect to Vite in development mode", async () => {
+    it("does not register a fallback route in development mode", async () => {
       process.env.NODE_ENV = "development";
       await import("./server");
 
       const getCall = mApp.get.mock.calls.find(call => call[0].toString() === "/^(?!\\/socket\\.io).+/");
-      expect(getCall).toBeDefined();
-
-      const handler = getCall[1];
-      const mockRes = { redirect: vi.fn() };
-
-      // Normal path
-      handler({ path: "/test-route" }, mockRes);
-      expect(mockRes.redirect).toHaveBeenCalledWith("http://localhost:5174/test-route");
-
-      // Nested path
-      handler({ path: "/a/b/c/d" }, mockRes);
-      expect(mockRes.redirect).toHaveBeenCalledWith("http://localhost:5174/a/b/c/d");
+      expect(getCall).toBeUndefined();
     });
   });
 });
