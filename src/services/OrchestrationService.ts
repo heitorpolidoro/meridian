@@ -76,14 +76,19 @@ export class OrchestrationService {
    * Runs validation engine for the track's current phase.
    * If validation passes, updates status to 'HandoffReady'.
    */
+  private getActiveMetadata(trackId: string): TrackMetadata | null {
+    const metadata = this.trackMetadataService.getTrackMetadata(trackId);
+    return metadata && metadata.status !== "Completed" ? metadata : null;
+  }
+
   public async runAutoValidation(trackId: string): Promise<void> {
     if (!this.validationEngine || this.validatingTracks.has(trackId)) return;
 
     this.validatingTracks.add(trackId);
 
     try {
-      const metadata = this.trackMetadataService.getTrackMetadata(trackId);
-      if (!metadata || metadata.status === "Completed") return;
+      const metadata = this.getActiveMetadata(trackId);
+      if (!metadata) return;
 
       const currentPhase = metadata.orchestration.currentPhase;
       const report = await this.validationEngine.runValidation(
@@ -92,9 +97,8 @@ export class OrchestrationService {
       );
 
       // Re-fetch metadata to avoid race conditions with stale state after async validation
-      const latestMetadata =
-        this.trackMetadataService.getTrackMetadata(trackId);
-      if (!latestMetadata || latestMetadata.status === "Completed") return;
+      const latestMetadata = this.getActiveMetadata(trackId);
+      if (!latestMetadata) return;
 
       const currentStatus = latestMetadata.orchestration.status;
 
@@ -120,6 +124,26 @@ export class OrchestrationService {
       this.validatingTracks.delete(trackId);
     }
   }
+  private assertTransitionAllowed(
+    currentPhase: SDSPhase,
+    currentStatus: OrchestrationStatus,
+    targetPhase: SDSPhase,
+    trigger: OrchestrationTrigger,
+  ) {
+    const validation = SDSStateMachine.validateTransition(currentPhase, targetPhase);
+    const isForward = SDSStateMachine.getNextPhase(currentPhase) === targetPhase;
+
+    if (isForward && currentStatus !== "HandoffReady" && trigger !== "Override") {
+      throw new Error(
+        `Cannot transition to ${targetPhase}: current phase ${currentPhase} must be in 'HandoffReady' status.`,
+      );
+    }
+
+    if (!validation.valid && trigger !== "Override") {
+      throw new Error(validation.error || "Invalid transition");
+    }
+  }
+
   /**
    * Returns the absolute path to the track directory.
    */
@@ -158,28 +182,9 @@ export class OrchestrationService {
 
     const currentPhase = metadata.orchestration.currentPhase;
     const currentStatus = metadata.orchestration.status;
-    const validation = SDSStateMachine.validateTransition(
-      currentPhase,
-      targetPhase,
-    );
 
-    // SDS Integrity Guard: Forward linear transitions MUST be in HandoffReady status
-    // unless it is an explicit User Override.
-    const isForward =
-      SDSStateMachine.getNextPhase(currentPhase) === targetPhase;
-    if (
-      isForward &&
-      currentStatus !== "HandoffReady" &&
-      trigger !== "Override"
-    ) {
-      throw new Error(
-        `Cannot transition to ${targetPhase}: current phase ${currentPhase} must be in 'HandoffReady' status.`,
-      );
-    }
-
-    if (!validation.valid && trigger !== "Override") {
-      throw new Error(validation.error || "Invalid transition");
-    }
+    // SDS Integrity Guard: forward transitions must be HandoffReady unless Override
+    this.assertTransitionAllowed(currentPhase, currentStatus, targetPhase, trigger);
 
     const newAgent = SDSStateMachine.getAssignedRole(targetPhase);
     const timestamp = new Date().toISOString();

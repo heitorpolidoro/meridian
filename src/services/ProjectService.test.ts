@@ -70,6 +70,24 @@ describe("ProjectService", () => {
     expect(projects[0].id).toBe("my-project");
   });
 
+  it("should fallback to folder name if .meridian/project.json has no name field", () => {
+    const fs = new MockFileSystem();
+    const searchPath = "/projects";
+    fs.mkdir(searchPath);
+
+    const projectPath = path.join(searchPath, "unnamed-project");
+    fs.mkdir(projectPath);
+    const meridianPath = path.join(projectPath, ".meridian");
+    fs.mkdir(meridianPath);
+
+    fs.writeFile(path.join(meridianPath, "project.json"), JSON.stringify({ description: "no name key" }));
+
+    const service = new ProjectService(fs);
+    const projects = service.listProjects(searchPath);
+
+    expect(projects[0].name).toBe("unnamed-project");
+  });
+
   it("should fallback to folder name if .meridian/project.json is invalid JSON", () => {
     const fs = new MockFileSystem();
     const searchPath = "/projects";

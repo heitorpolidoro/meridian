@@ -164,11 +164,12 @@ function App() {
   const handleViewChange = (newView: typeof view) => {
     setView(newView);
     if (newView === 'warroom') {
-      setMessages([]); 
+      setMessages([]);
       socket.emit('start-session');
+      return;
     }
-    if (newView === 'tracks' || newView === 'agents' || newView === 'projects') {
-      socket.emit(`get-${newView === 'projects' ? 'projects' : newView}`);
+    if (['tracks', 'agents', 'projects'].includes(newView)) {
+      socket.emit(`get-${newView}`);
     }
   };
 
@@ -508,48 +509,45 @@ function App() {
     </div>
   );
 
-  /** Evaluates the current view state and renders the appropriate content component. */
-  const renderContent = () => {
-    switch (view) {
-      case 'dashboard': return renderDashboardView();
-      case 'tracks': return renderTracksView();
-      case 'agents': return renderAgentsView();
-      case 'projects': return renderProjectsView();
-      case 'warroom': return renderWarRoomView();
-      case 'settings': return renderSettingsView();
-      case 'project-home': return (
-        <div className="view">
-          <header><h1>Project: {selectedProject?.name || 'Home'}</h1></header>
-          <div className="project-home-content" style={{ padding: '2rem' }}>
-            <div className="project-settings-form" style={{ maxWidth: '600px', backgroundColor: 'rgba(255,255,255,0.05)', padding: '2rem', borderRadius: '8px' }}>
-              <h3>Project Settings</h3>
-              <div className="form-group" style={{ marginBottom: '1.5rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem' }}>Project Name</label>
-                <input 
-                  type="text" 
-                  value={projectFormName} 
-                  onChange={(e) => setProjectFormName(e.target.value)}
-                  style={{ width: '100%', padding: '0.5rem', background: '#222', border: '1px solid #444', color: '#fff' }}
-                />
-              </div>
-              <button 
-                type="button" 
-                className="save-btn" 
-                onClick={handleSaveProjectConfig}
-              >
-                Save Project Config
-              </button>
-            </div>
-            
-            <div style={{ marginTop: '2rem' }}>
-              <p>Welcome to the project home. Specific features for this project will be defined soon.</p>
-            </div>
+  /** Renders the project home view for the selected project. */
+  const renderProjectHomeView = () => (
+    <div className="view">
+      <header><h1>Project: {selectedProject?.name ?? 'Home'}</h1></header>
+      <div className="project-home-content" style={{ padding: '2rem' }}>
+        <div className="project-settings-form" style={{ maxWidth: '600px', backgroundColor: 'rgba(255,255,255,0.05)', padding: '2rem', borderRadius: '8px' }}>
+          <h3>Project Settings</h3>
+          <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+            <label style={{ display: 'block', marginBottom: '0.5rem' }}>Project Name</label>
+            <input
+              type="text"
+              value={projectFormName}
+              onChange={(e) => setProjectFormName(e.target.value)}
+              style={{ width: '100%', padding: '0.5rem', background: '#222', border: '1px solid #444', color: '#fff' }}
+            />
           </div>
+          <button type="button" className="save-btn" onClick={handleSaveProjectConfig}>
+            Save Project Config
+          </button>
         </div>
-      );
-      default: return renderDashboardView();
-    }
+        <div style={{ marginTop: '2rem' }}>
+          <p>Welcome to the project home. Specific features for this project will be defined soon.</p>
+        </div>
+      </div>
+    </div>
+  );
+
+  const viewRegistry: Record<typeof view, () => React.ReactElement> = {
+    dashboard: renderDashboardView,
+    tracks: renderTracksView,
+    agents: renderAgentsView,
+    projects: renderProjectsView,
+    warroom: renderWarRoomView,
+    settings: renderSettingsView,
+    'project-home': renderProjectHomeView,
   };
+
+  /** Evaluates the current view state and renders the appropriate content component. */
+  const renderContent = () => viewRegistry[view]();
 
   return (
     <div className="app-container">

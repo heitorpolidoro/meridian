@@ -14,6 +14,17 @@ export type Project = z.infer<typeof ProjectSchema>;
 export class ProjectService {
   constructor(private readonly fs: IFileSystem) {}
 
+  private readProjectName(meridianPath: string, folderName: string): string {
+    const projectJsonPath = path.join(meridianPath, "project.json");
+    if (!this.fs.exists(projectJsonPath)) return folderName;
+    try {
+      const config = JSON.parse(this.fs.readFile(projectJsonPath));
+      return config.name ?? folderName;
+    } catch {
+      return folderName;
+    }
+  }
+
   private getProjectFromDirectory(parentPath: string, folderName: string): Project | null {
     const fullPath = path.join(parentPath, folderName);
     if (!this.fs.isDirectory(fullPath)) return null;
@@ -21,24 +32,9 @@ export class ProjectService {
     const meridianPath = path.join(fullPath, ".meridian");
     if (!this.fs.exists(meridianPath) || !this.fs.isDirectory(meridianPath)) return null;
 
-    let projectName = folderName;
-    const projectJsonPath = path.join(meridianPath, "project.json");
-
-    if (this.fs.exists(projectJsonPath)) {
-      try {
-        const content = this.fs.readFile(projectJsonPath);
-        const config = JSON.parse(content);
-        if (config.name) {
-          projectName = config.name;
-        }
-      } catch {
-        // Fallback to folder name if JSON is invalid or unreadable
-      }
-    }
-
     return {
-      id: folderName, // Use folder name as ID for now
-      name: projectName,
+      id: folderName,
+      name: this.readProjectName(meridianPath, folderName),
       path: fullPath,
     };
   }
@@ -49,17 +45,9 @@ export class ProjectService {
     }
 
     try {
-      const items = this.fs.readDirectory(searchPath);
-      const projects: Project[] = [];
-
-      for (const item of items) {
-        const project = this.getProjectFromDirectory(searchPath, item);
-        if (project) {
-          projects.push(project);
-        }
-      }
-
-      return projects;
+      return this.fs.readDirectory(searchPath)
+        .map(item => this.getProjectFromDirectory(searchPath, item))
+        .filter((p): p is Project => p !== null);
     } catch (error) {
       console.error('Failed to list projects:', error);
       return [];

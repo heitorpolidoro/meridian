@@ -41,11 +41,18 @@ export class BootstrappingService {
     return this.resolveFile(stubPath, visited);
   }
 
+  private resolveLine(line: string, dir: string, visited: Set<string>): string {
+    const trimmedLine = line.trim();
+    if (trimmedLine.startsWith('@')) {
+      const relativePath = trimmedLine.substring(1).trim();
+      return this.resolveFile(path.resolve(dir, relativePath), visited);
+    }
+    return line;
+  }
+
   private resolveFile(filePath: string, visited: Set<string>): string {
     const absolutePath = path.resolve(filePath);
-    if (visited.has(absolutePath)) {
-      return '';
-    }
+    if (visited.has(absolutePath)) return '';
     visited.add(absolutePath);
 
     if (!this.fs.exists(absolutePath)) {
@@ -54,19 +61,6 @@ export class BootstrappingService {
 
     const content = this.fs.readFile(absolutePath);
     const dir = path.dirname(absolutePath);
-    const lines = content.split('\n');
-    
-    const resolvedLines = lines.map(line => {
-      const trimmedLine = line.trim();
-      // Match lines starting with @ (optionally with whitespace before)
-      if (trimmedLine.startsWith('@')) {
-        const relativePath = trimmedLine.substring(1).trim();
-        const linkedPath = path.resolve(dir, relativePath);
-        return this.resolveFile(linkedPath, visited);
-      }
-      return line;
-    });
-
-    return resolvedLines.join('\n');
+    return content.split('\n').map(line => this.resolveLine(line, dir, visited)).join('\n');
   }
 }

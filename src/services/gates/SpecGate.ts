@@ -30,15 +30,10 @@ export const SpecGate: QualityGateFn = (
     "Audience",
     "Success Criteria",
   ];
-  const missingSections: string[] = [];
-
-  for (const section of mandatorySections) {
-    // Regex matches Markdown headers (level 1-6) containing the section name
+  const missingSections = mandatorySections.filter((section) => {
     const sectionRegex = new RegExp(`^#+\\s+.*${section}.*`, "mi");
-    if (!sectionRegex.test(content)) {
-      missingSections.push(section);
-    }
-  }
+    return !sectionRegex.test(content);
+  });
 
   if (missingSections.length > 0) {
     return Promise.resolve({
