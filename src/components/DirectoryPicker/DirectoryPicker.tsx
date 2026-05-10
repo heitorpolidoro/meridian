@@ -14,6 +14,13 @@ interface DirectoryPickerProps {
   onClose: () => void;
 }
 
+function buildNavigationPath(currentPath: string, name: string): string {
+  const separator = currentPath.includes('\\') ? '\\' : '/';
+  return currentPath.endsWith(separator)
+    ? `${currentPath}${name}`
+    : `${currentPath}${separator}${name}`;
+}
+
 export const DirectoryPicker: React.FC<DirectoryPickerProps> = ({ socket, initialPath, onSelect, onClose }) => {
   const [currentPath, setCurrentPath] = useState(initialPath || '/');
   const [entries, setEntries] = useState<string[]>([]);
@@ -42,9 +49,7 @@ export const DirectoryPicker: React.FC<DirectoryPickerProps> = ({ socket, initia
 
   const navigateTo = (name: string) => {
     setLoading(true);
-    const separator = currentPath.includes('\\') ? '\\' : '/';
-    const newPath = currentPath.endsWith(separator) ? `${currentPath}${name}` : `${currentPath}${separator}${name}`;
-    setCurrentPath(newPath);
+    setCurrentPath(buildNavigationPath(currentPath, name));
   };
 
   const goUp = () => {

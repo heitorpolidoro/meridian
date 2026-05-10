@@ -3,6 +3,7 @@ import {
   SDSStateMachine,
   SDSPhase,
   OrchestrationStatus,
+  TransitionResult,
 } from "./SDSStateMachine";
 import { TrackMetadataService, TrackMetadata } from "./TrackMetadataService";
 import { IFileSystem, IFilesystemWatcher } from "./interfaces/ICoreServices";
@@ -26,6 +27,11 @@ export interface OrchestrationLogEntry {
  */
 export class OrchestrationService {
   private readonly validatingTracks = new Set<string>();
+
+  private static readonly VALIDATION_TRANSITIONS = {
+    pass: { newStatus: "HandoffReady" as OrchestrationStatus, comment: "All quality gates passed automatically." },
+    fail: { newStatus: "InProgress" as OrchestrationStatus, comment: "Quality gates failed after modification." },
+  } as const;
 
   constructor(
     private readonly trackMetadataService: TrackMetadataService,
@@ -81,66 +87,49 @@ export class OrchestrationService {
     return metadata && metadata.status !== "Completed" ? metadata : null;
   }
 
+  private async applyValidationResult(trackId: string, engine: ValidationEngine): Promise<void> {
+    const metadata = this.getActiveMetadata(trackId);
+    if (!metadata) return;
+
+    const report = await engine.runValidation(trackId, metadata.orchestration.currentPhase);
+
+    // Re-fetch to avoid stale state after async validation
+    const latestMetadata = this.getActiveMetadata(trackId);
+    if (!latestMetadata) return;
+
+    const key = report.overallSuccess ? "pass" : "fail";
+    const action = OrchestrationService.VALIDATION_TRANSITIONS[key];
+    if (action.newStatus !== latestMetadata.orchestration.status) {
+      this.updateStatus(trackId, action.newStatus, action.comment);
+    }
+  }
+
   public async runAutoValidation(trackId: string): Promise<void> {
     if (!this.validationEngine || this.validatingTracks.has(trackId)) return;
-
     this.validatingTracks.add(trackId);
-
     try {
-      const metadata = this.getActiveMetadata(trackId);
-      if (!metadata) return;
-
-      const currentPhase = metadata.orchestration.currentPhase;
-      const report = await this.validationEngine.runValidation(
-        trackId,
-        currentPhase,
-      );
-
-      // Re-fetch metadata to avoid race conditions with stale state after async validation
-      const latestMetadata = this.getActiveMetadata(trackId);
-      if (!latestMetadata) return;
-
-      const currentStatus = latestMetadata.orchestration.status;
-
-      const transitionMap: Record<
-        "pass" | "fail",
-        { newStatus: string; comment: string }
-      > = {
-        pass: {
-          newStatus: "HandoffReady",
-          comment: "All quality gates passed automatically.",
-        },
-        fail: {
-          newStatus: "InProgress",
-          comment: "Quality gates failed after modification.",
-        },
-      };
-      const key = report.overallSuccess ? "pass" : "fail";
-      const action = transitionMap[key];
-      if (action.newStatus !== currentStatus) {
-        this.updateStatus(trackId, action.newStatus, action.comment);
-      }
+      await this.applyValidationResult(trackId, this.validationEngine);
     } finally {
       this.validatingTracks.delete(trackId);
     }
   }
-  private assertTransitionAllowed(
+  private assertForwardTransitionAllowed(
     currentPhase: SDSPhase,
     currentStatus: OrchestrationStatus,
     targetPhase: SDSPhase,
     trigger: OrchestrationTrigger,
   ) {
-    const validation = SDSStateMachine.validateTransition(currentPhase, targetPhase);
     const isForward = SDSStateMachine.getNextPhase(currentPhase) === targetPhase;
-
     if (isForward && currentStatus !== "HandoffReady" && trigger !== "Override") {
       throw new Error(
         `Cannot transition to ${targetPhase}: current phase ${currentPhase} must be in 'HandoffReady' status.`,
       );
     }
+  }
 
+  private assertValidationPassed(validation: TransitionResult, trigger: OrchestrationTrigger) {
     if (!validation.valid && trigger !== "Override") {
-      throw new Error(validation.error || "Invalid transition");
+      throw new Error(validation.error ?? "Invalid transition");
     }
   }
 
@@ -183,8 +172,9 @@ export class OrchestrationService {
     const currentPhase = metadata.orchestration.currentPhase;
     const currentStatus = metadata.orchestration.status;
 
-    // SDS Integrity Guard: forward transitions must be HandoffReady unless Override
-    this.assertTransitionAllowed(currentPhase, currentStatus, targetPhase, trigger);
+    const validation = SDSStateMachine.validateTransition(currentPhase, targetPhase);
+    this.assertForwardTransitionAllowed(currentPhase, currentStatus, targetPhase, trigger);
+    this.assertValidationPassed(validation, trigger);
 
     const newAgent = SDSStateMachine.getAssignedRole(targetPhase);
     const timestamp = new Date().toISOString();

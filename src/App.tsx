@@ -10,6 +10,10 @@ import { TelemetrySummary, SDSCompliance, SyncConflict } from './services/IPCSch
 
 const socket = io();
 
+function validateAgentForm(agent: Partial<{ name: string; role: string }>): boolean {
+  return Boolean(agent.name && agent.role);
+}
+
 interface Agent {
   id: string;
   name: string;
@@ -64,13 +68,6 @@ function App() {
   const [isProjectsOpen, setIsProjectsOpen] = useState(true);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [projectFormName, setProjectFormName] = useState('');
-
-  // Auto-fetch projects on load
-  useEffect(() => {
-    if (settings.rootDir && projects.length === 0) {
-      socket.emit('get-projects');
-    }
-  }, [settings.rootDir, projects]);
 
   const chatRef = useRef<HTMLDivElement>(null);
   const currentAiMsgRef = useRef<string>('');
@@ -163,14 +160,13 @@ function App() {
 
   const handleViewChange = (newView: typeof view) => {
     setView(newView);
-    if (newView === 'warroom') {
-      setMessages([]);
-      socket.emit('start-session');
-      return;
-    }
-    if (['tracks', 'agents', 'projects'].includes(newView)) {
-      socket.emit(`get-${newView}`);
-    }
+    const actions: Partial<Record<typeof view, () => void>> = {
+      warroom: () => { setMessages([]); socket.emit('start-session'); },
+      tracks: () => socket.emit('get-tracks'),
+      agents: () => socket.emit('get-agents'),
+      projects: () => socket.emit('get-projects'),
+    };
+    actions[newView]?.();
   };
 
   const [confirmDialog, setConfirmDialog] = useState<{ show: boolean; message: string; onConfirm: () => void } | null>(null);
@@ -233,7 +229,7 @@ function App() {
   };
 
   const handleAddAgent = () => {
-    if (!newAgent.name || !newAgent.role) {
+    if (!validateAgentForm(newAgent)) {
       showFlash('Name and Role are required.');
       return;
     }
@@ -257,7 +253,7 @@ function App() {
   };
 
   const handleSaveEdit = () => {
-    if (!editAgent.name || !editAgent.role) {
+    if (!validateAgentForm(editAgent)) {
       showFlash('Name and Role are required.');
       return;
     }

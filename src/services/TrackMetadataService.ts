@@ -92,6 +92,24 @@ export class TrackMetadataService {
     }
   }
 
+  private computeDates(
+    currentDates: TrackMetadata['dates'],
+    currentStatus: TrackMetadata['status'],
+    newStatus: TrackMetadata['status'],
+    overrideDates?: Partial<TrackMetadata['dates']>,
+  ): TrackMetadata['dates'] {
+    const merged = { ...currentDates, ...overrideDates, updated: new Date().toISOString() };
+    if (newStatus === 'Completed' && currentStatus !== 'Completed') {
+      return { ...merged, completed: new Date().toISOString() };
+    }
+    if (newStatus !== 'Completed') {
+      const dates = { ...merged };
+      delete dates.completed;
+      return dates;
+    }
+    return merged;
+  }
+
   /**
    * Updates track metadata and persists it to disk.
    * Handles automatic timestamps and status transitions.
@@ -107,38 +125,19 @@ export class TrackMetadataService {
       name: trackId,
       status: 'Draft' as const,
       progress: 0,
-      dates: {
-        created: new Date().toISOString(),
-        updated: new Date().toISOString()
-      }
+      dates: { created: new Date().toISOString(), updated: new Date().toISOString() }
     };
 
+    const newStatus = data.status ?? currentMetadata.status;
     const updatedMetadata = {
       ...currentMetadata,
       ...data,
       id: trackId,
-      dates: {
-        ...currentMetadata.dates,
-        updated: new Date().toISOString()
-      }
+      dates: this.computeDates(currentMetadata.dates, currentMetadata.status, newStatus, data.dates),
     };
-
-    if (data.dates) {
-      updatedMetadata.dates = { ...updatedMetadata.dates, ...data.dates };
-    }
-
-    if (updatedMetadata.status === 'Completed' && currentMetadata.status !== 'Completed') {
-      updatedMetadata.dates.completed = new Date().toISOString();
-    } else if (updatedMetadata.status !== 'Completed') {
-      // Remove completed date if status is not Completed
-      const newDates = { ...updatedMetadata.dates };
-      delete newDates.completed;
-      updatedMetadata.dates = newDates;
-    }
 
     const parsed = TrackMetadataSchema.parse(updatedMetadata);
     this.fs.writeFile(this.getMetadataPath(trackId), JSON.stringify(parsed, null, 2));
-
     return parsed;
   }
 
