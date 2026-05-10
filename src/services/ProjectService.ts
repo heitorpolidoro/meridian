@@ -66,7 +66,7 @@ export class ProjectService {
     }
   }
 
-  saveProjectConfig(projectPath: string, config: any): void {
+  saveProjectConfig(projectPath: string, config: Record<string, unknown>): void {
     if (!this.fs.exists(projectPath) || !this.fs.isDirectory(projectPath)) {
       throw new Error(`Invalid project path: ${projectPath}`);
     }

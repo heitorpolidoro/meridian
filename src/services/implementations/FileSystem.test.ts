@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NodeFileSystem } from './NodeFileSystem';
-import fs from 'node:fs';
+import fs, { type Dirent, type Stats } from 'node:fs';
 
 // Mock the entire fs module
 vi.mock('node:fs', () => ({
@@ -56,7 +56,7 @@ describe('NodeFileSystem (Concrete)', () => {
   });
 
   it('should call readdirSync in readDirectory', () => {
-    vi.mocked(fs.readdirSync).mockReturnValue(['file1.txt'] as any);
+    vi.mocked(fs.readdirSync).mockReturnValue(['file1.txt'] as unknown as Dirent[]);
     const result = nfs.readDirectory('dir');
     expect(fs.readdirSync).toHaveBeenCalledWith('dir');
     expect(result).toEqual(['file1.txt']);
@@ -64,7 +64,7 @@ describe('NodeFileSystem (Concrete)', () => {
 
   it('should call statSync in isDirectory', () => {
     const isDirectoryMock = vi.fn().mockReturnValue(true);
-    vi.mocked(fs.statSync).mockReturnValue({ isDirectory: isDirectoryMock } as any);
+    vi.mocked(fs.statSync).mockReturnValue({ isDirectory: isDirectoryMock } as unknown as Stats);
     
     const result = nfs.isDirectory('dir');
     expect(fs.statSync).toHaveBeenCalledWith('dir');

@@ -1,8 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import './DirectoryPicker.css';
 
+interface SocketLike {
+  emit: (event: string, ...args: unknown[]) => void;
+  on: (event: string, handler: (...args: unknown[]) => void) => void;
+  off: (event: string, handler: (...args: unknown[]) => void) => void;
+}
+
 interface DirectoryPickerProps {
-  socket: any;
+  socket: SocketLike;
   initialPath: string;
   onSelect: (path: string) => void;
   onClose: () => void;

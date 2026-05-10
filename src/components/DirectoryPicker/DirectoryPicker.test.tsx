@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { DirectoryPicker } from "./DirectoryPicker";
 
 describe("DirectoryPicker", () => {
-  let mockSocket: any;
+  let mockSocket: { emit: ReturnType<typeof vi.fn>; on: ReturnType<typeof vi.fn>; off: ReturnType<typeof vi.fn> };
   const mockOnSelect = vi.fn();
   const mockOnClose = vi.fn();
 

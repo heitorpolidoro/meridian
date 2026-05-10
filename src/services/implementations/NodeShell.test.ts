@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NodeShell } from './NodeShell';
 
 describe('NodeShell', () => {
-  let mockExec: any;
+  let mockExec: ReturnType<typeof vi.fn>;
   let shell: NodeShell;
 
   beforeEach(() => {
@@ -14,7 +14,7 @@ describe('NodeShell', () => {
     const mockStdout = 'success output';
     const mockStderr = '';
     
-    mockExec.mockImplementation((cmd: any, options: any, callback: any) => {
+    mockExec.mockImplementation((cmd: string, options: unknown, callback: (error: unknown, stdout: string, stderr: string) => void) => {
       callback(null, mockStdout, mockStderr);
     });
 
@@ -39,7 +39,7 @@ describe('NodeShell', () => {
     const mockStderr = 'error message';
     const mockError = { code: 127 };
     
-    mockExec.mockImplementation((cmd: any, options: any, callback: any) => {
+    mockExec.mockImplementation((cmd: string, options: unknown, callback: (error: unknown, stdout: string, stderr: string) => void) => {
       callback(mockError, mockStdout, mockStderr);
     });
 
@@ -53,7 +53,7 @@ describe('NodeShell', () => {
   it('should fallback to exit code 1 if error object has no code', async () => {
     const mockError = {}; // No code property
     
-    mockExec.mockImplementation((cmd: any, options: any, callback: any) => {
+    mockExec.mockImplementation((cmd: string, options: unknown, callback: (error: unknown, stdout: string, stderr: string) => void) => {
       callback(mockError, '', '');
     });
 
