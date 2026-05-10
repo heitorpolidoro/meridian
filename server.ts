@@ -95,10 +95,10 @@ if (isDev) {
   
   // In development, redirect root or any non-socket request to the Vite server
   app.get(/^(?!\/socket\.io).+/, (req, res) => {
-    // Sanitize the URL to prevent open redirect vulnerabilities
-    const targetPath = req.url.startsWith('/') ? req.url : '/' + req.url.split('/').slice(3).join('/');
-    const safeTarget = new URL(targetPath, "http://localhost:5174").toString();
-    res.redirect(safeTarget);
+    // Use .pathname setter (not URL constructor with user input) so the host can never be overridden
+    const viteDevUrl = new URL("http://localhost:5174");
+    viteDevUrl.pathname = req.path;
+    res.redirect(viteDevUrl.href);
   });
 } else {
   app.use(express.static("dist"));

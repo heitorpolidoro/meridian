@@ -835,12 +835,12 @@ describe("server.ts", () => {
       const handler = getCall[1];
       const mockRes = { redirect: vi.fn() };
 
-      // Case 1: starts with /
-      handler({ url: "/test-route" }, mockRes);
+      // Normal path
+      handler({ path: "/test-route" }, mockRes);
       expect(mockRes.redirect).toHaveBeenCalledWith("http://localhost:5174/test-route");
 
-      // Case 2: does not start with /
-      handler({ url: "http://other.com/a/b/c/d" }, mockRes);
+      // Nested path
+      handler({ path: "/a/b/c/d" }, mockRes);
       expect(mockRes.redirect).toHaveBeenCalledWith("http://localhost:5174/a/b/c/d");
     });
   });
