@@ -115,6 +115,49 @@ describe("DirectoryPicker", () => {
     expect(screen.getByText("/initial/path/folder1")).toBeInTheDocument();
   });
 
+  it("navigates to subdirectory when clicked and ends with separator (windows)", () => {
+    render(
+      <DirectoryPicker
+        socket={mockSocket}
+        initialPath={"C:\\initial\\path\\"}
+        onSelect={mockOnSelect}
+        onClose={mockOnClose}
+      />
+    );
+
+    const onDirContents = mockSocket.on.mock.calls.find((call: any) => call[0] === "dir-contents")![1];
+    
+    act(() => {
+      onDirContents(["folder1"]);
+    });
+
+    fireEvent.click(screen.getByText("📁 folder1"));
+
+    expect(screen.getByText("C:\\initial\\path\\folder1")).toBeInTheDocument();
+  });
+
+  it("navigates to subdirectory when clicked (windows separator)", () => {
+    render(
+      <DirectoryPicker
+        socket={mockSocket}
+        initialPath={"C:\\initial\\path"}
+        onSelect={mockOnSelect}
+        onClose={mockOnClose}
+      />
+    );
+
+    const onDirContents = mockSocket.on.mock.calls.find((call: any) => call[0] === "dir-contents")![1];
+    
+    act(() => {
+      onDirContents(["folder1"]);
+    });
+
+    fireEvent.click(screen.getByText("📁 folder1"));
+
+    expect(screen.getByText("C:\\initial\\path\\folder1")).toBeInTheDocument();
+    expect(mockSocket.emit).toHaveBeenCalledWith("list-dir-contents", "C:\\initial\\path\\folder1");
+  });
+
   it("goes up one directory", () => {
     render(
       <DirectoryPicker
