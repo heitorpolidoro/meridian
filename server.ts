@@ -1,7 +1,7 @@
 import express from "express";
 import { createServer } from "node:http";
 import { Server, Socket } from "socket.io";
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, exec, type ChildProcess } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import fs from "node:fs";
@@ -11,19 +11,17 @@ import { TrackMetadataService } from "./src/services/TrackMetadataService";
 import { BootstrappingService } from "./src/services/BootstrappingService";
 import { SDSComplianceScorer } from "./src/services/SDSComplianceScorer";
 import { TelemetryCollectorService } from "./src/services/TelemetryCollectorService";
+import { ProjectService } from "./src/services/ProjectService";
 import { GeminiMessage } from "./src/services/IPCSchemas";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const SETTINGS_DIR = path.join(__dirname, ".meridian");
-const SETTINGS_FILE = path.join(SETTINGS_DIR, "settings.json");
-
-if (!fs.existsSync(SETTINGS_DIR)) fs.mkdirSync(SETTINGS_DIR);
+const SETTINGS_FILE = path.join(__dirname, ".settings.json");
 
 const fileSystem = new NodeFileSystem();
 const telemetryCollector = new TelemetryCollectorService();
 
-const DEFAULT_SETTINGS = { rootDir: process.cwd() };
+const DEFAULT_SETTINGS = { rootDir: process.env.MERIDIAN_ROOT || process.cwd() };
 
 /**
  * Retrieves the application settings from the settings file, ensuring the file exists with default settings.
@@ -31,13 +29,24 @@ const DEFAULT_SETTINGS = { rootDir: process.cwd() };
  * @returns {object} The settings object from the file or DEFAULT_SETTINGS if parsing fails.
  */
 export function getSettings() {
-  if (!fs.existsSync(SETTINGS_FILE))
-    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(DEFAULT_SETTINGS, null, 2));
-  try {
-    return JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf8"));
-  } catch {
-    return DEFAULT_SETTINGS;
+  let settings;
+  if (!fs.existsSync(SETTINGS_FILE)) {
+    settings = { ...DEFAULT_SETTINGS };
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
+  } else {
+    try {
+      settings = JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf8"));
+    } catch {
+      settings = { ...DEFAULT_SETTINGS };
+    }
   }
+
+  // Override with environment variable if provided (e.g., from the meridian CLI script)
+  if (process.env.MERIDIAN_ROOT) {
+    settings.rootDir = process.env.MERIDIAN_ROOT;
+  }
+
+  return settings;
 }
 
 /**
@@ -57,6 +66,7 @@ export function getContextServices() {
       fileSystem,
       path.join(meridianDir, "tracks"),
     ),
+    projectService: new ProjectService(fileSystem),
   };
 }
 
@@ -78,7 +88,23 @@ export function log(
 }
 
 const app = express();
-app.use(express.static("dist"));
+const isDev = process.env.NODE_ENV !== "production";
+
+if (!isDev) {
+  app.use(express.static("dist"));
+
+  // Fallback to index.html for SPA routing using a Regex to bypass Express 5 string parsing quirks
+  app.get(/^(?!\/socket\.io).+/, (req, res) => {
+    res.sendFile(path.join(__dirname, "dist", "index.html"));
+  });
+} else {
+  log("Running in development mode - access the frontend via Vite on port 5174", "INFO");
+  
+  // In development, redirect root or any non-socket request to the Vite server
+  app.get(/^(?!\/socket\.io).+/, (req, res) => {
+    res.redirect("http://localhost:5174" + req.url);
+  });
+}
 
 const httpServer = createServer(app);
 const io = new Server(httpServer);
@@ -224,6 +250,88 @@ io.on("connection", (socket) => {
       gemini = null;
     }
   };
+
+  socket.on("list-dir-contents", (dirPath: string) => {
+    try {
+      if (fileSystem.exists(dirPath) && fileSystem.isDirectory(dirPath)) {
+        const entries = fileSystem.readDirectory(dirPath)
+          .filter(name => {
+            try {
+              return fileSystem.isDirectory(path.join(dirPath, name));
+            } catch {
+              return false;
+            }
+          });
+        socket.emit("dir-contents", entries);
+      } else {
+        socket.emit("dir-contents", []);
+      }
+    } catch (error) {
+      log(`Error listing directory ${dirPath}: ${error}`, "ERROR");
+      socket.emit("dir-contents", []);
+    }
+  });
+
+  socket.on("get-parent-dir", (dirPath: string) => {
+    socket.emit("parent-dir", path.dirname(dirPath));
+  });
+
+  socket.on("get-settings", () => {
+    socket.emit("settings", getSettings());
+  });
+
+  socket.on("save-settings", (settings) => {
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
+    // Use socket.emit instead of io.emit to avoid triggering flash messages for all clients
+    socket.emit("settings-saved", settings);
+  });
+
+  socket.on("get-agents", () => {
+    const { agentRegistry } = getContextServices();
+    socket.emit("agents", agentRegistry.getAgents());
+  });
+
+  socket.on("save-agents", (agents) => {
+    const { agentRegistry } = getContextServices();
+    agentRegistry.saveAgents(agents);
+    socket.emit("agents-saved");
+  });
+
+  socket.on("get-tracks", () => {
+    const { trackMetadataService } = getContextServices();
+    socket.emit("tracks", trackMetadataService.listTracksWithMetadata());
+  });
+
+  socket.on("get-projects", () => {
+    const { rootDir, projectService } = getContextServices();
+    // In this model, rootDir is always the workspace. 
+    // We list all projects containing .meridian inside it.
+    socket.emit("projects", projectService.listProjects(rootDir));
+  });
+
+  socket.on("save-project-config", ({ projectPath, config }) => {
+    log(`Attempting to save project config for: ${projectPath}`, "INFO");
+    try {
+      const { rootDir, projectService } = getContextServices();
+      projectService.saveProjectConfig(projectPath, config);
+      log(`Project config saved successfully for ${projectPath}`, "INFO");
+      // Emit only to the user who saved
+      socket.emit("project-config-saved");
+      // Broadcast updated project list to everyone to refresh sidebars/hubs
+      io.emit("projects", projectService.listProjects(rootDir));
+    } catch (error) {
+      log(`Error saving project config for ${projectPath}: ${error}`, "ERROR");
+    }
+  });
+
+  socket.on("get-file-content", ({ trackId, fileName }: { trackId: string; fileName: string }) => {
+    const { meridianDir } = getContextServices();
+    const filePath = path.join(meridianDir, "tracks", trackId, fileName);
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, "utf8");
+      socket.emit("file-content", { trackId, fileName, content });
+    }
+  });
 
   socket.on("disconnect", cleanup);
 

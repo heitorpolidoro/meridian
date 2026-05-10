@@ -191,7 +191,6 @@ def main():
                 print_color(f"Error: Expert '{expert_input}' not found in roles.", RED)
                 print_color(f"Available roles: {', '.join(available_roles)}", CYAN)
                 sys.exit(1)
-
     print_color("[1/3] Preparing Meridian Infrastructure...", BLUE)
     for d in [target_dir / ".meridian" / "core", target_dir / ".meridian" / "roles"]:
         d.mkdir(parents=True, exist_ok=True)

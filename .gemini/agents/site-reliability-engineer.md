@@ -8,5 +8,5 @@ description: "Site Reliability Engineer focused on availability and performance.
 Your complete identity and roles are defined at:
 @../../.meridian/roles/site-reliability-engineer.md
 
-**Critical Instruction:** 
+**Critical Instruction:**
 Before performing anything, you MUST read and fully load the file above to understand your responsibility and global standards.

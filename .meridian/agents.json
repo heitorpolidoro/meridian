@@ -1,12 +1,5 @@
 [
   {
-    "id": "architect",
-    "name": "software-architect",
-    "role": "Expert in designing scalable and secure software architectures.",
-    "instruction": "Bootstrap loaded from filesystem.",
-    "color": "#00c3ff"
-  },
-  {
     "id": "devsecops",
     "name": "devsecops",
     "role": "Expert in security, CI/CD, and infrastructure automation.",
@@ -17,20 +10,6 @@
     "id": "elixir-expert",
     "name": "elixir-expert",
     "role": "Advanced specialist in Elixir and Phoenix development.",
-    "instruction": "Bootstrap loaded from filesystem.",
-    "color": "#00c3ff"
-  },
-  {
-    "id": "em",
-    "name": "engineering-manager",
-    "role": "Engineering Manager focused on orchestrating project teams.",
-    "instruction": "Bootstrap loaded from filesystem.",
-    "color": "#00c3ff"
-  },
-  {
-    "id": "engineer",
-    "name": "software-engineer",
-    "role": "Senior engineer for implementation and technical execution.",
     "instruction": "Bootstrap loaded from filesystem.",
     "color": "#00c3ff"
   },
@@ -63,13 +42,6 @@
     "color": "#00c3ff"
   },
   {
-    "id": "pm",
-    "name": "product-manager",
-    "role": "Product Manager focused on requirements and business value.",
-    "instruction": "Bootstrap loaded from filesystem.",
-    "color": "#00c3ff"
-  },
-  {
     "id": "product-manager",
     "name": "product-manager",
     "role": "Product Manager focused on requirements and business value.",
@@ -80,13 +52,6 @@
     "id": "python-expert",
     "name": "python-expert",
     "role": "Advanced specialist in Python development and patterns.",
-    "instruction": "Bootstrap loaded from filesystem.",
-    "color": "#00c3ff"
-  },
-  {
-    "id": "qa",
-    "name": "quality-assurance",
-    "role": "Quality Assurance expert for testing and verification.",
     "instruction": "Bootstrap loaded from filesystem.",
     "color": "#00c3ff"
   },
@@ -129,13 +94,6 @@
     "id": "sql-expert",
     "name": "sql-expert",
     "role": "Expert in SQL database design and query optimization.",
-    "instruction": "Bootstrap loaded from filesystem.",
-    "color": "#00c3ff"
-  },
-  {
-    "id": "sre",
-    "name": "site-reliability-engineer",
-    "role": "Site Reliability Engineer focused on availability and performance.",
     "instruction": "Bootstrap loaded from filesystem.",
     "color": "#00c3ff"
   },

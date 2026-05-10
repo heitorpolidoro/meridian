@@ -26,11 +26,29 @@ export class ProjectService {
       for (const item of items) {
         const fullPath = path.join(searchPath, item);
         if (this.fs.isDirectory(fullPath)) {
-          const meridianPath = path.join(fullPath, '.meridian');
-          if (this.fs.exists(meridianPath) && this.fs.isDirectory(meridianPath)) {
+          const meridianPath = path.join(fullPath, ".meridian");
+          if (
+            this.fs.exists(meridianPath) &&
+            this.fs.isDirectory(meridianPath)
+          ) {
+            let projectName = item;
+            const projectJsonPath = path.join(meridianPath, "project.json");
+
+            if (this.fs.exists(projectJsonPath)) {
+              try {
+                const content = this.fs.readFile(projectJsonPath);
+                const config = JSON.parse(content);
+                if (config.name) {
+                  projectName = config.name;
+                }
+              } catch {
+                // Fallback to folder name if JSON is invalid or unreadable
+              }
+            }
+
             projects.push({
               id: item, // Use folder name as ID for now
-              name: item,
+              name: projectName,
               path: fullPath,
             });
           }
@@ -49,5 +67,21 @@ export class ProjectService {
       console.error('Failed to list projects:', error);
       return [];
     }
+  }
+
+  saveProjectConfig(projectPath: string, config: any): void {
+    if (!this.fs.exists(projectPath) || !this.fs.isDirectory(projectPath)) {
+      throw new Error(`Invalid project path: ${projectPath}`);
+    }
+
+    // Ensure we are saving inside the project folder, not the workspace root
+    const meridianPath = path.join(projectPath, ".meridian");
+    
+    if (!this.fs.exists(meridianPath)) {
+      this.fs.mkdir(meridianPath);
+    }
+
+    const projectJsonPath = path.join(meridianPath, "project.json");
+    this.fs.writeFile(projectJsonPath, JSON.stringify(config, null, 2));
   }
 }

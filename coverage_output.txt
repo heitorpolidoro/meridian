@@ -1,47 +1,59 @@
 
-> meridian-ai-manager@1.0.0 test
-> vitest --coverage
-
-
  RUN  v4.1.4 /Users/heitor/workspace/meridian
       Coverage enabled with v8
 
-Not implemented: navigation to another Document
-Not implemented: navigation to another Document
 
- Test Files  16 passed (16)
-      Tests  120 passed (120)
-   Start at  13:52:32
-   Duration  3.00s (transform 725ms, setup 1.12s, import 2.09s, tests 362ms, environment 11.89s)
+ Test Files  1 passed (1)
+      Tests  11 passed (11)
+   Start at  19:09:55
+   Duration  1.06s (transform 29ms, setup 75ms, import 32ms, tests 6ms, environment 686ms)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
 File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
 -------------------|---------|----------|---------|---------|-------------------
-All files          |    88.6 |    74.79 |   83.01 |   89.24 |                   
+All files          |    7.56 |    10.63 |    5.29 |    7.85 |                   
+ meridian          |       0 |        0 |       0 |       0 |                   
+  server.ts        |       0 |        0 |       0 |       0 | 1-443             
+ ...irectoryPicker |       0 |        0 |       0 |       0 |                   
+  ...oryPicker.tsx |       0 |        0 |       0 |       0 | 11-79             
+ ...MarkdownViewer |       0 |        0 |       0 |       0 |                   
+  ...ownViewer.tsx |       0 |        0 |       0 |       0 | 20-107            
  ...metryDashboard |       0 |        0 |       0 |       0 |                   
-  ...Dashboard.tsx |       0 |        0 |       0 |       0 | 11-70             
- services          |   88.81 |    81.37 |   85.93 |   89.73 |                   
-  ...tryService.ts |   90.47 |    70.83 |   78.57 |   94.33 | 98-100            
-  IPCSchemas.ts    |       0 |      100 |     100 |       0 | 3-35              
-  ...ionService.ts |   97.56 |     82.6 |     100 |   97.56 | 127               
-  ...ectService.ts |       0 |        0 |       0 |       0 | 5-50              
-  ...anceScorer.ts |   71.42 |      100 |      40 |      75 | 10-11,37          
-  ...torService.ts |   94.73 |      100 |    90.9 |   93.75 | 46                
-  ...ataService.ts |   97.82 |     90.9 |     100 |     100 | 129-148           
- ...mplementations |   69.56 |       40 |   57.14 |   69.56 |                   
-  ...FileSystem.ts |   66.66 |       50 |    62.5 |   66.66 | 55-71             
-  ...temWatcher.ts |     100 |       75 |     100 |     100 | 11                
-  NodeShell.ts     |       0 |        0 |       0 |       0 | 1-8               
- services/mocks    |   96.92 |       80 |     100 |   96.92 |                   
-  ...FileSystem.ts |     100 |    77.77 |     100 |     100 | 44-49,58          
-  MockServices.ts  |   96.96 |       85 |     100 |   96.96 | 114               
-  MockShell.ts     |   83.33 |       50 |     100 |   83.33 | 18                
+  ...Dashboard.tsx |       0 |        0 |       0 |       0 | 23-104            
+ ...n/src/services |    8.35 |    12.56 |    3.89 |    8.75 |                   
+  ...tryService.ts |       0 |        0 |       0 |       0 | 6-148             
+  ...ingService.ts |       0 |        0 |       0 |       0 | 5-70              
+  ...ionService.ts |       0 |        0 |       0 |       0 | 12-111            
+  IPCSchemas.ts    |       0 |      100 |     100 |       0 | 3-50              
+  ...ionService.ts |       0 |        0 |       0 |       0 | 28-279            
+  ...anceScorer.ts |       0 |        0 |       0 |       0 | 7-42              
+  ...ateMachine.ts |       0 |        0 |       0 |       0 | 1-74              
+  ...gerService.ts |       0 |        0 |       0 |       0 | 3-62              
+  ...torService.ts |       0 |        0 |       0 |       0 | 5-46              
+  ...ataService.ts |       0 |        0 |       0 |       0 | 5-169             
+  ...tionEngine.ts |       0 |        0 |       0 |       0 | 29-83             
+ ...services/gates |       0 |        0 |       0 |       0 |                   
+  CodeGate.ts      |       0 |        0 |       0 |       0 | 9-21              
+  PlanGate.ts      |       0 |        0 |       0 |       0 | 13-53             
+  SpecGate.ts      |       0 |        0 |       0 |       0 | 12-52             
+  TasksGate.ts     |       0 |        0 |       0 |       0 | 11-56             
+ ...mplementations |       0 |        0 |       0 |       0 |                   
+  ...FileSystem.ts |       0 |        0 |       0 |       0 | 13-71             
+  ...temWatcher.ts |       0 |        0 |       0 |       0 | 5-23              
+  NodeShell.ts     |       0 |        0 |       0 |       0 | 1-16              
+ ...services/mocks |    64.7 |       65 |      50 |    64.7 |                   
+  ...FileSystem.ts |   81.48 |    72.22 |   66.66 |   81.48 | 18,32-40,96       
+  MockShell.ts     |       0 |        0 |       0 |       0 | 7-29              
 -------------------|---------|----------|---------|---------|-------------------
 
 =============================== Coverage summary ===============================
-Statements   : 88.6% ( 381/430 )
-Branches     : 74.79% ( 181/242 )
-Functions    : 83.01% ( 88/106 )
-Lines        : 89.24% ( 365/409 )
+Statements   : 7.56% ( 55/727 )
+Branches     : 10.63% ( 37/348 )
+Functions    : 5.29% ( 9/170 )
+Lines        : 7.85% ( 55/700 )
 ================================================================================
+ERROR: Coverage for lines (7.85%) does not meet global threshold (100%)
+ERROR: Coverage for functions (5.29%) does not meet global threshold (100%)
+ERROR: Coverage for statements (7.56%) does not meet global threshold (100%)
+ERROR: Coverage for branches (10.63%) does not meet global threshold (100%)

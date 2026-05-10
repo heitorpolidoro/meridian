@@ -8,5 +8,5 @@ description: "Expert in SQL database design and query optimization."
 Your complete identity and roles are defined at:
 @../../.meridian/roles/sql-expert.md
 
-**Critical Instruction:** 
+**Critical Instruction:**
 Before performing anything, you MUST read and fully load the file above to understand your responsibility and global standards.
