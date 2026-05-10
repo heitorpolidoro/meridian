@@ -31,6 +31,7 @@ const { mSocket, mIO, mChildProcess, state, mSpawn, mExec } = vi.hoisted(() => (
   },
   mIO: {
     on: vi.fn(),
+    emit: vi.fn(),
   },
   mChildProcess: {
     stdin: {
@@ -62,13 +63,16 @@ vi.mock("socket.io", () => {
   };
 });
 
-vi.mock("express", () => {
-  const mApp = {
+const { mApp } = vi.hoisted(() => ({
+  mApp: {
     use: vi.fn(),
     get: vi.fn(),
     post: vi.fn(),
     listen: vi.fn(),
-  };
+  }
+}));
+
+vi.mock("express", () => {
   const mExpress: any = vi.fn(() => mApp);
   mExpress.static = vi.fn();
   return {
@@ -137,6 +141,24 @@ describe("server.ts", () => {
       vi.mocked(fs.readFileSync).mockReturnValue("invalid json");
       const settings = server.getSettings();
       expect(settings).toEqual({ rootDir: process.cwd() });
+    });
+
+    it("overrides rootDir if MERIDIAN_ROOT is set", () => {
+      const originalRoot = process.env.MERIDIAN_ROOT;
+      process.env.MERIDIAN_ROOT = "/env/root";
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({ rootDir: "/custom" }),
+      );
+      
+      const settings = server.getSettings();
+      expect(settings.rootDir).toBe("/env/root");
+      
+      if (originalRoot === undefined) {
+        delete process.env.MERIDIAN_ROOT;
+      } else {
+        process.env.MERIDIAN_ROOT = originalRoot;
+      }
     });
   });
 
@@ -673,6 +695,33 @@ describe("server.ts", () => {
         expect(socket.emit).toHaveBeenCalledWith("projects", projects);
       });
 
+      it("handles save-project-config", () => {
+        const handler = vi.mocked(socket.on).mock.calls.find(call => call[0] === "save-project-config")?.[1];
+        const config = { name: "New Proj" };
+        const projects = [{ id: "p1", name: "New Proj" }];
+        vi.mocked(ProjectService.prototype.listProjects).mockReturnValue(projects as any);
+
+        handler({ projectPath: "/proj", config });
+
+        expect(ProjectService.prototype.saveProjectConfig).toHaveBeenCalledWith("/proj", config);
+        expect(socket.emit).toHaveBeenCalledWith("project-config-saved");
+        expect(mIO.emit).toHaveBeenCalledWith("projects", projects);
+      });
+
+      it("handles save-project-config with error", () => {
+        const handler = vi.mocked(socket.on).mock.calls.find(call => call[0] === "save-project-config")?.[1];
+        const config = { name: "New Proj" };
+        vi.mocked(ProjectService.prototype.saveProjectConfig).mockImplementation(() => {
+          throw new Error("test error");
+        });
+        const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+        handler({ projectPath: "/proj", config });
+
+        expect(consoleSpy).toHaveBeenCalled();
+        consoleSpy.mockRestore();
+      });
+
       it("handles get-file-content", () => {
         const handler = vi.mocked(socket.on).mock.calls.find(call => call[0] === "get-file-content")?.[1];
         vi.mocked(fs.existsSync).mockReturnValue(true);
@@ -699,8 +748,19 @@ describe("server.ts", () => {
   });
 
   describe("Module initialization", () => {
-    it("does not create SETTINGS_DIR if it already exists", async () => {
+    let originalNodeEnv: string | undefined;
+
+    beforeEach(() => {
+      originalNodeEnv = process.env.NODE_ENV;
       vi.resetModules();
+      mApp.get.mockClear();
+    });
+
+    afterEach(() => {
+      process.env.NODE_ENV = originalNodeEnv;
+    });
+
+    it("does not create SETTINGS_DIR if it already exists", async () => {
       vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.mkdirSync).mockClear();
       
@@ -709,6 +769,36 @@ describe("server.ts", () => {
       // The exact call with SETTINGS_DIR should not have happened
       const mkdirCalls = vi.mocked(fs.mkdirSync).mock.calls;
       expect(mkdirCalls.length).toBe(0);
+    });
+
+    it("registers fallback route to index.html in production mode", async () => {
+      process.env.NODE_ENV = "production";
+      await import("./server");
+
+      const getCall = mApp.get.mock.calls.find(call => call[0].toString() === "/^(?!\\/socket\\.io).+/");
+      expect(getCall).toBeDefined();
+
+      const handler = getCall[1];
+      const mockReq = {};
+      const mockRes = { sendFile: vi.fn() };
+
+      handler(mockReq, mockRes);
+      expect(mockRes.sendFile).toHaveBeenCalledWith(expect.stringContaining("index.html"));
+    });
+
+    it("registers fallback route to redirect to Vite in development mode", async () => {
+      process.env.NODE_ENV = "development";
+      await import("./server");
+
+      const getCall = mApp.get.mock.calls.find(call => call[0].toString() === "/^(?!\\/socket\\.io).+/");
+      expect(getCall).toBeDefined();
+
+      const handler = getCall[1];
+      const mockReq = { url: "/test-route" };
+      const mockRes = { redirect: vi.fn() };
+
+      handler(mockReq, mockRes);
+      expect(mockRes.redirect).toHaveBeenCalledWith("http://localhost:5174/test-route");
     });
   });
 });
