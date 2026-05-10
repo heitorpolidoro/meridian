@@ -61,17 +61,22 @@ export const DirectoryPicker: React.FC<DirectoryPickerProps> = ({ socket, initia
             <button type="button" onClick={goUp} disabled={loading}>⬆️ Up</button>
           </div>
           <ul className="entry-list">
-            {loading ? (
-              <li className="loading">Loading...</li>
-            ) : entries.length > 0 ? (
-              entries.map(name => (
-                <li key={name} onClick={() => navigateTo(name)}>
-                  📁 {name}
-                </li>
-              ))
-            ) : (
-              <li className="empty">No subdirectories found.</li>
-            )}
+            {loading && <li className="loading">Loading...</li>}
+            {!loading && entries.length === 0 && <li className="empty">No subdirectories found.</li>}
+            {!loading && entries.length > 0 && entries.map(name => (
+              <li 
+                key={name} 
+                onClick={() => navigateTo(name)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') navigateTo(name);
+                  if (e.key === ' ') navigateTo(name);
+                }}
+                role="button"
+                tabIndex={0}
+              >
+                📁 {name}
+              </li>
+            ))}
           </ul>
         </div>
         <footer>

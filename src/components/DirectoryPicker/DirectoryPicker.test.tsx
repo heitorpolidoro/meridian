@@ -136,6 +136,41 @@ describe("DirectoryPicker", () => {
     expect(screen.getByText("C:\\initial\\path\\folder1")).toBeInTheDocument();
   });
 
+  it("navigates to subdirectory when Enter or Space is pressed", () => {
+    render(
+      <DirectoryPicker
+        socket={mockSocket}
+        initialPath="/initial/path"
+        onSelect={mockOnSelect}
+        onClose={mockOnClose}
+      />
+    );
+
+    const onDirContents = mockSocket.on.mock.calls.find((call: any) => call[0] === "dir-contents")![1];
+    
+    act(() => {
+      onDirContents(["folder1"]);
+    });
+
+    const folder = screen.getByText("📁 folder1");
+    
+    // Test Enter
+    fireEvent.keyDown(folder, { key: 'Enter' });
+    expect(screen.getByText("/initial/path/folder1")).toBeInTheDocument();
+
+    // Reset and test Space
+    act(() => {
+      onDirContents(["folder1", "folder2"]);
+    });
+    const folder2 = screen.getByText("📁 folder2");
+    fireEvent.keyDown(folder2, { key: ' ' });
+    expect(screen.getByText("/initial/path/folder1/folder2")).toBeInTheDocument();
+
+    // Test other key (should not navigate)
+    fireEvent.keyDown(folder2, { key: 'Escape' });
+    expect(screen.getByText("/initial/path/folder1/folder2")).toBeInTheDocument();
+  });
+
   it("navigates to subdirectory when clicked (windows separator)", () => {
     render(
       <DirectoryPicker

@@ -1,7 +1,7 @@
 import express from "express";
 import { createServer } from "node:http";
 import { Server, Socket } from "socket.io";
-import { spawn, exec, type ChildProcess } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import fs from "node:fs";
@@ -30,15 +30,15 @@ const DEFAULT_SETTINGS = { rootDir: process.env.MERIDIAN_ROOT || process.cwd() }
  */
 export function getSettings() {
   let settings;
-  if (!fs.existsSync(SETTINGS_FILE)) {
-    settings = { ...DEFAULT_SETTINGS };
-    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
-  } else {
+  if (fs.existsSync(SETTINGS_FILE)) {
     try {
       settings = JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf8"));
     } catch {
       settings = { ...DEFAULT_SETTINGS };
     }
+  } else {
+    settings = { ...DEFAULT_SETTINGS };
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
   }
 
   // Override with environment variable if provided (e.g., from the meridian CLI script)
@@ -90,19 +90,22 @@ export function log(
 const app = express();
 const isDev = process.env.NODE_ENV !== "production";
 
-if (!isDev) {
+if (isDev) {
+  log("Running in development mode - access the frontend via Vite on port 5174", "INFO");
+  
+  // In development, redirect root or any non-socket request to the Vite server
+  app.get(/^(?!\/socket\.io).+/, (req, res) => {
+    // Sanitize the URL to prevent open redirect vulnerabilities
+    const targetPath = req.url.startsWith('/') ? req.url : '/' + req.url.split('/').slice(3).join('/');
+    const safeTarget = new URL(targetPath, "http://localhost:5174").toString();
+    res.redirect(safeTarget);
+  });
+} else {
   app.use(express.static("dist"));
 
   // Fallback to index.html for SPA routing using a Regex to bypass Express 5 string parsing quirks
   app.get(/^(?!\/socket\.io).+/, (req, res) => {
     res.sendFile(path.join(__dirname, "dist", "index.html"));
-  });
-} else {
-  log("Running in development mode - access the frontend via Vite on port 5174", "INFO");
-  
-  // In development, redirect root or any non-socket request to the Vite server
-  app.get(/^(?!\/socket\.io).+/, (req, res) => {
-    res.redirect("http://localhost:5174" + req.url);
   });
 }
 

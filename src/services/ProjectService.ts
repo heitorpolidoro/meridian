@@ -14,6 +14,35 @@ export type Project = z.infer<typeof ProjectSchema>;
 export class ProjectService {
   constructor(private readonly fs: IFileSystem) {}
 
+  private getProjectFromDirectory(parentPath: string, folderName: string): Project | null {
+    const fullPath = path.join(parentPath, folderName);
+    if (!this.fs.isDirectory(fullPath)) return null;
+
+    const meridianPath = path.join(fullPath, ".meridian");
+    if (!this.fs.exists(meridianPath) || !this.fs.isDirectory(meridianPath)) return null;
+
+    let projectName = folderName;
+    const projectJsonPath = path.join(meridianPath, "project.json");
+
+    if (this.fs.exists(projectJsonPath)) {
+      try {
+        const content = this.fs.readFile(projectJsonPath);
+        const config = JSON.parse(content);
+        if (config.name) {
+          projectName = config.name;
+        }
+      } catch {
+        // Fallback to folder name if JSON is invalid or unreadable
+      }
+    }
+
+    return {
+      id: folderName, // Use folder name as ID for now
+      name: projectName,
+      path: fullPath,
+    };
+  }
+
   listProjects(searchPath: string): Project[] {
     if (!this.fs.exists(searchPath) || !this.fs.isDirectory(searchPath)) {
       return [];
@@ -24,42 +53,10 @@ export class ProjectService {
       const projects: Project[] = [];
 
       for (const item of items) {
-        const fullPath = path.join(searchPath, item);
-        if (this.fs.isDirectory(fullPath)) {
-          const meridianPath = path.join(fullPath, ".meridian");
-          if (
-            this.fs.exists(meridianPath) &&
-            this.fs.isDirectory(meridianPath)
-          ) {
-            let projectName = item;
-            const projectJsonPath = path.join(meridianPath, "project.json");
-
-            if (this.fs.exists(projectJsonPath)) {
-              try {
-                const content = this.fs.readFile(projectJsonPath);
-                const config = JSON.parse(content);
-                if (config.name) {
-                  projectName = config.name;
-                }
-              } catch {
-                // Fallback to folder name if JSON is invalid or unreadable
-              }
-            }
-
-            projects.push({
-              id: item, // Use folder name as ID for now
-              name: projectName,
-              path: fullPath,
-            });
-          }
+        const project = this.getProjectFromDirectory(searchPath, item);
+        if (project) {
+          projects.push(project);
         }
-      }
-
-      // Also check if the searchPath itself is a project
-      const rootMeridian = path.join(searchPath, '.meridian');
-      if (this.fs.exists(rootMeridian) && this.fs.isDirectory(rootMeridian)) {
-        // If the searchPath itself is a project, it might be the only one or one of many
-        // But usually listProjects is called on a parent directory
       }
 
       return projects;

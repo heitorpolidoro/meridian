@@ -147,7 +147,7 @@ nav button:focus-visible {
   background: rgba(56, 189, 248, 0.05);
 }
 .sidebar-project-list button.active {
-  color: #7dd3fc;
+  color: #ffffff;
   background: rgba(56, 189, 248, 0.1);
   border-left-color: #38bdf8;
 }

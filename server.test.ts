@@ -771,6 +771,23 @@ describe("server.ts", () => {
       expect(mkdirCalls.length).toBe(0);
     });
 
+    it("uses MERIDIAN_ROOT for DEFAULT_SETTINGS if set", async () => {
+      const originalRoot = process.env.MERIDIAN_ROOT;
+      process.env.MERIDIAN_ROOT = "/env/root/init";
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+      
+      const serverModule = await import("./server");
+      const settings = serverModule.getSettings();
+      
+      expect(settings.rootDir).toBe("/env/root/init");
+      
+      if (originalRoot === undefined) {
+        delete process.env.MERIDIAN_ROOT;
+      } else {
+        process.env.MERIDIAN_ROOT = originalRoot;
+      }
+    });
+
     it("registers fallback route to index.html in production mode", async () => {
       process.env.NODE_ENV = "production";
       await import("./server");
@@ -794,11 +811,15 @@ describe("server.ts", () => {
       expect(getCall).toBeDefined();
 
       const handler = getCall[1];
-      const mockReq = { url: "/test-route" };
       const mockRes = { redirect: vi.fn() };
 
-      handler(mockReq, mockRes);
+      // Case 1: starts with /
+      handler({ url: "/test-route" }, mockRes);
       expect(mockRes.redirect).toHaveBeenCalledWith("http://localhost:5174/test-route");
+
+      // Case 2: does not start with /
+      handler({ url: "http://other.com/a/b/c/d" }, mockRes);
+      expect(mockRes.redirect).toHaveBeenCalledWith("http://localhost:5174/a/b/c/d");
     });
   });
 });
