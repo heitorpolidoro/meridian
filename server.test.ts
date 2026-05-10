@@ -6,6 +6,9 @@ import { Socket } from "socket.io";
 import { TelemetryCollectorService } from "./src/services/TelemetryCollectorService";
 import { AgentRegistryService } from "./src/services/AgentRegistryService";
 import { BootstrappingService } from "./src/services/BootstrappingService";
+import { TrackMetadataService } from "./src/services/TrackMetadataService";
+import { ProjectService } from "./src/services/ProjectService";
+import { NodeFileSystem } from "./src/services/implementations/NodeFileSystem";
 
 // Mock services and modules
 vi.mock("node:fs", () => ({
@@ -17,8 +20,9 @@ vi.mock("node:fs", () => ({
   },
 }));
 
-const { mSocket, mIO, mChildProcess, state, mSpawn } = vi.hoisted(() => ({
+const { mSocket, mIO, mChildProcess, state, mSpawn, mExec } = vi.hoisted(() => ({
   mSpawn: vi.fn(),
+  mExec: vi.fn(),
   state: { connectionHandler: null as any },
   mSocket: {
     on: vi.fn(),
@@ -90,8 +94,10 @@ vi.mock("node:child_process", () => {
   mSpawn.mockImplementation(() => mChildProcess);
   return {
     spawn: mSpawn,
+    exec: mExec,
     default: {
       spawn: mSpawn,
+      exec: mExec,
     },
   };
 });
@@ -102,6 +108,7 @@ vi.mock("./src/services/TrackMetadataService");
 vi.mock("./src/services/BootstrappingService");
 vi.mock("./src/services/SDSComplianceScorer");
 vi.mock("./src/services/TelemetryCollectorService");
+vi.mock("./src/services/ProjectService");
 
 describe("server.ts", () => {
   beforeEach(() => {
@@ -529,6 +536,165 @@ describe("server.ts", () => {
       // Should return early, not writing anything
       diretrizHandler("test prompt");
       expect(mChildProcess.stdin.write).not.toHaveBeenCalled();
+    });
+
+    describe("New Handlers", () => {
+      let socket: any;
+
+      beforeEach(() => {
+        socket = { on: vi.fn(), emit: vi.fn() };
+        state.connectionHandler(socket);
+      });
+
+      it("handles list-dir-contents for a valid directory", () => {
+        const handler = vi.mocked(socket.on).mock.calls.find(call => call[0] === "list-dir-contents")?.[1];
+        
+        vi.mocked(NodeFileSystem.prototype.exists).mockReturnValue(true);
+        vi.mocked(NodeFileSystem.prototype.readDirectory).mockReturnValue(["dir1", "file1", "dir2"]);
+        vi.mocked(NodeFileSystem.prototype.isDirectory).mockImplementation((path: string) => 
+          path === "/test" || path.includes("dir")
+        );
+
+        handler("/test");
+
+        expect(socket.emit).toHaveBeenCalledWith("dir-contents", ["dir1", "dir2"]);
+      });
+
+      it("handles list-dir-contents for a non-existent directory", () => {
+        const handler = vi.mocked(socket.on).mock.calls.find(call => call[0] === "list-dir-contents")?.[1];
+        vi.mocked(NodeFileSystem.prototype.exists).mockReturnValue(false);
+
+        handler("/invalid");
+
+        expect(socket.emit).toHaveBeenCalledWith("dir-contents", []);
+      });
+
+      it("handles list-dir-contents for a path that is not a directory", () => {
+        const handler = vi.mocked(socket.on).mock.calls.find(call => call[0] === "list-dir-contents")?.[1];
+        vi.mocked(NodeFileSystem.prototype.exists).mockReturnValue(true);
+        vi.mocked(NodeFileSystem.prototype.isDirectory).mockReturnValue(false);
+
+        handler("/file.txt");
+
+        expect(socket.emit).toHaveBeenCalledWith("dir-contents", []);
+      });
+
+      it("handles list-dir-contents when error occurs", () => {
+        const handler = vi.mocked(socket.on).mock.calls.find(call => call[0] === "list-dir-contents")?.[1];
+        
+        vi.mocked(NodeFileSystem.prototype.exists).mockImplementation(() => { throw new Error("FS Error"); });
+        const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+        handler("/error");
+
+        expect(socket.emit).toHaveBeenCalledWith("dir-contents", []);
+        expect(spy).toHaveBeenCalledWith(expect.stringContaining("Error listing directory"));
+        spy.mockRestore();
+      });
+
+      it("handles list-dir-contents when nested isDirectory throws", () => {
+        const handler = vi.mocked(socket.on).mock.calls.find(call => call[0] === "list-dir-contents")?.[1];
+        
+        vi.mocked(NodeFileSystem.prototype.exists).mockReturnValue(true);
+        vi.mocked(NodeFileSystem.prototype.readDirectory).mockReturnValue(["dir1"]);
+        vi.mocked(NodeFileSystem.prototype.isDirectory).mockImplementation((path: string) => {
+          if (path === "/test") return true;
+          throw new Error("Nested Error");
+        });
+
+        handler("/test");
+
+        expect(socket.emit).toHaveBeenCalledWith("dir-contents", []);
+      });
+
+      it("handles get-parent-dir", () => {
+        const handler = vi.mocked(socket.on).mock.calls.find(call => call[0] === "get-parent-dir")?.[1];
+        handler("/test/path");
+        expect(socket.emit).toHaveBeenCalledWith("parent-dir", expect.stringContaining("test"));
+      });
+
+      it("handles get-settings", () => {
+        const handler = vi.mocked(socket.on).mock.calls.find(call => call[0] === "get-settings")?.[1];
+        vi.mocked(fs.existsSync).mockReturnValue(true);
+        vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ rootDir: "/test" }));
+
+        handler();
+
+        expect(socket.emit).toHaveBeenCalledWith("settings", { rootDir: "/test" });
+      });
+
+      it("handles save-settings", () => {
+        const handler = vi.mocked(socket.on).mock.calls.find(call => call[0] === "save-settings")?.[1];
+        const newSettings = { rootDir: "/new" };
+
+        handler(newSettings);
+
+        expect(fs.writeFileSync).toHaveBeenCalledWith(expect.any(String), JSON.stringify(newSettings, null, 2));
+        expect(socket.emit).toHaveBeenCalledWith("settings-saved", newSettings);
+      });
+
+      it("handles get-agents", () => {
+        const handler = vi.mocked(socket.on).mock.calls.find(call => call[0] === "get-agents")?.[1];
+        const agents = [{ id: "1", name: "A1" }];
+        vi.mocked(AgentRegistryService.prototype.getAgents).mockReturnValue(agents as any);
+
+        handler();
+
+        expect(socket.emit).toHaveBeenCalledWith("agents", agents);
+      });
+
+      it("handles save-agents", () => {
+        const handler = vi.mocked(socket.on).mock.calls.find(call => call[0] === "save-agents")?.[1];
+        const agents = [{ id: "1", name: "A1" }];
+
+        handler(agents);
+
+        expect(AgentRegistryService.prototype.saveAgents).toHaveBeenCalledWith(agents);
+        expect(socket.emit).toHaveBeenCalledWith("agents-saved");
+      });
+
+      it("handles get-tracks", () => {
+        const handler = vi.mocked(socket.on).mock.calls.find(call => call[0] === "get-tracks")?.[1];
+        const tracks = [{ id: "t1", name: "Track 1" }];
+        vi.mocked(TrackMetadataService.prototype.listTracksWithMetadata).mockReturnValue(tracks as any);
+
+        handler();
+
+        expect(socket.emit).toHaveBeenCalledWith("tracks", tracks);
+      });
+
+      it("handles get-projects", () => {
+        const handler = vi.mocked(socket.on).mock.calls.find(call => call[0] === "get-projects")?.[1];
+        const projects = [{ id: "p1", name: "Proj 1" }];
+        vi.mocked(ProjectService.prototype.listProjects).mockReturnValue(projects as any);
+
+        handler();
+
+        expect(socket.emit).toHaveBeenCalledWith("projects", projects);
+      });
+
+      it("handles get-file-content", () => {
+        const handler = vi.mocked(socket.on).mock.calls.find(call => call[0] === "get-file-content")?.[1];
+        vi.mocked(fs.existsSync).mockReturnValue(true);
+        vi.mocked(fs.readFileSync).mockReturnValue("file content");
+
+        handler({ trackId: "t1", fileName: "spec.md" });
+
+        expect(socket.emit).toHaveBeenCalledWith("file-content", {
+          trackId: "t1",
+          fileName: "spec.md",
+          content: "file content"
+        });
+      });
+
+      it("does not emit file-content if file does not exist", () => {
+        const handler = vi.mocked(socket.on).mock.calls.find(call => call[0] === "get-file-content")?.[1];
+        vi.mocked(fs.existsSync).mockReturnValue(false);
+
+        handler({ trackId: "t1", fileName: "spec.md" });
+
+        expect(socket.emit).not.toHaveBeenCalledWith("file-content", expect.anything());
+      });
     });
   });
 

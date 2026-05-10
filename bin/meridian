@@ -1,0 +1,48 @@
+#!/bin/bash
+
+# Get the absolute path of the Meridian installation
+# This works even if the script is symlinked
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+  DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+MERIDIAN_PATH="$(dirname "$DIR")"
+
+# Current Working Directory where the user is
+CWD="$(pwd)"
+
+# Check for flags
+USE_DEV=false
+for arg in "$@"; do
+    if [ "$arg" = "--dev" ]; then
+        USE_DEV=true
+    fi
+done
+
+export MERIDIAN_ROOT="$CWD"
+
+if [ "$USE_DEV" = true ]; then
+    echo "🚀 Starting Meridian in DEVELOPMENT mode (Hot Reload)..."
+    echo "📂 Root Directory: $CWD"
+    echo "🌐 Frontend (Vite): http://localhost:5174"
+    echo "🔌 Backend (API):   http://localhost:3000"
+    
+    cd "$MERIDIAN_PATH" || exit
+    # In dev mode, we don't set NODE_ENV=production
+    npm run dev
+else
+    echo "🚀 Starting Meridian..."
+    echo "📂 Root Directory: $CWD"
+    echo "🌐 Meridian is running at http://localhost:3000"
+    
+    cd "$MERIDIAN_PATH" || exit
+    # Ensure dist exists, otherwise run build
+    if [ ! -d "dist" ]; then
+        echo "📦 Missing build: Building frontend..."
+        npm run build
+    fi
+    npm start
+fi

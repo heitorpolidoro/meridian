@@ -47,6 +47,47 @@ describe("ProjectService", () => {
     });
   });
 
+  it("should use the name from .meridian/project.json if it exists", () => {
+    const fs = new MockFileSystem();
+    const searchPath = "/projects";
+    fs.mkdir(searchPath);
+
+    const projectPath = path.join(searchPath, "my-project");
+    fs.mkdir(projectPath);
+    const meridianPath = path.join(projectPath, ".meridian");
+    fs.mkdir(meridianPath);
+
+    fs.writeFile(
+      path.join(meridianPath, "project.json"),
+      JSON.stringify({ name: "Custom Project Name" }),
+    );
+
+    const service = new ProjectService(fs);
+    const projects = service.listProjects(searchPath);
+
+    expect(projects).toHaveLength(1);
+    expect(projects[0].name).toBe("Custom Project Name");
+    expect(projects[0].id).toBe("my-project");
+  });
+
+  it("should fallback to folder name if .meridian/project.json is invalid JSON", () => {
+    const fs = new MockFileSystem();
+    const searchPath = "/projects";
+    fs.mkdir(searchPath);
+
+    const projectPath = path.join(searchPath, "bad-project");
+    fs.mkdir(projectPath);
+    const meridianPath = path.join(projectPath, ".meridian");
+    fs.mkdir(meridianPath);
+
+    fs.writeFile(path.join(meridianPath, "project.json"), "not json");
+
+    const service = new ProjectService(fs);
+    const projects = service.listProjects(searchPath);
+
+    expect(projects[0].name).toBe("bad-project");
+  });
+
   it("should handle errors during directory reading gracefully", () => {
     const fs = new MockFileSystem();
     fs.mkdir("/error-path");
@@ -98,5 +139,49 @@ describe("ProjectService", () => {
     // This should trigger the rootMeridian check, though it currently doesn't add to the array
     const projects = service.listProjects(searchPath);
     expect(projects).toEqual([]);
+  });
+
+  describe("saveProjectConfig", () => {
+    it("should throw an error if the project path does not exist", () => {
+      const fs = new MockFileSystem();
+      const service = new ProjectService(fs);
+      expect(() =>
+        service.saveProjectConfig("/invalid", { name: "test" }),
+      ).toThrow("Invalid project path: /invalid");
+    });
+
+    it("should create .meridian directory if it doesn't exist and save project.json", () => {
+      const fs = new MockFileSystem();
+      const projectPath = "/new-project";
+      fs.mkdir(projectPath);
+      const service = new ProjectService(fs);
+
+      const config = { name: "New Name" };
+      service.saveProjectConfig(projectPath, config);
+
+      const meridianPath = path.join(projectPath, ".meridian");
+      const projectJsonPath = path.join(meridianPath, "project.json");
+
+      expect(fs.exists(meridianPath)).toBe(true);
+      expect(fs.isDirectory(meridianPath)).toBe(true);
+      expect(fs.exists(projectJsonPath)).toBe(true);
+      expect(JSON.parse(fs.readFile(projectJsonPath))).toEqual(config);
+    });
+
+    it("should overwrite existing project.json", () => {
+      const fs = new MockFileSystem();
+      const projectPath = "/existing-project";
+      fs.mkdir(projectPath);
+      const meridianPath = path.join(projectPath, ".meridian");
+      fs.mkdir(meridianPath);
+      const projectJsonPath = path.join(meridianPath, "project.json");
+      fs.writeFile(projectJsonPath, JSON.stringify({ name: "Old Name" }));
+
+      const service = new ProjectService(fs);
+      const newConfig = { name: "Updated Name" };
+      service.saveProjectConfig(projectPath, newConfig);
+
+      expect(JSON.parse(fs.readFile(projectJsonPath))).toEqual(newConfig);
+    });
   });
 });

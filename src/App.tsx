@@ -5,6 +5,7 @@ import './components/TrackNavigator.css';
 import './components/AgentsTable.css';
 import { MarkdownViewer } from './components/MarkdownViewer/MarkdownViewer';
 import { TelemetryDashboard } from './components/TelemetryDashboard/TelemetryDashboard';
+import { DirectoryPicker } from './components/DirectoryPicker/DirectoryPicker';
 import { TelemetrySummary, SDSCompliance, SyncConflict } from './services/IPCSchemas';
 
 const socket = io();
@@ -35,7 +36,7 @@ interface Project {
 }
 
 function App() {
-  const [view, setView] = useState<'dashboard' | 'warroom' | 'tracks' | 'agents' | 'settings' | 'projects'>('dashboard');
+  const [view, setView] = useState<'dashboard' | 'warroom' | 'tracks' | 'agents' | 'settings' | 'projects' | 'project-home'>('dashboard');
   const [messages, setMessages] = useState<{ id: string; text: string; type: string }[]>([]);
   const [status, setStatus] = useState('Initializing...');
   const [input, setInput] = useState('');
@@ -48,6 +49,7 @@ function App() {
   const [compliance, setCompliance] = useState<SDSCompliance[]>([]);
   const [conflicts, setConflicts] = useState<SyncConflict[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
   
   // Track Navigator States
   const [tracks, setTracks] = useState<Track[]>([]);
@@ -59,6 +61,16 @@ function App() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newAgent, setNewAgent] = useState<Partial<Agent>>({ name: '', role: '', color: '#00c3ff', instruction: '' });
   const [editAgent, setEditAgent] = useState<Partial<Agent>>({});
+  const [isProjectsOpen, setIsProjectsOpen] = useState(true);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [projectFormName, setProjectFormName] = useState('');
+
+  // Auto-fetch projects on load
+  useEffect(() => {
+    if (settings.rootDir && projects.length === 0) {
+      socket.emit('get-projects');
+    }
+  }, [settings.rootDir, projects]);
 
   const chatRef = useRef<HTMLDivElement>(null);
   const currentAiMsgRef = useRef<string>('');
@@ -69,10 +81,13 @@ function App() {
     socket.emit('get-tracks');
     socket.emit('get-projects');
     
-    socket.on('settings', (s) => setSettings(s));
-    socket.on('agents', (a) => setAgents(a));
-    socket.on('tracks', (t) => setTracks(t));
-    socket.on('projects', (p) => setProjects(p));
+    socket.on('settings', (s) => {
+      setSettings(s);
+      socket.emit('get-projects');
+    });
+    socket.on('projects', (p) => {
+      setProjects(p);
+    });
     
     socket.on('telemetry-update', (data) => setTelemetry(data));
     socket.on('compliance-update', (data) => setCompliance(data));
@@ -111,11 +126,10 @@ function App() {
       setIsReady(true);
       currentAiMsgRef.current = '';
     });
-
-    socket.on('directory-picked', (path) => setSettings(prev => ({ ...prev, rootDir: path })));
     
     socket.on('settings-saved', () => showFlash('Settings saved.'));
     socket.on('agents-saved', () => showFlash('Squad updated.'));
+    socket.on('project-config-saved', () => showFlash('Project configuration saved.'));
 
     return () => {
       socket.off('settings');
@@ -130,11 +144,11 @@ function App() {
       socket.off('ready');
       socket.off('chunk');
       socket.off('done');
-      socket.off('directory-picked');
       socket.off('settings-saved');
       socket.off('agents-saved');
+      socket.off('project-config-saved');
     };
-  }, []);
+  }, [settings.rootDir]);
 
   useEffect(() => {
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
@@ -160,18 +174,23 @@ function App() {
   const [confirmDialog, setConfirmDialog] = useState<{ show: boolean; message: string; onConfirm: () => void } | null>(null);
 
   const handleSelectProject = (project: Project) => {
-    setConfirmDialog({
-      show: true,
-      message: `Switch to project "${project.name}"?`,
-      onConfirm: () => {
-        socket.emit('save-settings', { ...settings, rootDir: project.path });
-        setTimeout(() => {
-          socket.emit('get-agents');
-          socket.emit('get-tracks');
-          showFlash(`Switched to project ${project.name}`);
-        }, 500);
-        setConfirmDialog(null);
-      }
+    setSelectedProject(project);
+    setProjectFormName(project.name);
+    setTimeout(() => {
+      // In this mode, we tell the backend to work on the selected project's path
+      socket.emit('save-settings', { ...settings, rootDir: project.path });
+      socket.emit('get-agents');
+      socket.emit('get-tracks');
+      setView('project-home' as any);
+    }, 100);
+  };
+
+  const handleSaveProjectConfig = () => {
+    if (!selectedProject) return;
+
+    socket.emit('save-project-config', {
+      projectPath: selectedProject.path,
+      config: { name: projectFormName }
     });
   };
 
@@ -271,12 +290,14 @@ function App() {
             type="button"
             aria-current={settings.rootDir === project.path ? 'true' : undefined}
             className={`project-card ${settings.rootDir === project.path ? 'active' : ''}`} 
-            onClick={() => handleSelectProject(project)}
+            onClick={() => {
+              handleSelectProject(project);
+              setView('project-home');
+            }}
           >
             <div className="project-icon">📂</div>
             <div className="project-info">
               <span className="project-title">{project.name}</span>
-              <span className="project-path">{project.path}</span>
             </div>
             {settings.rootDir === project.path && <div className="current-badge">Current</div>}
           </button>
@@ -287,15 +308,30 @@ function App() {
     </div>
   );
 
-  /** Renders the governance dashboard view. */
+  /** Renders the governance dashboard view (now serving as the projects hub). */
   const renderDashboardView = () => (
-    <div className="view">
-      <header><h1>Governance Dashboard</h1></header>
-      <TelemetryDashboard 
-        telemetry={telemetry} 
-        compliance={compliance} 
-        conflicts={conflicts} 
-      />
+    <div className="view projects-view">
+      <header><h1>Projects Hub</h1></header>
+      <div className="projects-grid">
+        {projects.length > 0 ? projects.map(project => (
+          <button 
+            key={project.id} 
+            type="button"
+            className="project-card" 
+            onClick={() => {
+              handleSelectProject(project);
+              setView('project-home');
+            }}
+          >
+            <div className="project-icon">📂</div>
+            <div className="project-info">
+              <span className="project-title">{project.name}</span>
+            </div>
+          </button>
+        )) : (
+          <div className="no-projects">No projects found with .meridian directory in the workspace.</div>
+        )}
+      </div>
     </div>
   );
 
@@ -457,7 +493,7 @@ function App() {
       <label>Root Directory</label>
       <div className="input-group">
         <input type="text" value={settings.rootDir} readOnly />
-        <button className="browse-btn" onClick={() => socket.emit('pick-directory')}>Browse...</button>
+        <button type="button" className="browse-btn" onClick={() => setIsPickerOpen(true)}>Browse...</button>
       </div>
     </div>
   );
@@ -468,7 +504,7 @@ function App() {
       <header><h1>Settings</h1></header>
       <div className="settings-content">
         {renderSettingsForm()}
-        <button className="save-btn" onClick={() => socket.emit('save-settings', settings)}>Save Settings</button>
+        <button type="button" className="save-btn" onClick={() => socket.emit('save-settings', settings)}>Save Settings</button>
       </div>
     </div>
   );
@@ -477,11 +513,39 @@ function App() {
   const renderContent = () => {
     switch (view) {
       case 'dashboard': return renderDashboardView();
-      case 'projects': return renderProjectsView();
       case 'tracks': return renderTracksView();
       case 'warroom': return renderWarRoomView();
-      case 'agents': return renderAgentsView();
       case 'settings': return renderSettingsView();
+      case 'project-home': return (
+        <div className="view">
+          <header><h1>Project: {selectedProject?.name || 'Home'}</h1></header>
+          <div className="project-home-content" style={{ padding: '2rem' }}>
+            <div className="project-settings-form" style={{ maxWidth: '600px', backgroundColor: 'rgba(255,255,255,0.05)', padding: '2rem', borderRadius: '8px' }}>
+              <h3>Project Settings</h3>
+              <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.5rem' }}>Project Name</label>
+                <input 
+                  type="text" 
+                  value={projectFormName} 
+                  onChange={(e) => setProjectFormName(e.target.value)}
+                  style={{ width: '100%', padding: '0.5rem', background: '#222', border: '1px solid #444', color: '#fff' }}
+                />
+              </div>
+              <button 
+                type="button" 
+                className="save-btn" 
+                onClick={handleSaveProjectConfig}
+              >
+                Save Project Config
+              </button>
+            </div>
+            
+            <div style={{ marginTop: '2rem' }}>
+              <p>Welcome to the project home. Specific features for this project will be defined soon.</p>
+            </div>
+          </div>
+        </div>
+      );
       default: return renderDashboardView();
     }
   };
@@ -493,6 +557,18 @@ function App() {
       <div id="flash-container">
         {flashes.map(f => <div key={f.id} className="flash-msg">{f.text}</div>)}
       </div>
+
+      {isPickerOpen && (
+        <DirectoryPicker 
+          socket={socket} 
+          initialPath={settings.rootDir} 
+          onSelect={(path) => {
+            setSettings(prev => ({ ...prev, rootDir: path }));
+            setIsPickerOpen(false);
+          }}
+          onClose={() => setIsPickerOpen(false)}
+        />
+      )}
 
       {confirmDialog?.show && (
         <div className="confirm-overlay">
@@ -509,19 +585,39 @@ function App() {
       <aside>
         <div className="sidebar-header">
           <h2>Meridian</h2>
-          {activeProject && (
-            <div className="active-project-info">
-              <span className="project-label">Project:</span>
-              <span className="project-name">{activeProject.name}</span>
-            </div>
-          )}
         </div>
         <nav>
           <button type="button" aria-current={view === 'dashboard' ? 'page' : undefined} className={view === 'dashboard' ? 'active' : ''} onClick={() => handleViewChange('dashboard')}>Dashboard</button>
-          <button type="button" aria-current={view === 'projects' ? 'page' : undefined} className={view === 'projects' ? 'active' : ''} onClick={() => handleViewChange('projects')}>Projects</button>
-          <button type="button" aria-current={view === 'warroom' ? 'page' : undefined} className={view === 'warroom' ? 'active' : ''} onClick={() => handleViewChange('warroom')}>War Room</button>
-          <button type="button" aria-current={view === 'tracks' ? 'page' : undefined} className={view === 'tracks' ? 'active' : ''} onClick={() => handleViewChange('tracks')}>Tracks</button>
-          <button type="button" aria-current={view === 'agents' ? 'page' : undefined} className={view === 'agents' ? 'active' : ''} onClick={() => handleViewChange('agents')}>Agents</button>
+          
+          <div className="sidebar-group">
+            <button 
+              type="button" 
+              className={`sidebar-group-title ${isProjectsOpen ? 'open' : ''}`}
+              onClick={() => setIsProjectsOpen(!isProjectsOpen)}
+            >
+              <span className="arrow">{isProjectsOpen ? '▼' : '▶'}</span> Projects
+            </button>
+            
+            {isProjectsOpen && (
+              <ul className="sidebar-project-list">
+                {projects.map(project => (
+                  <li key={project.id}>
+                    <button 
+                      type="button"
+                      className={settings.rootDir === project.path ? 'active' : ''}
+                      onClick={() => {
+                        handleSelectProject(project);
+                      }}
+                    >
+                      📁 {project.name}
+                    </button>
+                  </li>
+                ))}
+                {projects.length === 0 && <li className="empty-msg">No projects found</li>}
+              </ul>
+            )}
+          </div>
+
           <button type="button" aria-current={view === 'settings' ? 'page' : undefined} className={view === 'settings' ? 'active' : ''} onClick={() => handleViewChange('settings')}>Settings</button>
         </nav>
       </aside>
