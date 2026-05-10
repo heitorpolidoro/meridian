@@ -199,7 +199,7 @@ describe("server.ts", () => {
 
   describe("log", () => {
     it("logs messages to console.error", () => {
-      const spy = vi.spyOn(console, "error").mockReturnValue(undefined);
+      const spy = vi.spyOn(console, "error").mockReturnValue();
       log("test message", "INFO");
       expect(spy).toHaveBeenCalledWith(expect.stringContaining("test message"));
       spy.mockRestore();
@@ -438,7 +438,7 @@ describe("server.ts", () => {
       startSessionHandler();
 
       const stderrOnHandler = vi.mocked(mChildProcess.stderr.on).mock.calls.find(call => call[0] === "data")?.[1];
-      const spy = vi.spyOn(console, "error").mockReturnValue(undefined);
+      const spy = vi.spyOn(console, "error").mockReturnValue();
       
       stderrOnHandler(Buffer.from("some error"));
       expect(spy).toHaveBeenCalled();
@@ -518,7 +518,7 @@ describe("server.ts", () => {
       mChildProcess.stdin.write.mockClear();
       const stdoutOnHandler = vi.mocked(mChildProcess.stdout.on).mock.calls.find(call => call[0] === "data")?.[1];
       
-      const spy = vi.spyOn(console, "error").mockReturnValue(undefined);
+      const spy = vi.spyOn(console, "error").mockReturnValue();
       stdoutOnHandler(Buffer.from('{"id": 1, "result": {}}\n'));
 
       // Check if sendACP was called
@@ -627,7 +627,7 @@ describe("server.ts", () => {
         const handler = vi.mocked(socket.on).mock.calls.find(call => call[0] === "list-dir-contents")?.[1];
         
         vi.mocked(NodeFileSystem.prototype.exists).mockImplementation(() => { throw new Error("FS Error"); });
-        const spy = vi.spyOn(console, "error").mockReturnValue(undefined);
+        const spy = vi.spyOn(console, "error").mockReturnValue();
 
         handler("/error");
 
@@ -736,7 +736,7 @@ describe("server.ts", () => {
         vi.mocked(ProjectService.prototype.saveProjectConfig).mockImplementation(() => {
           throw new Error("test error");
         });
-        const consoleSpy = vi.spyOn(console, "error").mockReturnValue(undefined);
+        const consoleSpy = vi.spyOn(console, "error").mockReturnValue();
 
         handler({ projectPath: "/proj", config });
 
