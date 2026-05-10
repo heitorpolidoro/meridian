@@ -182,7 +182,7 @@ function App() {
       socket.emit('save-settings', { ...settings, rootDir: project.path });
       socket.emit('get-agents');
       socket.emit('get-tracks');
-      setView('project-home' as any);
+      setView('project-home');
     }, 100);
   };
 

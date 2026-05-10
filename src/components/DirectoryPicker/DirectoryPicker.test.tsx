@@ -41,7 +41,7 @@ describe("DirectoryPicker", () => {
       />
     );
 
-    const onDirContents = mockSocket.on.mock.calls.find((call: any) => call[0] === "dir-contents")![1];
+    const onDirContents = mockSocket.on.mock.calls.find((call: unknown[]) => call[0] === "dir-contents")![1];
     
     act(() => {
       onDirContents(["folder1", "folder2"]);
@@ -62,7 +62,7 @@ describe("DirectoryPicker", () => {
       />
     );
 
-    const onDirContents = mockSocket.on.mock.calls.find((call: any) => call[0] === "dir-contents")![1];
+    const onDirContents = mockSocket.on.mock.calls.find((call: unknown[]) => call[0] === "dir-contents")![1];
     
     act(() => {
       onDirContents([]);
@@ -81,7 +81,7 @@ describe("DirectoryPicker", () => {
       />
     );
 
-    const onDirContents = mockSocket.on.mock.calls.find((call: any) => call[0] === "dir-contents")![1];
+    const onDirContents = mockSocket.on.mock.calls.find((call: unknown[]) => call[0] === "dir-contents")![1];
     
     act(() => {
       onDirContents(["folder1"]);
@@ -104,7 +104,7 @@ describe("DirectoryPicker", () => {
       />
     );
 
-    const onDirContents = mockSocket.on.mock.calls.find((call: any) => call[0] === "dir-contents")![1];
+    const onDirContents = mockSocket.on.mock.calls.find((call: unknown[]) => call[0] === "dir-contents")![1];
     
     act(() => {
       onDirContents(["folder1"]);
@@ -125,7 +125,7 @@ describe("DirectoryPicker", () => {
       />
     );
 
-    const onDirContents = mockSocket.on.mock.calls.find((call: any) => call[0] === "dir-contents")![1];
+    const onDirContents = mockSocket.on.mock.calls.find((call: unknown[]) => call[0] === "dir-contents")![1];
     
     act(() => {
       onDirContents(["folder1"]);
@@ -146,7 +146,7 @@ describe("DirectoryPicker", () => {
       />
     );
 
-    const onDirContents = mockSocket.on.mock.calls.find((call: any) => call[0] === "dir-contents")![1];
+    const onDirContents = mockSocket.on.mock.calls.find((call: unknown[]) => call[0] === "dir-contents")![1];
     
     act(() => {
       onDirContents(["folder1"]);
@@ -181,7 +181,7 @@ describe("DirectoryPicker", () => {
       />
     );
 
-    const onDirContents = mockSocket.on.mock.calls.find((call: any) => call[0] === "dir-contents")![1];
+    const onDirContents = mockSocket.on.mock.calls.find((call: unknown[]) => call[0] === "dir-contents")![1];
     
     act(() => {
       onDirContents(["folder1"]);
@@ -203,7 +203,7 @@ describe("DirectoryPicker", () => {
       />
     );
 
-    const onDirContents = mockSocket.on.mock.calls.find((call: any) => call[0] === "dir-contents")![1];
+    const onDirContents = mockSocket.on.mock.calls.find((call: unknown[]) => call[0] === "dir-contents")![1];
     act(() => {
       onDirContents(["subfolder"]);
     });
@@ -212,7 +212,7 @@ describe("DirectoryPicker", () => {
 
     expect(mockSocket.emit).toHaveBeenCalledWith("get-parent-dir", "/initial/path/folder");
 
-    const onParentDir = mockSocket.on.mock.calls.find((call: any) => call[0] === "parent-dir")![1];
+    const onParentDir = mockSocket.on.mock.calls.find((call: unknown[]) => call[0] === "parent-dir")![1];
     
     act(() => {
       onParentDir("/initial/path");
