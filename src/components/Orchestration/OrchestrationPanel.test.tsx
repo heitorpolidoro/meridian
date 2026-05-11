@@ -1,11 +1,10 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import type { Socket } from "socket.io-client";
 import { OrchestrationPanel } from "./OrchestrationPanel";
 
 describe("OrchestrationPanel", () => {
-  const mockSocket = {
-    emit: vi.fn(),
-  };
+  const mockSocket = { emit: vi.fn() } as unknown as Socket;
 
   const defaultMetadata = {
     orchestration: {
@@ -24,7 +23,6 @@ describe("OrchestrationPanel", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.spyOn(window, "prompt").mockImplementation(() => "2.1");
   });
 
   it("renders the current phase label", () => {
@@ -114,7 +112,7 @@ describe("OrchestrationPanel", () => {
     expect(mockSocket.emit).not.toHaveBeenCalled();
   });
 
-  it("emits override transition request when clicking force override", () => {
+  it("emits override transition request when clicking force override and confirming", () => {
     render(
       <OrchestrationPanel
         trackId="test-track"
@@ -123,6 +121,10 @@ describe("OrchestrationPanel", () => {
       />,
     );
     fireEvent.click(screen.getByText("Force Override"));
+
+    const input = screen.getByLabelText("Force override to phase:");
+    fireEvent.change(input, { target: { value: "2.1" } });
+    fireEvent.click(screen.getByText("Confirm"));
 
     expect(mockSocket.emit).toHaveBeenCalledWith(
       "orchestration:request-transition",
@@ -135,7 +137,6 @@ describe("OrchestrationPanel", () => {
   });
 
   it("does not emit transition if override phase is invalid", () => {
-    vi.spyOn(window, "prompt").mockImplementation(() => "invalid-phase");
     render(
       <OrchestrationPanel
         trackId="test-track"
@@ -144,12 +145,29 @@ describe("OrchestrationPanel", () => {
       />,
     );
     fireEvent.click(screen.getByText("Force Override"));
+
+    const input = screen.getByLabelText("Force override to phase:");
+    fireEvent.change(input, { target: { value: "invalid-phase" } });
+    fireEvent.click(screen.getByText("Confirm"));
 
     expect(mockSocket.emit).not.toHaveBeenCalled();
   });
 
   it("does not emit transition if override is cancelled", () => {
-    vi.spyOn(window, "prompt").mockImplementation(() => null);
+    render(
+      <OrchestrationPanel
+        trackId="test-track"
+        metadata={defaultMetadata}
+        socket={mockSocket}
+      />,
+    );
+    fireEvent.click(screen.getByText("Force Override"));
+    fireEvent.click(screen.getByText("Cancel"));
+
+    expect(mockSocket.emit).not.toHaveBeenCalled();
+  });
+
+  it("hides override dialog after cancel", () => {
     render(
       <OrchestrationPanel
         trackId="test-track"
@@ -159,7 +177,11 @@ describe("OrchestrationPanel", () => {
     );
     fireEvent.click(screen.getByText("Force Override"));
 
-    expect(mockSocket.emit).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Force override to phase:")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Cancel"));
+    expect(
+      screen.queryByLabelText("Force override to phase:"),
+    ).not.toBeInTheDocument();
   });
 
   it("toggles logs visibility", () => {

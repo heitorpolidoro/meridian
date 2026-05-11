@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import type { Socket } from "socket.io-client";
 import "./OrchestrationPanel.css";
 import { SDSPhase, SDS_PHASES } from "../../services/SDSStateMachine";
 
@@ -21,7 +22,7 @@ interface OrchestrationPanelProps {
       logs: OrchestrationLog[];
     };
   };
-  socket: any;
+  socket: Socket;
 }
 
 const PHASE_LABELS: Record<SDSPhase, string> = {
@@ -33,16 +34,20 @@ const PHASE_LABELS: Record<SDSPhase, string> = {
   "5.0": "Done",
 };
 
+/** Renders the SDS Orchestration panel for a given track. */
 export const OrchestrationPanel: React.FC<OrchestrationPanelProps> = ({
   trackId,
   metadata,
   socket,
 }) => {
   const [showLogs, setShowLogs] = useState(false);
+  const [showOverrideDialog, setShowOverrideDialog] = useState(false);
+  const [overridePhaseInput, setOverridePhaseInput] = useState("");
   const { currentPhase, status, logs } = metadata.orchestration;
 
   const currentPhaseIndex = SDS_PHASES.indexOf(currentPhase);
 
+  /** Approves the handoff to the next phase. */
   const handleApprove = () => {
     const nextPhaseIndex = currentPhaseIndex + 1;
     if (nextPhaseIndex < SDS_PHASES.length) {
@@ -54,18 +59,21 @@ export const OrchestrationPanel: React.FC<OrchestrationPanelProps> = ({
     }
   };
 
+  /** Opens the force override dialog. */
   const handleOverride = () => {
-    const targetPhase = prompt(
-      "Force override to phase (e.g. 1.1, 1.2, 2.1, 3.1, 4.2, 5.0):",
-      currentPhase,
-    );
-    if (targetPhase && SDS_PHASES.includes(targetPhase as SDSPhase)) {
+    setOverridePhaseInput(currentPhase);
+    setShowOverrideDialog(true);
+  };
+
+  const handleConfirmOverride = () => {
+    if (SDS_PHASES.includes(overridePhaseInput as SDSPhase)) {
       socket.emit("orchestration:request-transition", {
         trackId,
-        targetPhase,
+        targetPhase: overridePhaseInput,
         trigger: "Override",
       });
     }
+    setShowOverrideDialog(false);
   };
 
   return (
@@ -83,6 +91,19 @@ export const OrchestrationPanel: React.FC<OrchestrationPanelProps> = ({
           </button>
         </div>
       </div>
+
+      {showOverrideDialog && (
+        <div className="override-dialog">
+          <label htmlFor="override-phase-input">Force override to phase:</label>
+          <input
+            id="override-phase-input"
+            value={overridePhaseInput}
+            onChange={(e) => setOverridePhaseInput(e.target.value)}
+          />
+          <button onClick={handleConfirmOverride}>Confirm</button>
+          <button onClick={() => setShowOverrideDialog(false)}>Cancel</button>
+        </div>
+      )}
 
       <div className="phase-stepper">
         {SDS_PHASES.map((phase, index) => {
@@ -114,8 +135,8 @@ export const OrchestrationPanel: React.FC<OrchestrationPanelProps> = ({
               logs
                 .slice()
                 .reverse()
-                .map((log, i) => (
-                  <div key={i} className="log-entry">
+                .map((log) => (
+                  <div key={log.timestamp} className="log-entry">
                     <span className="log-timestamp">
                       [{new Date(log.timestamp).toLocaleTimeString()}]
                     </span>

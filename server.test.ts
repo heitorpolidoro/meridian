@@ -962,7 +962,11 @@ describe("server.ts", () => {
           const tracks = [{ id: "t1", metadata: {} }];
           vi.mocked(
             TrackMetadataService.prototype.listTracksWithMetadata,
-          ).mockReturnValue(tracks as any);
+          ).mockReturnValue(
+            tracks as unknown as ReturnType<
+              typeof TrackMetadataService.prototype.listTracksWithMetadata
+            >,
+          );
 
           handler(payload);
 
@@ -1029,7 +1033,11 @@ describe("server.ts", () => {
           const tracks = [{ id: "t1", metadata: {} }];
           vi.mocked(
             TrackMetadataService.prototype.listTracksWithMetadata,
-          ).mockReturnValue(tracks as any);
+          ).mockReturnValue(
+            tracks as unknown as ReturnType<
+              typeof TrackMetadataService.prototype.listTracksWithMetadata
+            >,
+          );
 
           handler(payload);
 
@@ -1090,7 +1098,11 @@ describe("server.ts", () => {
           const state = { currentPhase: "SPEC", status: "IDLE" };
           vi.mocked(
             OrchestrationService.prototype.getOrchestrationState,
-          ).mockReturnValue(state as any);
+          ).mockReturnValue(
+            state as unknown as ReturnType<
+              typeof OrchestrationService.prototype.getOrchestrationState
+            >,
+          );
 
           handler("t1");
 

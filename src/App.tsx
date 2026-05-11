@@ -4,7 +4,6 @@ import "./App.css";
 import "./components/TrackNavigator.css";
 import "./components/AgentsTable.css";
 import { MarkdownViewer } from "./components/MarkdownViewer/MarkdownViewer";
-import { TelemetryDashboard } from "./components/TelemetryDashboard/TelemetryDashboard";
 import { DirectoryPicker } from "./components/DirectoryPicker/DirectoryPicker";
 import { OrchestrationPanel } from "./components/Orchestration/OrchestrationPanel";
 import {
@@ -98,6 +97,29 @@ function App() {
   const chatRef = useRef<HTMLDivElement>(null);
   const currentAiMsgRef = useRef<string>("");
 
+  const showFlash = (text: string) => {
+    const id = Date.now();
+    setFlashes((prev) => [...prev, { id, text }]);
+    setTimeout(
+      () => setFlashes((prev) => prev.filter((f) => f.id !== id)),
+      3000,
+    );
+  };
+
+  const handleViewChange = (newView: typeof view) => {
+    setView(newView);
+    const actions: Partial<Record<typeof view, () => void>> = {
+      warroom: () => {
+        setMessages([]);
+        socket.emit("start-session");
+      },
+      tracks: () => socket.emit("get-tracks"),
+      agents: () => socket.emit("get-agents"),
+      projects: () => socket.emit("get-projects"),
+    };
+    actions[newView]?.();
+  };
+
   useEffect(() => {
     socket.emit("get-settings");
     socket.emit("get-agents");
@@ -190,29 +212,6 @@ function App() {
     if (chatRef.current)
       chatRef.current.scrollTop = chatRef.current.scrollHeight;
   }, [messages, isTyping]);
-
-  const showFlash = (text: string) => {
-    const id = Date.now();
-    setFlashes((prev) => [...prev, { id, text }]);
-    setTimeout(
-      () => setFlashes((prev) => prev.filter((f) => f.id !== id)),
-      3000,
-    );
-  };
-
-  const handleViewChange = (newView: typeof view) => {
-    setView(newView);
-    const actions: Partial<Record<typeof view, () => void>> = {
-      warroom: () => {
-        setMessages([]);
-        socket.emit("start-session");
-      },
-      tracks: () => socket.emit("get-tracks"),
-      agents: () => socket.emit("get-agents"),
-      projects: () => socket.emit("get-projects"),
-    };
-    actions[newView]?.();
-  };
 
   const [confirmDialog, setConfirmDialog] = useState<{
     show: boolean;
