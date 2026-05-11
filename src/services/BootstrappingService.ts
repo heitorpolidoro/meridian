@@ -45,7 +45,11 @@ export class BootstrappingService {
     const trimmedLine = line.trim();
     if (trimmedLine.startsWith('@')) {
       const relativePath = trimmedLine.substring(1).trim();
-      return this.resolveFile(path.resolve(dir, relativePath), visited);
+      const targetPath =
+        relativePath.startsWith('.meridian') || relativePath.startsWith('/')
+          ? path.join(this.rootDir, relativePath.startsWith('/') ? relativePath.substring(1) : relativePath)
+          : path.resolve(dir, relativePath);
+      return this.resolveFile(targetPath, visited);
     }
     return line;
   }

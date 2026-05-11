@@ -39,7 +39,7 @@ Some instructions.`,
 name: architect
 ---
 # Stub
-@../../.meridian/roles/architect.md`,
+@.meridian/roles/architect.md`,
     );
   });
 
@@ -97,11 +97,27 @@ name: architect
     );
     mockFs.writeFile(
       path.join(rootDir, ".gemini/agents/missing.md"),
-      "@../../.meridian/roles/missing.md",
+      "@.meridian/roles/missing.md",
     );
 
     const result = service.resolve("missing");
     expect(result).toContain("[Error: File not found:");
+  });
+
+  it("should resolve root-relative paths starting with slash", () => {
+    mockFs.writeFile(
+      path.join(rootDir, ".meridian/roles/absolute.md"),
+      "@/.meridian/core/global.md",
+    );
+    mockFs.writeFile(
+      path.join(rootDir, ".gemini/agents/absolute.md"),
+      "@.meridian/roles/absolute.md",
+    );
+
+    const result = service.resolve("absolute");
+    expect(result).toContain("# Global Standards");
+    // Verify it doesn't contain an error message
+    expect(result).not.toContain("[Error: File not found:");
   });
 
   it("should throw error if stub file itself is missing", () => {

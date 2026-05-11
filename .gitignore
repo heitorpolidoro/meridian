@@ -33,6 +33,7 @@ error.log
 # --- Gemini CLI Infrastructure (CRITICAL) ---
 .gemini/
 conductor/
+meridianagent.*.pem
 
 
 # --- IDEs & System ---
