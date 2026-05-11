@@ -5,6 +5,8 @@ import { SDSStateMachine } from "./SDSStateMachine";
 import { MockFileSystem } from "./mocks/MockFileSystem";
 import { ValidationEngine } from "./ValidationEngine";
 import { IFilesystemWatcher } from "./interfaces/ICoreServices";
+import { BootstrappingService } from "./BootstrappingService";
+import { SessionManagerService } from "./SessionManagerService";
 import path from "node:path";
 
 describe("OrchestrationService", () => {
@@ -12,6 +14,8 @@ describe("OrchestrationService", () => {
   let metadataService: TrackMetadataService;
   let orchestrationService: OrchestrationService;
   let validationEngine: ValidationEngine;
+  let bootstrappingService: BootstrappingService;
+  let sessionManagerService: SessionManagerService;
   let mockWatcher: IFilesystemWatcher;
   const meridianDir = "/test/.meridian";
 
@@ -19,6 +23,8 @@ describe("OrchestrationService", () => {
     fs = new MockFileSystem();
     metadataService = new TrackMetadataService(fs, meridianDir);
     validationEngine = new ValidationEngine(fs, meridianDir);
+    bootstrappingService = new BootstrappingService(fs, meridianDir);
+    sessionManagerService = new SessionManagerService();
     mockWatcher = {
       watch: vi.fn(),
       stop: vi.fn(),
@@ -30,6 +36,26 @@ describe("OrchestrationService", () => {
       meridianDir,
       validationEngine,
       mockWatcher,
+      bootstrappingService,
+      sessionManagerService,
+    );
+
+    // Setup required files for BootstrappingService
+    fs.writeFile(
+      path.join(meridianDir, ".meridian/core/global.md"),
+      "Global Standards",
+    );
+    fs.writeFile(
+      path.join(meridianDir, ".gemini/agents/product-manager.md"),
+      "PM Instructions",
+    );
+    fs.writeFile(
+      path.join(meridianDir, ".gemini/agents/software-architect.md"),
+      "Architect Instructions",
+    );
+    fs.writeFile(
+      path.join(meridianDir, ".gemini/agents/software-engineer.md"),
+      "Engineer Instructions",
     );
 
     vi.useFakeTimers();
@@ -243,6 +269,83 @@ describe("OrchestrationService", () => {
       );
       expect(updated.orchestration.currentPhase).toBe("1.2");
       expect(updated.orchestration.logs[0].trigger).toBe("Override");
+    });
+
+    it("resolves agent instructions and assigns session during transition", () => {
+      const resolveSpy = vi.spyOn(bootstrappingService, "resolve");
+      const assignSpy = vi.spyOn(sessionManagerService, "assignAgent");
+
+      orchestrationService.updateStatus("track-1", "HandoffReady");
+      orchestrationService.requestTransition("track-1", "1.2");
+
+      expect(resolveSpy).toHaveBeenCalledWith("software-architect");
+      expect(assignSpy).toHaveBeenCalledWith("track-1", "software-architect");
+
+      const session = sessionManagerService.getSession("track-1");
+      expect(session?.activeAgentId).toBe("software-architect");
+      expect(session?.status).toBe("Working");
+    });
+
+    it("works with only bootstrapping service", () => {
+      const service = new OrchestrationService(
+        metadataService,
+        fs,
+        meridianDir,
+        undefined,
+        undefined,
+        bootstrappingService,
+      );
+      const resolveSpy = vi.spyOn(bootstrappingService, "resolve");
+
+      orchestrationService.updateStatus("track-1", "HandoffReady");
+      service.requestTransition("track-1", "1.2");
+
+      expect(resolveSpy).toHaveBeenCalledWith("software-architect");
+    });
+
+    it("works with only session manager service", () => {
+      const service = new OrchestrationService(
+        metadataService,
+        fs,
+        meridianDir,
+        undefined,
+        undefined,
+        undefined,
+        sessionManagerService,
+      );
+      const assignSpy = vi.spyOn(sessionManagerService, "assignAgent");
+
+      orchestrationService.updateStatus("track-1", "HandoffReady");
+      service.requestTransition("track-1", "1.2");
+
+      expect(assignSpy).toHaveBeenCalledWith("track-1", "software-architect");
+    });
+
+    it("fails transition if bootstrapping resolution fails", () => {
+      vi.spyOn(bootstrappingService, "resolve").mockImplementation(() => {
+        throw new Error("Resolution failed");
+      });
+
+      orchestrationService.updateStatus("track-1", "HandoffReady");
+      expect(() =>
+        orchestrationService.requestTransition("track-1", "1.2"),
+      ).toThrow("Resolution failed");
+
+      // Verify no transition occurred
+      const state = orchestrationService.getOrchestrationState("track-1");
+      expect(state?.currentPhase).toBe("1.1");
+    });
+
+    it("works without optional services", () => {
+      const basicService = new OrchestrationService(
+        metadataService,
+        fs,
+        meridianDir,
+      );
+
+      basicService.updateStatus("track-1", "HandoffReady");
+      const updated = basicService.requestTransition("track-1", "1.2");
+      expect(updated.orchestration.currentPhase).toBe("1.2");
     });
 
     it("throws error for non-existent track", () => {

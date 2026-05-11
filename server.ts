@@ -13,6 +13,14 @@ import { SDSComplianceScorer } from "./src/services/SDSComplianceScorer";
 import { TelemetryCollectorService } from "./src/services/TelemetryCollectorService";
 import { ProjectService } from "./src/services/ProjectService";
 import { GeminiMessage } from "./src/services/IPCSchemas";
+import { ValidationEngine } from "./src/services/ValidationEngine";
+import { NodeFilesystemWatcher } from "./src/services/implementations/NodeFilesystemWatcher";
+import { OrchestrationService } from "./src/services/OrchestrationService";
+import { SessionManagerService } from "./src/services/SessionManagerService";
+import { SpecGate } from "./src/services/gates/SpecGate";
+import { PlanGate } from "./src/services/gates/PlanGate";
+import { TasksGate } from "./src/services/gates/TasksGate";
+import { createCodeGate } from "./src/services/gates/CodeGate";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,8 +28,12 @@ const SETTINGS_FILE = path.join(__dirname, ".settings.json");
 
 const fileSystem = new NodeFileSystem();
 const telemetryCollector = new TelemetryCollectorService();
+const sessionManager = new SessionManagerService();
+const watcher = new NodeFilesystemWatcher();
 
-const DEFAULT_SETTINGS = { rootDir: process.env.MERIDIAN_ROOT || process.cwd() };
+const DEFAULT_SETTINGS = {
+  rootDir: process.env.MERIDIAN_ROOT || process.cwd(),
+};
 
 /**
  * Retrieves the application settings from the settings file, ensuring the file exists with default settings.
@@ -52,21 +64,48 @@ export function getSettings() {
 /**
  * Retrieves context-dependent services based on root directory.
  */
+// skipcq: JS-0067
 export function getContextServices() {
   const settings = getSettings();
   const rootDir = settings.rootDir;
   const meridianDir = path.join(rootDir, ".meridian");
+  const trackMetadataService = new TrackMetadataService(
+    fileSystem,
+    meridianDir,
+  );
+  const bootstrappingService = new BootstrappingService(fileSystem, rootDir);
+  const complianceScorer = new SDSComplianceScorer(
+    fileSystem,
+    path.join(meridianDir, "tracks"),
+  );
+
+  const validationEngine = new ValidationEngine(fileSystem, meridianDir);
+  validationEngine.registerGate("1.1", SpecGate);
+  validationEngine.registerGate("1.2", PlanGate);
+  validationEngine.registerGate("2.1", TasksGate);
+  validationEngine.registerGate("3.1", createCodeGate(complianceScorer));
+  validationEngine.registerGate("4.2", createCodeGate(complianceScorer));
+
+  const orchestrationService = new OrchestrationService(
+    trackMetadataService,
+    fileSystem,
+    meridianDir,
+    validationEngine,
+    watcher,
+    bootstrappingService,
+    sessionManager,
+  );
+
   return {
     rootDir,
     meridianDir,
     agentRegistry: new AgentRegistryService(fileSystem, rootDir),
-    trackMetadataService: new TrackMetadataService(fileSystem, meridianDir),
-    bootstrappingService: new BootstrappingService(fileSystem, rootDir),
-    complianceScorer: new SDSComplianceScorer(
-      fileSystem,
-      path.join(meridianDir, "tracks"),
-    ),
+    trackMetadataService,
+    bootstrappingService,
+    complianceScorer,
     projectService: new ProjectService(fileSystem),
+    validationEngine,
+    orchestrationService,
   };
 }
 
@@ -91,7 +130,10 @@ const app = express();
 const isDev = process.env.NODE_ENV !== "production";
 
 if (isDev) {
-  log("Running in development mode - access the frontend via Vite on port 5174", "INFO");
+  log(
+    "Running in development mode - access the frontend via Vite on port 5174",
+    "INFO",
+  );
 } else {
   app.use(express.static("dist"));
 
@@ -249,14 +291,13 @@ io.on("connection", (socket) => {
   socket.on("list-dir-contents", (dirPath: string) => {
     try {
       if (fileSystem.exists(dirPath) && fileSystem.isDirectory(dirPath)) {
-        const entries = fileSystem.readDirectory(dirPath)
-          .filter(name => {
-            try {
-              return fileSystem.isDirectory(path.join(dirPath, name));
-            } catch {
-              return false;
-            }
-          });
+        const entries = fileSystem.readDirectory(dirPath).filter((name) => {
+          try {
+            return fileSystem.isDirectory(path.join(dirPath, name));
+          } catch {
+            return false;
+          }
+        });
         socket.emit("dir-contents", entries);
       } else {
         socket.emit("dir-contents", []);
@@ -299,7 +340,7 @@ io.on("connection", (socket) => {
 
   socket.on("get-projects", () => {
     const { rootDir, projectService } = getContextServices();
-    // In this model, rootDir is always the workspace. 
+    // In this model, rootDir is always the workspace.
     // We list all projects containing .meridian inside it.
     socket.emit("projects", projectService.listProjects(rootDir));
   });
@@ -319,12 +360,67 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("get-file-content", ({ trackId, fileName }: { trackId: string; fileName: string }) => {
-    const { meridianDir } = getContextServices();
-    const filePath = path.join(meridianDir, "tracks", trackId, fileName);
-    if (fs.existsSync(filePath)) {
-      const content = fs.readFileSync(filePath, "utf8");
-      socket.emit("file-content", { trackId, fileName, content });
+  socket.on(
+    "get-file-content",
+    ({ trackId, fileName }: { trackId: string; fileName: string }) => {
+      const { meridianDir } = getContextServices();
+      const filePath = path.join(meridianDir, "tracks", trackId, fileName);
+      if (fs.existsSync(filePath)) {
+        const content = fs.readFileSync(filePath, "utf8");
+        socket.emit("file-content", { trackId, fileName, content });
+      }
+    },
+  );
+
+  socket.on(
+    "orchestration:request-transition",
+    ({ trackId, targetPhase, message, trigger }) => {
+      try {
+        const { orchestrationService, trackMetadataService } =
+          getContextServices();
+        orchestrationService.requestTransition(
+          trackId,
+          targetPhase,
+          message,
+          trigger,
+        );
+        io.emit("tracks", trackMetadataService.listTracksWithMetadata());
+      } catch (error) {
+        log(`Error in orchestration:request-transition: ${error}`, "ERROR");
+        socket.emit("orchestration:error", {
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    },
+  );
+
+  socket.on(
+    "orchestration:update-status",
+    ({ trackId, status, message, trigger }) => {
+      try {
+        const { orchestrationService, trackMetadataService } =
+          getContextServices();
+        orchestrationService.updateStatus(trackId, status, message, trigger);
+        io.emit("tracks", trackMetadataService.listTracksWithMetadata());
+      } catch (error) {
+        log(`Error in orchestration:update-status: ${error}`, "ERROR");
+        socket.emit("orchestration:error", {
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    },
+  );
+
+  socket.on("orchestration:get-state", (trackId: string) => {
+    try {
+      const { orchestrationService } = getContextServices();
+      const state = orchestrationService.getOrchestrationState(trackId);
+      socket.emit("orchestration:state", { trackId, state });
+    } catch (error) {
+      log(`Error in orchestration:get-state: ${error}`, "ERROR");
+      socket.emit("orchestration:error", {
+        message: error instanceof Error ? error.message : String(error),
+      });
     }
   });
 
@@ -385,7 +481,7 @@ io.on("connection", (socket) => {
       const lines = lineBuffer.split("\n");
       // Keep the last partial line in the buffer
       lineBuffer = lines.pop() || "";
-      
+
       for (const line of lines) {
         const trimmed = line.trim();
         if (trimmed) processGeminiOutput(trimmed, { ...ctx, gemini }, sendACP);
