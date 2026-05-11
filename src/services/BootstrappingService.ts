@@ -3,8 +3,8 @@ import { IFileSystem } from "./interfaces/ICoreServices";
 
 export class BootstrappingService {
   constructor(
-    private fs: IFileSystem,
-    private rootDir: string,
+    private readonly fs: IFileSystem,
+    private readonly rootDir: string,
   ) {}
 
   /**
