@@ -77,6 +77,38 @@ You MUST read the core project standards and context defined in `{meridian_ref}`
             f.write(meridian_content)
         print_color("  ✅ Initial .meridian/MERIDIAN.md (Agent Briefing) created.", GREEN)
 
+def ensure_bot_instruction(target_dir, force=False):
+    meridian_md_path = target_dir / ".meridian" / "MERIDIAN.md"
+    if not meridian_md_path.exists():
+        return
+
+    bot_id = "3677362"
+    bot_instruction = f"""
+### 🤖 Bot Authentication
+To use the GitHub App bot for automation, run:
+```bash
+GH_TOKEN=$(gh token generate --app-id {bot_id} --key ~/workspace/meridian/meridianagent.2026-05-11.private-key.pem --token-only)
+gh <command>
+```
+"""
+
+    with open(meridian_md_path, 'r') as f:
+        content = f.read()
+
+    if f"app-id {bot_id}" not in content:
+        if not force:
+            print_color(f"  ❓ MERIDIAN.md is missing bot authentication instructions.", YELLOW)
+            choice = input(f"     Add bot instructions to the end of MERIDIAN.md? [Y/n]: ").lower() or 'y'
+            if choice != 'y':
+                print_color("  ℹ️ Bot instructions skipped.", NC)
+                return
+        
+        with open(meridian_md_path, 'a') as f:
+            f.write(bot_instruction)
+        print_color("  ✅ Bot authentication instructions added to MERIDIAN.md.", GREEN)
+    else:
+        print_color("  ℹ️ MERIDIAN.md already has bot instructions.", NC)
+
 def generate_for_target(target, target_dir, source_dir, agents, added_ids):
     cli_dir = target_dir / (".gemini" if target == "gemini" else ".claude")
     agents_dir = cli_dir / "agents"
@@ -157,6 +189,7 @@ def main():
     parser = argparse.ArgumentParser(description="Sync Meridian standards and generate agents/skills.")
     parser.add_argument('target', nargs='*', choices=['gemini', 'claude'], help="Target CLI(s): 'gemini' or 'claude'")
     parser.add_argument('--add-expert', nargs='+', help="Add expert roles (e.g., python, go, elixir)")
+    parser.add_argument('--use-bot', action='store_true', help="Configure GitHub App bot instruction in MERIDIAN.md")
     args = parser.parse_args()
 
     if args.target:
@@ -267,6 +300,8 @@ def main():
         for target in targets:
             generate_for_target(target, target_dir, source_dir, agents, added_ids)
             generate_standard_files(target, target_dir)
+
+    ensure_bot_instruction(target_dir, force=args.use_bot)
 
     print_color("=== Synchronization & Generation Complete! ===", GREEN)
 
