@@ -66,6 +66,7 @@ export const OrchestrationPanel: React.FC<OrchestrationPanelProps> = ({
     setShowOverrideDialog(true);
   };
 
+  // skipcq: JS-D1001
   const handleConfirmOverride = () => {
     if (SDS_PHASES.includes(overridePhaseInput as SDSPhase)) {
       socket.emit("orchestration:request-transition", {

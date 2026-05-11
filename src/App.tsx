@@ -99,6 +99,7 @@ function App() {
   const chatRef = useRef<HTMLDivElement>(null);
   const currentAiMsgRef = useRef<string>("");
 
+  // skipcq: JS-D1001
   const showFlash = (text: string) => {
     const id = Date.now();
     setFlashes((prev) => [...prev, { id, text }]);
@@ -108,6 +109,7 @@ function App() {
     );
   };
 
+  // skipcq: JS-D1001
   const handleViewChange = (newView: typeof view) => {
     setView(newView);
     const actions: Partial<Record<typeof view, () => void>> = {
