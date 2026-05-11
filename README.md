@@ -7,6 +7,7 @@
 <br>
 
 <!-- GitHub Stats -->
+
 <a href="https://github.com/heitorpolidoro/meridian/releases/latest"><img src="https://img.shields.io/github/v/release/heitorpolidoro/meridian?label=Latest%20Version" alt="Latest Version"></a>
 <img src="https://img.shields.io/github/release-date/heitorpolidoro/meridian" alt="GitHub Release Date">
 <img src="https://img.shields.io/github/commits-since/heitorpolidoro/meridian/latest" alt="GitHub commits since latest release">
@@ -14,16 +15,19 @@
 <br>
 
 <!-- GitHub Activity -->
+
 <a href="https://github.com/heitorpolidoro/meridian/issues"><img src="https://img.shields.io/github/issues/heitorpolidoro/meridian" alt="GitHub issues"></a>
 <a href="https://github.com/heitorpolidoro/meridian/pulls"><img src="https://img.shields.io/github/issues-pr/heitorpolidoro/meridian" alt="GitHub pull requests"></a>
 <br>
 
 <!-- DeepSource -->
+
 <a href="https://app.deepsource.com/gh/heitorpolidoro/meridian/" target="_blank"><img alt="DeepSource" title="DeepSource" src="https://app.deepsource.com/gh/heitorpolidoro/meridian.svg/?label=code+coverage&show_trend=true&token=TbnUO25wUZwE2xbpNccxDYAZ"/></a>
 <a href="https://app.deepsource.com/gh/heitorpolidoro/meridian/" target="_blank"><img alt="DeepSource" title="DeepSource" src="https://app.deepsource.com/gh/heitorpolidoro/meridian.svg/?label=active+issues&show_trend=true&token=lJTrsoZ84oEv-4SuRN912pX1"/></a>
 <br>
 
 <!-- SonarCloud -->
+
 <a href="https://sonarcloud.io/summary/new_code?id=heitorpolidoro_meridian"><img src="https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_meridian&metric=alert_status" alt="SonarCloud Quality Gate"></a>
 <a href="https://sonarcloud.io/summary/new_code?id=heitorpolidoro_meridian"><img src="https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_meridian&metric=coverage" alt="SonarCloud Coverage"></a>
 <a href="https://sonarcloud.io/summary/new_code?id=heitorpolidoro_meridian"><img src="https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_meridian&metric=security_rating" alt="SonarCloud Security Rating"></a>
@@ -32,6 +36,7 @@
 <a href="https://sonarcloud.io/summary/new_code?id=heitorpolidoro_meridian"><img src="https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_meridian&metric=vulnerabilities" alt="SonarCloud Vulnerabilities"></a>
 <a href="https://sonarcloud.io/summary/new_code?id=heitorpolidoro_meridian"><img src="https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_meridian&metric=code_smells" alt="SonarCloud Code Smells"></a>
 <a href="https://sonarcloud.io/summary/new_code?id=heitorpolidoro_meridian"><img src="https://sonarcloud.io/api/project_badges/measure?project=heitorpolidoro_meridian&metric=sqale_rating" alt="SonarCloud Maintainability"></a>
+
 </div>
 
 Meridian: Intelligent Project Manager with Multi-Agent Orchestration
@@ -67,6 +72,7 @@ Meridian is a powerful, intelligent project management tool designed to orchestr
 ### Installation
 
 1. Clone the repository:
+
    ```bash
    git clone <repository-url>
    cd meridian
@@ -86,6 +92,7 @@ npm run dev
 ```
 
 Alternatively, you can run them separately:
+
 - **Server only:** `npm run dev:server`
 - **Client only:** `npm run dev:client`
 

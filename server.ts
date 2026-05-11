@@ -31,7 +31,9 @@ const telemetryCollector = new TelemetryCollectorService();
 const sessionManager = new SessionManagerService();
 const watcher = new NodeFilesystemWatcher();
 
-const DEFAULT_SETTINGS = { rootDir: process.env.MERIDIAN_ROOT || process.cwd() };
+const DEFAULT_SETTINGS = {
+  rootDir: process.env.MERIDIAN_ROOT || process.cwd(),
+};
 
 /**
  * Retrieves the application settings from the settings file, ensuring the file exists with default settings.
@@ -66,7 +68,10 @@ export function getContextServices() {
   const settings = getSettings();
   const rootDir = settings.rootDir;
   const meridianDir = path.join(rootDir, ".meridian");
-  const trackMetadataService = new TrackMetadataService(fileSystem, meridianDir);
+  const trackMetadataService = new TrackMetadataService(
+    fileSystem,
+    meridianDir,
+  );
   const bootstrappingService = new BootstrappingService(fileSystem, rootDir);
   const complianceScorer = new SDSComplianceScorer(
     fileSystem,
@@ -124,7 +129,10 @@ const app = express();
 const isDev = process.env.NODE_ENV !== "production";
 
 if (isDev) {
-  log("Running in development mode - access the frontend via Vite on port 5174", "INFO");
+  log(
+    "Running in development mode - access the frontend via Vite on port 5174",
+    "INFO",
+  );
 } else {
   app.use(express.static("dist"));
 
@@ -282,14 +290,13 @@ io.on("connection", (socket) => {
   socket.on("list-dir-contents", (dirPath: string) => {
     try {
       if (fileSystem.exists(dirPath) && fileSystem.isDirectory(dirPath)) {
-        const entries = fileSystem.readDirectory(dirPath)
-          .filter(name => {
-            try {
-              return fileSystem.isDirectory(path.join(dirPath, name));
-            } catch {
-              return false;
-            }
-          });
+        const entries = fileSystem.readDirectory(dirPath).filter((name) => {
+          try {
+            return fileSystem.isDirectory(path.join(dirPath, name));
+          } catch {
+            return false;
+          }
+        });
         socket.emit("dir-contents", entries);
       } else {
         socket.emit("dir-contents", []);
@@ -332,7 +339,7 @@ io.on("connection", (socket) => {
 
   socket.on("get-projects", () => {
     const { rootDir, projectService } = getContextServices();
-    // In this model, rootDir is always the workspace. 
+    // In this model, rootDir is always the workspace.
     // We list all projects containing .meridian inside it.
     socket.emit("projects", projectService.listProjects(rootDir));
   });
@@ -352,36 +359,56 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("get-file-content", ({ trackId, fileName }: { trackId: string; fileName: string }) => {
-    const { meridianDir } = getContextServices();
-    const filePath = path.join(meridianDir, "tracks", trackId, fileName);
-    if (fs.existsSync(filePath)) {
-      const content = fs.readFileSync(filePath, "utf8");
-      socket.emit("file-content", { trackId, fileName, content });
-    }
-  });
+  socket.on(
+    "get-file-content",
+    ({ trackId, fileName }: { trackId: string; fileName: string }) => {
+      const { meridianDir } = getContextServices();
+      const filePath = path.join(meridianDir, "tracks", trackId, fileName);
+      if (fs.existsSync(filePath)) {
+        const content = fs.readFileSync(filePath, "utf8");
+        socket.emit("file-content", { trackId, fileName, content });
+      }
+    },
+  );
 
-  socket.on("orchestration:request-transition", ({ trackId, targetPhase, message, trigger }) => {
-    try {
-      const { orchestrationService, trackMetadataService } = getContextServices();
-      orchestrationService.requestTransition(trackId, targetPhase, message, trigger);
-      io.emit("tracks", trackMetadataService.listTracksWithMetadata());
-    } catch (error) {
-      log(`Error in orchestration:request-transition: ${error}`, "ERROR");
-      socket.emit("orchestration:error", { message: error instanceof Error ? error.message : String(error) });
-    }
-  });
+  socket.on(
+    "orchestration:request-transition",
+    ({ trackId, targetPhase, message, trigger }) => {
+      try {
+        const { orchestrationService, trackMetadataService } =
+          getContextServices();
+        orchestrationService.requestTransition(
+          trackId,
+          targetPhase,
+          message,
+          trigger,
+        );
+        io.emit("tracks", trackMetadataService.listTracksWithMetadata());
+      } catch (error) {
+        log(`Error in orchestration:request-transition: ${error}`, "ERROR");
+        socket.emit("orchestration:error", {
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    },
+  );
 
-  socket.on("orchestration:update-status", ({ trackId, status, message, trigger }) => {
-    try {
-      const { orchestrationService, trackMetadataService } = getContextServices();
-      orchestrationService.updateStatus(trackId, status, message, trigger);
-      io.emit("tracks", trackMetadataService.listTracksWithMetadata());
-    } catch (error) {
-      log(`Error in orchestration:update-status: ${error}`, "ERROR");
-      socket.emit("orchestration:error", { message: error instanceof Error ? error.message : String(error) });
-    }
-  });
+  socket.on(
+    "orchestration:update-status",
+    ({ trackId, status, message, trigger }) => {
+      try {
+        const { orchestrationService, trackMetadataService } =
+          getContextServices();
+        orchestrationService.updateStatus(trackId, status, message, trigger);
+        io.emit("tracks", trackMetadataService.listTracksWithMetadata());
+      } catch (error) {
+        log(`Error in orchestration:update-status: ${error}`, "ERROR");
+        socket.emit("orchestration:error", {
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
+    },
+  );
 
   socket.on("orchestration:get-state", (trackId: string) => {
     try {
@@ -390,7 +417,9 @@ io.on("connection", (socket) => {
       socket.emit("orchestration:state", { trackId, state });
     } catch (error) {
       log(`Error in orchestration:get-state: ${error}`, "ERROR");
-      socket.emit("orchestration:error", { message: error instanceof Error ? error.message : String(error) });
+      socket.emit("orchestration:error", {
+        message: error instanceof Error ? error.message : String(error),
+      });
     }
   });
 
@@ -451,7 +480,7 @@ io.on("connection", (socket) => {
       const lines = lineBuffer.split("\n");
       // Keep the last partial line in the buffer
       lineBuffer = lines.pop() || "";
-      
+
       for (const line of lines) {
         const trimmed = line.trim();
         if (trimmed) processGeminiOutput(trimmed, { ...ctx, gemini }, sendACP);

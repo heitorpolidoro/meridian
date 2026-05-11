@@ -327,9 +327,9 @@ describe("OrchestrationService", () => {
       });
 
       orchestrationService.updateStatus("track-1", "HandoffReady");
-      expect(() => orchestrationService.requestTransition("track-1", "1.2")).toThrow(
-        "Resolution failed",
-      );
+      expect(() =>
+        orchestrationService.requestTransition("track-1", "1.2"),
+      ).toThrow("Resolution failed");
 
       // Verify no transition occurred
       const state = orchestrationService.getOrchestrationState("track-1");

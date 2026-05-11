@@ -9,53 +9,59 @@ describe("OrchestrationPanel", () => {
 
   const defaultMetadata = {
     orchestration: {
-      currentPhase: '1.1' as const,
-      status: 'Idle',
+      currentPhase: "1.1" as const,
+      status: "Idle",
       logs: [
         {
           timestamp: new Date().toISOString(),
-          toPhase: '1.1' as const,
-          status: 'Started',
-          message: 'Process initialized'
-        }
+          toPhase: "1.1" as const,
+          status: "Started",
+          message: "Process initialized",
+        },
       ],
     },
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.spyOn(window, 'prompt').mockImplementation(() => '2.1');
+    vi.spyOn(window, "prompt").mockImplementation(() => "2.1");
   });
 
   it("renders the current phase label", () => {
-    render(<OrchestrationPanel trackId="test-track" metadata={defaultMetadata} socket={mockSocket} />);
+    render(
+      <OrchestrationPanel
+        trackId="test-track"
+        metadata={defaultMetadata}
+        socket={mockSocket}
+      />,
+    );
     expect(screen.getByText("SDS Orchestration")).toBeInTheDocument();
     expect(screen.getByText("Spec")).toBeInTheDocument();
   });
 
   it("shows 'Approve Handoff' button only when status is HandoffReady", () => {
     const { rerender } = render(
-      <OrchestrationPanel 
-        trackId="test-track" 
-        metadata={defaultMetadata} 
-        socket={mockSocket} 
-      />
+      <OrchestrationPanel
+        trackId="test-track"
+        metadata={defaultMetadata}
+        socket={mockSocket}
+      />,
     );
     expect(screen.queryByText("Approve Handoff")).not.toBeInTheDocument();
 
     const readyMetadata = {
       orchestration: {
         ...defaultMetadata.orchestration,
-        status: 'HandoffReady'
-      }
+        status: "HandoffReady",
+      },
     };
 
     rerender(
-      <OrchestrationPanel 
-        trackId="test-track" 
-        metadata={readyMetadata} 
-        socket={mockSocket} 
-      />
+      <OrchestrationPanel
+        trackId="test-track"
+        metadata={readyMetadata}
+        socket={mockSocket}
+      />,
     );
     expect(screen.getByText("Approve Handoff")).toBeInTheDocument();
   });
@@ -64,70 +70,112 @@ describe("OrchestrationPanel", () => {
     const readyMetadata = {
       orchestration: {
         ...defaultMetadata.orchestration,
-        status: 'HandoffReady'
-      }
+        status: "HandoffReady",
+      },
     };
 
-    render(<OrchestrationPanel trackId="test-track" metadata={readyMetadata} socket={mockSocket} />);
+    render(
+      <OrchestrationPanel
+        trackId="test-track"
+        metadata={readyMetadata}
+        socket={mockSocket}
+      />,
+    );
     fireEvent.click(screen.getByText("Approve Handoff"));
 
-    expect(mockSocket.emit).toHaveBeenCalledWith('orchestration:request-transition', {
-      trackId: 'test-track',
-      targetPhase: '1.2',
-      trigger: 'Manual'
-    });
+    expect(mockSocket.emit).toHaveBeenCalledWith(
+      "orchestration:request-transition",
+      {
+        trackId: "test-track",
+        targetPhase: "1.2",
+        trigger: "Manual",
+      },
+    );
   });
 
   it("does not emit transition if already at the last phase when approving", () => {
     const lastPhaseMetadata = {
       orchestration: {
         ...defaultMetadata.orchestration,
-        currentPhase: '5.0' as const,
-        status: 'HandoffReady'
-      }
+        currentPhase: "5.0" as const,
+        status: "HandoffReady",
+      },
     };
 
-    render(<OrchestrationPanel trackId="test-track" metadata={lastPhaseMetadata} socket={mockSocket} />);
+    render(
+      <OrchestrationPanel
+        trackId="test-track"
+        metadata={lastPhaseMetadata}
+        socket={mockSocket}
+      />,
+    );
     fireEvent.click(screen.getByText("Approve Handoff"));
 
     expect(mockSocket.emit).not.toHaveBeenCalled();
   });
 
   it("emits override transition request when clicking force override", () => {
-    render(<OrchestrationPanel trackId="test-track" metadata={defaultMetadata} socket={mockSocket} />);
+    render(
+      <OrchestrationPanel
+        trackId="test-track"
+        metadata={defaultMetadata}
+        socket={mockSocket}
+      />,
+    );
     fireEvent.click(screen.getByText("Force Override"));
 
-    expect(mockSocket.emit).toHaveBeenCalledWith('orchestration:request-transition', {
-      trackId: 'test-track',
-      targetPhase: '2.1',
-      trigger: 'Override'
-    });
+    expect(mockSocket.emit).toHaveBeenCalledWith(
+      "orchestration:request-transition",
+      {
+        trackId: "test-track",
+        targetPhase: "2.1",
+        trigger: "Override",
+      },
+    );
   });
 
   it("does not emit transition if override phase is invalid", () => {
-    vi.spyOn(window, 'prompt').mockImplementation(() => 'invalid-phase');
-    render(<OrchestrationPanel trackId="test-track" metadata={defaultMetadata} socket={mockSocket} />);
+    vi.spyOn(window, "prompt").mockImplementation(() => "invalid-phase");
+    render(
+      <OrchestrationPanel
+        trackId="test-track"
+        metadata={defaultMetadata}
+        socket={mockSocket}
+      />,
+    );
     fireEvent.click(screen.getByText("Force Override"));
 
     expect(mockSocket.emit).not.toHaveBeenCalled();
   });
 
   it("does not emit transition if override is cancelled", () => {
-    vi.spyOn(window, 'prompt').mockImplementation(() => null);
-    render(<OrchestrationPanel trackId="test-track" metadata={defaultMetadata} socket={mockSocket} />);
+    vi.spyOn(window, "prompt").mockImplementation(() => null);
+    render(
+      <OrchestrationPanel
+        trackId="test-track"
+        metadata={defaultMetadata}
+        socket={mockSocket}
+      />,
+    );
     fireEvent.click(screen.getByText("Force Override"));
 
     expect(mockSocket.emit).not.toHaveBeenCalled();
   });
 
   it("toggles logs visibility", () => {
-    render(<OrchestrationPanel trackId="test-track" metadata={defaultMetadata} socket={mockSocket} />);
-    
+    render(
+      <OrchestrationPanel
+        trackId="test-track"
+        metadata={defaultMetadata}
+        socket={mockSocket}
+      />,
+    );
+
     expect(screen.queryByText("Process initialized")).not.toBeInTheDocument();
-    
+
     fireEvent.click(screen.getByText(/Orchestration Logs/));
     expect(screen.getByText("Process initialized")).toBeInTheDocument();
-    
+
     fireEvent.click(screen.getByText(/Orchestration Logs/));
     expect(screen.queryByText("Process initialized")).not.toBeInTheDocument();
   });
@@ -136,13 +184,19 @@ describe("OrchestrationPanel", () => {
     const emptyLogsMetadata = {
       orchestration: {
         ...defaultMetadata.orchestration,
-        logs: []
-      }
+        logs: [],
+      },
     };
 
-    render(<OrchestrationPanel trackId="test-track" metadata={emptyLogsMetadata} socket={mockSocket} />);
+    render(
+      <OrchestrationPanel
+        trackId="test-track"
+        metadata={emptyLogsMetadata}
+        socket={mockSocket}
+      />,
+    );
     fireEvent.click(screen.getByText(/Orchestration Logs/));
-    
+
     expect(screen.getByText("No logs recorded.")).toBeInTheDocument();
   });
 
@@ -153,17 +207,23 @@ describe("OrchestrationPanel", () => {
         logs: [
           {
             timestamp: new Date().toISOString(),
-            fromPhase: '1.1' as const,
-            toPhase: '1.2' as const,
-            status: 'Completed',
-          }
-        ]
-      }
+            fromPhase: "1.1" as const,
+            toPhase: "1.2" as const,
+            status: "Completed",
+          },
+        ],
+      },
     };
 
-    render(<OrchestrationPanel trackId="test-track" metadata={complexLogsMetadata} socket={mockSocket} />);
+    render(
+      <OrchestrationPanel
+        trackId="test-track"
+        metadata={complexLogsMetadata}
+        socket={mockSocket}
+      />,
+    );
     fireEvent.click(screen.getByText(/Orchestration Logs/));
-    
+
     expect(screen.getByText("Spec → Plan")).toBeInTheDocument();
     expect(screen.getByText("Completed")).toBeInTheDocument();
   });
@@ -172,16 +232,22 @@ describe("OrchestrationPanel", () => {
     const advancedMetadata = {
       orchestration: {
         ...defaultMetadata.orchestration,
-        currentPhase: '2.1' as const,
-      }
+        currentPhase: "2.1" as const,
+      },
     };
 
-    const { container } = render(<OrchestrationPanel trackId="test-track" metadata={advancedMetadata} socket={mockSocket} />);
-    
-    const completedPhases = container.querySelectorAll('.phase-item.completed');
+    const { container } = render(
+      <OrchestrationPanel
+        trackId="test-track"
+        metadata={advancedMetadata}
+        socket={mockSocket}
+      />,
+    );
+
+    const completedPhases = container.querySelectorAll(".phase-item.completed");
     expect(completedPhases.length).toBe(2);
-    expect(screen.getByText("Spec").parentElement).toHaveClass('completed');
-    expect(screen.getByText("Plan").parentElement).toHaveClass('completed');
-    expect(screen.getByText("Tasks").parentElement).toHaveClass('active');
+    expect(screen.getByText("Spec").parentElement).toHaveClass("completed");
+    expect(screen.getByText("Plan").parentElement).toHaveClass("completed");
+    expect(screen.getByText("Tasks").parentElement).toHaveClass("active");
   });
 });
