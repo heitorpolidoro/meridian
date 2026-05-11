@@ -51,3 +51,4 @@ coverage/
 .next/
 .server/
 .client/
+*.pem
