@@ -109,6 +109,36 @@ gh <command>
     else:
         print_color("  ℹ️ MERIDIAN.md already has bot instructions.", NC)
 
+def ensure_auto_merge_instruction(target_dir, force=False):
+    meridian_md_path = target_dir / ".meridian" / "MERIDIAN.md"
+    if not meridian_md_path.exists():
+        return
+
+    auto_merge_instruction = """
+### 🚀 Auto-Merge
+To enable automatic merging for Pull Requests that pass all status checks, run:
+```bash
+gh pr merge --auto --squash --delete-branch
+```
+"""
+
+    with open(meridian_md_path, 'r') as f:
+        content = f.read()
+
+    if "gh pr merge --auto" not in content:
+        if not force:
+            print_color(f"  ❓ MERIDIAN.md is missing auto-merge instructions.", YELLOW)
+            choice = input(f"     Add auto-merge instructions to MERIDIAN.md? [Y/n]: ").lower() or 'y'
+            if choice != 'y':
+                print_color("  ℹ️ Auto-merge instructions skipped.", NC)
+                return
+        
+        with open(meridian_md_path, 'a') as f:
+            f.write(auto_merge_instruction)
+        print_color("  ✅ Auto-merge instructions added to MERIDIAN.md.", GREEN)
+    else:
+        print_color("  ℹ️ MERIDIAN.md already has auto-merge instructions.", NC)
+
 def generate_for_target(target, target_dir, source_dir, agents, added_ids):
     cli_dir = target_dir / (".gemini" if target == "gemini" else ".claude")
     agents_dir = cli_dir / "agents"
@@ -190,6 +220,7 @@ def main():
     parser.add_argument('target', nargs='*', choices=['gemini', 'claude'], help="Target CLI(s): 'gemini' or 'claude'")
     parser.add_argument('--add-expert', nargs='+', help="Add expert roles (e.g., python, go, elixir)")
     parser.add_argument('--use-bot', action='store_true', help="Configure GitHub App bot instruction in MERIDIAN.md")
+    parser.add_argument('--enable-auto-merge', action='store_true', help="Configure Auto-Merge instruction in MERIDIAN.md")
     args = parser.parse_args()
 
     if args.target:
@@ -302,6 +333,7 @@ def main():
             generate_standard_files(target, target_dir)
 
     ensure_bot_instruction(target_dir, force=args.use_bot)
+    ensure_auto_merge_instruction(target_dir, force=args.enable_auto_merge)
 
     print_color("=== Synchronization & Generation Complete! ===", GREEN)
 
