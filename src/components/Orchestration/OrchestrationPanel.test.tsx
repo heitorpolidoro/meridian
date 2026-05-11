@@ -177,7 +177,9 @@ describe("OrchestrationPanel", () => {
     );
     fireEvent.click(screen.getByText("Force Override"));
 
-    expect(screen.getByLabelText("Force override to phase:")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Force override to phase:"),
+    ).toBeInTheDocument();
     fireEvent.click(screen.getByText("Cancel"));
     expect(
       screen.queryByLabelText("Force override to phase:"),
