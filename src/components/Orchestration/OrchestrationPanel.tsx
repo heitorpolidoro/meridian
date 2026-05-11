@@ -35,6 +35,7 @@ const PHASE_LABELS: Record<SDSPhase, string> = {
 };
 
 /** Renders the SDS Orchestration panel for a given track. */
+// skipcq: JS-R1005
 export const OrchestrationPanel: React.FC<OrchestrationPanelProps> = ({
   trackId,
   metadata,

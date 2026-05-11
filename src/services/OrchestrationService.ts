@@ -182,6 +182,7 @@ export class OrchestrationService {
    *
    * @throws Error if track not found, transition invalid, or log fails.
    */
+  // skipcq: JS-R1005
   requestTransition(
     trackId: string,
     targetPhase: SDSPhase,

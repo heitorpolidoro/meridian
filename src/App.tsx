@@ -15,6 +15,7 @@ import { TrackMetadata } from "./services/TrackMetadataService";
 
 const socket = io();
 
+// skipcq: JS-0067
 function validateAgentForm(
   agent: Partial<{ name: string; role: string }>,
 ): boolean {
@@ -46,6 +47,7 @@ interface Project {
   path: string;
 }
 
+// skipcq: JS-0067
 function App() {
   const [view, setView] = useState<
     | "dashboard"

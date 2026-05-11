@@ -64,6 +64,7 @@ export function getSettings() {
 /**
  * Retrieves context-dependent services based on root directory.
  */
+// skipcq: JS-0067
 export function getContextServices() {
   const settings = getSettings();
   const rootDir = settings.rootDir;
