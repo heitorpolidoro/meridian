@@ -43,6 +43,7 @@ Meridian is a powerful, intelligent project management tool designed to orchestr
 ## Features
 
 - **Multi-Agent Orchestration:** Manage and coordinate multiple intelligent agents to handle various project tasks.
+- **Automated SDS Orchestration:** State-machine driven enforcement of the Software Development Standard (SDS), including automated phase transitions and quality gates.
 - **Context Injection:** Dynamically inject relevant context (like project standards or markdown documents) into agent sessions.
 - **Filesystem Monitoring:** Watch for node filesystem changes in real-time to trigger appropriate actions.
 - **Telemetry & Compliance:** Collect detailed telemetry data and calculate SDS (Standard Definition Spec) compliance scores to ensure project health and adherence to standards.

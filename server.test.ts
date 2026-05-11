@@ -17,6 +17,7 @@ import { BootstrappingService } from "./src/services/BootstrappingService";
 import { TrackMetadataService, type TrackMetadata } from "./src/services/TrackMetadataService";
 import { ProjectService, type Project } from "./src/services/ProjectService";
 import { NodeFileSystem } from "./src/services/implementations/NodeFileSystem";
+import { OrchestrationService } from "./src/services/OrchestrationService";
 
 // Mock services and modules
 vi.mock("node:fs", () => ({
@@ -121,6 +122,10 @@ vi.mock("./src/services/BootstrappingService");
 vi.mock("./src/services/SDSComplianceScorer");
 vi.mock("./src/services/TelemetryCollectorService");
 vi.mock("./src/services/ProjectService");
+vi.mock("./src/services/OrchestrationService");
+vi.mock("./src/services/ValidationEngine");
+vi.mock("./src/services/SessionManagerService");
+vi.mock("./src/services/implementations/NodeFilesystemWatcher");
 
 function makeCtx(overrides: Partial<GeminiContext>): GeminiContext {
   return {
@@ -765,6 +770,121 @@ describe("server.ts", () => {
         handler({ trackId: "t1", fileName: "spec.md" });
 
         expect(socket.emit).not.toHaveBeenCalledWith("file-content", expect.anything());
+      });
+
+      describe("Orchestration Handlers", () => {
+        it("handles orchestration:request-transition", () => {
+          const handler = vi.mocked(socket.on).mock.calls.find(call => call[0] === "orchestration:request-transition")?.[1];
+          const payload = { trackId: "t1", targetPhase: "PLANNING", message: "start", trigger: "USER" };
+          const tracks = [{ id: "t1", metadata: {} }];
+          vi.mocked(TrackMetadataService.prototype.listTracksWithMetadata).mockReturnValue(tracks as any);
+
+          handler(payload);
+
+          expect(OrchestrationService.prototype.requestTransition).toHaveBeenCalledWith("t1", "PLANNING", "start", "USER");
+          expect(mIO.emit).toHaveBeenCalledWith("tracks", tracks);
+        });
+
+        it("handles orchestration:request-transition error", () => {
+          const handler = vi.mocked(socket.on).mock.calls.find(call => call[0] === "orchestration:request-transition")?.[1];
+          vi.mocked(OrchestrationService.prototype.requestTransition).mockImplementation(() => {
+            throw new Error("transition error");
+          });
+          const spy = vi.spyOn(console, "error").mockReturnValue();
+
+          handler({ trackId: "t1" });
+
+          expect(socket.emit).toHaveBeenCalledWith("orchestration:error", { message: "transition error" });
+          spy.mockRestore();
+        });
+
+        it("handles orchestration:request-transition error (non-Error)", () => {
+          const handler = vi.mocked(socket.on).mock.calls.find(call => call[0] === "orchestration:request-transition")?.[1];
+          vi.mocked(OrchestrationService.prototype.requestTransition).mockImplementation(() => {
+            throw "string error";
+          });
+          const spy = vi.spyOn(console, "error").mockReturnValue();
+
+          handler({ trackId: "t1" });
+
+          expect(socket.emit).toHaveBeenCalledWith("orchestration:error", { message: "string error" });
+          spy.mockRestore();
+        });
+
+        it("handles orchestration:update-status", () => {
+          const handler = vi.mocked(socket.on).mock.calls.find(call => call[0] === "orchestration:update-status")?.[1];
+          const payload = { trackId: "t1", status: "IN_PROGRESS", message: "working", trigger: "SYSTEM" };
+          const tracks = [{ id: "t1", metadata: {} }];
+          vi.mocked(TrackMetadataService.prototype.listTracksWithMetadata).mockReturnValue(tracks as any);
+
+          handler(payload);
+
+          expect(OrchestrationService.prototype.updateStatus).toHaveBeenCalledWith("t1", "IN_PROGRESS", "working", "SYSTEM");
+          expect(mIO.emit).toHaveBeenCalledWith("tracks", tracks);
+        });
+
+        it("handles orchestration:update-status error", () => {
+          const handler = vi.mocked(socket.on).mock.calls.find(call => call[0] === "orchestration:update-status")?.[1];
+          vi.mocked(OrchestrationService.prototype.updateStatus).mockImplementation(() => {
+            throw new Error("status error");
+          });
+          const spy = vi.spyOn(console, "error").mockReturnValue();
+
+          handler({ trackId: "t1" });
+
+          expect(socket.emit).toHaveBeenCalledWith("orchestration:error", { message: "status error" });
+          spy.mockRestore();
+        });
+
+        it("handles orchestration:update-status error (non-Error)", () => {
+          const handler = vi.mocked(socket.on).mock.calls.find(call => call[0] === "orchestration:update-status")?.[1];
+          vi.mocked(OrchestrationService.prototype.updateStatus).mockImplementation(() => {
+            throw "status string error";
+          });
+          const spy = vi.spyOn(console, "error").mockReturnValue();
+
+          handler({ trackId: "t1" });
+
+          expect(socket.emit).toHaveBeenCalledWith("orchestration:error", { message: "status string error" });
+          spy.mockRestore();
+        });
+
+        it("handles orchestration:get-state", () => {
+          const handler = vi.mocked(socket.on).mock.calls.find(call => call[0] === "orchestration:get-state")?.[1];
+          const state = { currentPhase: "SPEC", status: "IDLE" };
+          vi.mocked(OrchestrationService.prototype.getOrchestrationState).mockReturnValue(state as any);
+
+          handler("t1");
+
+          expect(OrchestrationService.prototype.getOrchestrationState).toHaveBeenCalledWith("t1");
+          expect(socket.emit).toHaveBeenCalledWith("orchestration:state", { trackId: "t1", state });
+        });
+
+        it("handles orchestration:get-state error", () => {
+          const handler = vi.mocked(socket.on).mock.calls.find(call => call[0] === "orchestration:get-state")?.[1];
+          vi.mocked(OrchestrationService.prototype.getOrchestrationState).mockImplementation(() => {
+            throw new Error("state error");
+          });
+          const spy = vi.spyOn(console, "error").mockReturnValue();
+
+          handler("t1");
+
+          expect(socket.emit).toHaveBeenCalledWith("orchestration:error", { message: "state error" });
+          spy.mockRestore();
+        });
+
+        it("handles orchestration:get-state error (non-Error)", () => {
+          const handler = vi.mocked(socket.on).mock.calls.find(call => call[0] === "orchestration:get-state")?.[1];
+          vi.mocked(OrchestrationService.prototype.getOrchestrationState).mockImplementation(() => {
+            throw "state string error";
+          });
+          const spy = vi.spyOn(console, "error").mockReturnValue();
+
+          handler("t1");
+
+          expect(socket.emit).toHaveBeenCalledWith("orchestration:error", { message: "state string error" });
+          spy.mockRestore();
+        });
       });
     });
   });

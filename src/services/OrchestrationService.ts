@@ -8,6 +8,8 @@ import {
 import { TrackMetadataService, TrackMetadata } from "./TrackMetadataService";
 import { IFileSystem, IFilesystemWatcher } from "./interfaces/ICoreServices";
 import { ValidationEngine } from "./ValidationEngine";
+import { BootstrappingService } from "./BootstrappingService";
+import { SessionManagerService } from "./SessionManagerService";
 
 export type OrchestrationTrigger = "Auto" | "Manual" | "Override";
 
@@ -39,6 +41,8 @@ export class OrchestrationService {
     private readonly meridianDir: string,
     private readonly validationEngine?: ValidationEngine,
     private readonly watcher?: IFilesystemWatcher,
+    private readonly bootstrappingService?: BootstrappingService,
+    private readonly sessionManagerService?: SessionManagerService,
   ) {
     if (this.watcher && this.validationEngine) {
       this.setupAutoValidation();
@@ -178,6 +182,16 @@ export class OrchestrationService {
 
     const newAgent = SDSStateMachine.getAssignedRole(targetPhase);
     const timestamp = new Date().toISOString();
+
+    // Resolve instructions if bootstrapping service is available
+    if (this.bootstrappingService) {
+      this.bootstrappingService.resolve(newAgent);
+    }
+
+    // Assign agent if session manager is available
+    if (this.sessionManagerService) {
+      this.sessionManagerService.assignAgent(trackId, newAgent);
+    }
 
     const logEntry: OrchestrationLogEntry = {
       timestamp,

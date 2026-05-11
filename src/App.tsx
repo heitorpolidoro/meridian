@@ -6,7 +6,9 @@ import './components/AgentsTable.css';
 import { MarkdownViewer } from './components/MarkdownViewer/MarkdownViewer';
 import { TelemetryDashboard } from './components/TelemetryDashboard/TelemetryDashboard';
 import { DirectoryPicker } from './components/DirectoryPicker/DirectoryPicker';
+import { OrchestrationPanel } from './components/Orchestration/OrchestrationPanel';
 import { TelemetrySummary, SDSCompliance, SyncConflict } from './services/IPCSchemas';
+import { TrackMetadata } from './services/TrackMetadataService';
 
 const socket = io();
 
@@ -26,7 +28,7 @@ interface Track {
   id: string;
   name: string;
   files: string[];
-  metadata: unknown;
+  metadata: TrackMetadata;
   activeSession?: {
     status: string;
     activeAgentId?: string;
@@ -128,6 +130,7 @@ function App() {
     socket.on('settings-saved', () => showFlash('Settings saved.'));
     socket.on('agents-saved', () => showFlash('Squad updated.'));
     socket.on('project-config-saved', () => showFlash('Project configuration saved.'));
+    socket.on('orchestration:error', (data) => showFlash(`Orchestration Error: ${data.message}`));
 
     return () => {
       socket.off('settings');
@@ -145,6 +148,7 @@ function App() {
       socket.off('settings-saved');
       socket.off('agents-saved');
       socket.off('project-config-saved');
+      socket.off('orchestration:error');
     };
   }, [settings.rootDir]);
 
@@ -367,6 +371,13 @@ function App() {
         )}
 
         <div className="content-viewer">
+          {selectedTrack && (
+            <OrchestrationPanel 
+              trackId={selectedTrack.id} 
+              metadata={selectedTrack.metadata} 
+              socket={socket} 
+            />
+          )}
           {selectedFile ? (
             <div className="viewer-wrapper">
               <h2>{selectedFile.name}</h2>

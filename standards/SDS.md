@@ -118,4 +118,24 @@ To ensure efficient resource allocation and avoid "ghost projects", every Specif
 - **False Positive:** If a problem is found to be non-existent or low-impact, the project must be **Terminated** and archived with a justification note to prevent future "resurrections".
 
 ---
-*Last update: April 2026*
+
+## 🤖 Automated Enforcement (Orchestration Engine)
+
+Meridian includes an **Orchestration Engine** that programmatically enforces the SDS phases and standards.
+
+### 1. Quality Gates
+Phase transitions are blocked by automated "Quality Gates" that verify compliance:
+- **Spec Gate (1.1):** Ensures PRD contains mandatory sections (Problem, Audience, Success Criteria).
+- **Plan Gate (1.2):** Verifies RFC references a Spec and includes architecture and trade-offs.
+- **Tasks Gate (2.1):** Ensures tasks are defined with a clear Definition of Done.
+- **Code Gate (3.1/4.2):** Mandates **100% test coverage** and zero lint errors (via `SDSComplianceScorer`).
+
+### 2. Automated Hand-offs
+When a phase's quality gates are met, the engine:
+- Updates the track status to `HandoffReady`.
+- Assigns the next specialized agent role (e.g., Architect -> Engineer).
+- Resolves and injects the new agent's specific instructions.
+- Initializes a new collaborative session.
+
+---
+*Last update: May 2026*
