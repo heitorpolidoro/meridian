@@ -125,7 +125,11 @@ export const OrchestrationPanel: React.FC<OrchestrationPanelProps> = ({
       </div>
 
       <div className="logs-container">
-        <button type="button" className="logs-header" onClick={() => setShowLogs(!showLogs)}>
+        <button
+          type="button"
+          className="logs-header"
+          onClick={() => setShowLogs(!showLogs)}
+        >
           <span>{showLogs ? "▼" : "▶"} Orchestration Logs</span>
           <span style={{ fontSize: "0.7rem" }}>({logs.length} entries)</span>
         </button>
