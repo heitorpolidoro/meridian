@@ -129,6 +129,7 @@ export class OrchestrationService {
       this.validatingTracks.delete(trackId);
     }
   }
+  /** Throws if a forward phase transition is attempted before the current phase is HandoffReady. */
   private static assertForwardTransitionAllowed(
     currentPhase: SDSPhase,
     currentStatus: OrchestrationStatus,
@@ -148,6 +149,7 @@ export class OrchestrationService {
     }
   }
 
+  /** Throws if the validation result failed and the trigger is not an Override. */
   private static assertValidationPassed(
     validation: TransitionResult,
     trigger: OrchestrationTrigger,

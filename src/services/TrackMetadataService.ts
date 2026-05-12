@@ -118,6 +118,7 @@ export class TrackMetadataService {
     }
   }
 
+  /** Merges date fields for a metadata update, stamping `completed` only on transition into Completed status. */
   private static computeDates(
     currentDates: TrackMetadata["dates"],
     currentStatus: TrackMetadata["status"],

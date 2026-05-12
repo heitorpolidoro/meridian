@@ -1,9 +1,11 @@
 import { ITelemetryCollector } from "./interfaces/ICoreServices";
 import { TelemetryMetric, TelemetrySummary } from "./IPCSchemas";
 
+/** Collects and summarises runtime telemetry metrics (latency, tokens, errors). */
 export class TelemetryCollectorService implements ITelemetryCollector {
   private metrics: TelemetryMetric[] = [];
 
+  /** Records a single metric observation of the given type. */
   recordMetric(
     type: "latency" | "tokens" | "errors",
     value: number,
@@ -17,6 +19,7 @@ export class TelemetryCollectorService implements ITelemetryCollector {
     });
   }
 
+  /** Returns aggregated p50/p95 latency, total tokens, and error rate. */
   getSummary(): TelemetrySummary {
     const latencies = this.metrics
       .filter((m) => m.type === "latency")
@@ -41,12 +44,16 @@ export class TelemetryCollectorService implements ITelemetryCollector {
     };
   }
 
+  /** Returns the value at the given percentile (0–100) of a sorted array. */
   private static calculatePercentile(
     sortedLatencies: number[],
     percentile: number,
   ): number {
     if (sortedLatencies.length === 0) return 0;
-    const index = Math.ceil((percentile / 100) * sortedLatencies.length) - 1;
+    const index = Math.max(
+      0,
+      Math.ceil((percentile / 100) * sortedLatencies.length) - 1,
+    );
     return sortedLatencies[index];
   }
 
