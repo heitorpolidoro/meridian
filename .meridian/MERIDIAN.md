@@ -39,17 +39,24 @@ Meridian is an **Intelligent Project Manager with Multi-Agent Orchestration**. I
 ---
 *Initialized: May 2026*
 
-### 🤖 PR Workflow (use the bot — required)
+### 🤖 Bot Identity & Agent Simulation (Required)
 
-All Pull Requests MUST be created using the GitHub App bot token, not the personal account:
+To maintain a consistent audit trail and simulate that actions (branches, commits, and Pull Requests) are performed by the **Meridian Agent**, you MUST use the automated helper script.
 
+#### Using the meridian-agent Wrapper
+The `bin/meridian-agent` script acts as a transparent proxy for `git` and `gh` commands, automatically injecting the agent's identity and authentication token.
+
+**Usage Example:**
 ```bash
-GH_TOKEN=$(gh token generate --app-id 3677362 --key ~/workspace/meridian/meridianagent.2026-05-11.private-key.pem --token-only) \
-  gh pr create ...
+# Any git or gh command can be prefixed with meridian-agent
+bin/meridian-agent git checkout -b feature/agent-task
+bin/meridian-agent git add src/
+bin/meridian-agent git commit -m "feat: simulate agent work"
+bin/meridian-agent gh pr create --title "..." --body "..."
 ```
 
 ### 🚀 Auto-Merge
-To enable automatic merging for Pull Requests that pass all status checks, run:
+To enable automatic merging for Pull Requests that pass all status checks, run the following command (this is a separate action from the agent simulation):
 ```bash
 gh pr merge --auto --squash --delete-branch
 ```

@@ -84,32 +84,38 @@ def ensure_bot_instruction(target_dir, force=False):
 
     bot_id = "3677362"
     bot_instruction = f"""
-### 🤖 PR Workflow (use the bot — required)
+### 🤖 Bot Identity & Agent Simulation (Required)
 
-All Pull Requests MUST be created using the GitHub App bot token, not the personal account:
+To maintain a consistent audit trail and simulate that actions (branches, commits, and Pull Requests) are performed by the **Meridian Agent**, you MUST use the automated helper script.
+
+**Using the meridian-agent Wrapper**
+The `bin/meridian-agent` script acts as a transparent proxy for `git` and `gh` commands, automatically injecting the agent's identity and authentication token.
 
 ```bash
-GH_TOKEN=$(gh token generate --app-id {bot_id} --key ~/workspace/meridian/meridianagent.2026-05-11.private-key.pem --token-only) \\
-  gh pr create ...
+# Any git or gh command can be prefixed with meridian-agent
+bin/meridian-agent git checkout -b feature/agent-task
+bin/meridian-agent git add src/
+bin/meridian-agent git commit -m "feat: simulate agent work"
+bin/meridian-agent gh pr create --title "..." --body "..."
 ```
 """
 
     with open(meridian_md_path, 'r') as f:
         content = f.read()
 
-    if f"app-id {bot_id}" not in content:
+    if "bin/meridian-agent" not in content:
         if not force:
-            print_color(f"  ❓ MERIDIAN.md is missing bot authentication instructions.", YELLOW)
-            choice = input(f"     Add bot instructions to the end of MERIDIAN.md? [Y/n]: ").lower() or 'y'
+            print_color(f"  ❓ MERIDIAN.md is missing bot/agent simulation instructions.", YELLOW)
+            choice = input(f"     Add agent simulation instructions to the end of MERIDIAN.md? [Y/n]: ").lower() or 'y'
             if choice != 'y':
                 print_color("  ℹ️ Bot instructions skipped.", NC)
                 return
         
         with open(meridian_md_path, 'a') as f:
             f.write(bot_instruction)
-        print_color("  ✅ Bot authentication instructions added to MERIDIAN.md.", GREEN)
+        print_color("  ✅ Agent simulation instructions added to MERIDIAN.md.", GREEN)
     else:
-        print_color("  ℹ️ MERIDIAN.md already has bot instructions.", NC)
+        print_color("  ℹ️ MERIDIAN.md already has agent simulation instructions.", NC)
 
 def ensure_auto_merge_instruction(target_dir, force=False):
     meridian_md_path = target_dir / ".meridian" / "MERIDIAN.md"

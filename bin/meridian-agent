@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+import os
+import subprocess
+import sys
+
+# Constants for the Meridian Agent Bot
+APP_ID = "3677362"
+KEY_PATH = "~/workspace/meridian/meridianagent.2026-05-11.private-key.pem"
+BOT_NAME = "meridianagent[bot]"
+BOT_EMAIL = "3677362+meridianagent[bot]@users.noreply.github.com"
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: meridian-agent <command> [args...]")
+        print("Example: meridian-agent git commit -m \"feat: message\"")
+        sys.exit(1)
+
+    # 1. Generate GH_TOKEN using the private key
+    key_expanded = os.path.expanduser(KEY_PATH)
+    if not os.path.exists(key_expanded):
+        print(f"Error: Private key not found at {key_expanded}", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        token = subprocess.check_output(
+            ["gh", "token", "generate", "--app-id", APP_ID, "--key", key_expanded, "--token-only"],
+            text=True
+        ).strip()
+    except subprocess.CalledProcessError as e:
+        print(f"Error generating GitHub App token: {e}", file=sys.stderr)
+        sys.exit(1)
+    
+    # 2. Setup Environment
+    env = os.environ.copy()
+    env["GH_TOKEN"] = token
+    # Identity variables for Git simulation
+    env["GIT_AUTHOR_NAME"] = BOT_NAME
+    env["GIT_AUTHOR_EMAIL"] = BOT_EMAIL
+    env["GIT_COMMITTER_NAME"] = BOT_NAME
+    env["GIT_COMMITTER_EMAIL"] = BOT_EMAIL
+
+    # 3. Execute the wrapped command
+    command = sys.argv[1:]
+    
+    try:
+        # Pass through all arguments to the underlying process
+        result = subprocess.run(command, env=env)
+        sys.exit(result.returncode)
+    except FileNotFoundError:
+        print(f"Error: Command '{command[0]}' not found.", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f"Unexpected error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()

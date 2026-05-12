@@ -31,7 +31,6 @@ error.log
 .env*.local
 
 # --- Gemini CLI Infrastructure (CRITICAL) ---
-.gemini/
 conductor/
 meridianagent.*.pem
 
