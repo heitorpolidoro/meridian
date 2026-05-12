@@ -126,3 +126,8 @@ npm test
 - `TelemetryCollectorService`: Gathers metrics about system performance and agent actions.
 - `NodeFilesystemWatcher`: Monitors the file system for real-time reactivity.
 - `SessionManagerService`: Manages user and agent sessions.
+
+## 📚 Resources
+- [Meridian Standards](.meridian/MERIDIAN.md)
+- [Architecture Overview](conductor/index.md)
+- [DeepSource Dashboard](https://deepsource.io/gh/heitorpolidoro/meridian/)
