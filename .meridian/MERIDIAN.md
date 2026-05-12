@@ -50,17 +50,15 @@ _Initialized: May 2026_
 To maintain a consistent audit trail and simulate that actions (branches, commits, and Pull Requests) are performed by the **Meridian Agent**, you MUST use the automated helper script.
 
 #### Using the meridian-agent Wrapper
-
-The `meridian-agent` script acts as a transparent proxy for `git` and `gh` commands, automatically injecting the agent's identity and authentication token.
+The `.meridian/meridian-agent` script acts as a transparent proxy for `git` and `gh` commands, automatically injecting the agent's identity and authentication token.
 
 **Usage Example:**
-
 ```bash
 # Any git or gh command can be prefixed with meridian-agent
-meridian-agent git checkout -b feature/agent-task
-meridian-agent git add src/
-meridian-agent git commit -m "feat: simulate agent work"
-meridian-agent gh pr create --title "..." --body "..."
+.meridian/meridian-agent git checkout -b feature/agent-task
+.meridian/meridian-agent git add src/
+.meridian/meridian-agent git commit -m "feat: simulate agent work"
+.meridian/meridian-agent gh pr create --title "..." --body "..."
 ```
 
 ### 🚀 Auto-Merge

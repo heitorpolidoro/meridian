@@ -89,14 +89,14 @@ def ensure_bot_instruction(target_dir, force=False):
 To maintain a consistent audit trail and simulate that actions (branches, commits, and Pull Requests) are performed by the **Meridian Agent**, you MUST use the automated helper script.
 
 **Using the meridian-agent Wrapper**
-The `meridian-agent` script acts as a transparent proxy for `git` and `gh` commands, automatically injecting the agent's identity and authentication token.
+The `.meridian/meridian-agent` script acts as a transparent proxy for `git` and `gh` commands, automatically injecting the agent's identity and authentication token.
 
 ```bash
 # Any git or gh command can be prefixed with meridian-agent
-meridian-agent git checkout -b feature/agent-task
-meridian-agent git add src/
-meridian-agent git commit -m "feat: simulate agent work"
-meridian-agent gh pr create --title "..." --body "..."
+.meridian/meridian-agent git checkout -b feature/agent-task
+.meridian/meridian-agent git add src/
+.meridian/meridian-agent git commit -m "feat: simulate agent work"
+.meridian/meridian-agent gh pr create --title "..." --body "..."
 ```
 """
 
@@ -274,21 +274,27 @@ def main():
         (cli_dir / "skills").mkdir(parents=True, exist_ok=True)
 
     print_color("[2/3] Syncing Core Standards & Roles...", BLUE)
-    source_core = source_dir / ".meridian" / "core"
-    target_core_dir = target_dir / ".meridian" / "core"
-    if source_core.exists() and source_core.resolve() != target_core_dir.resolve():
-        for item in source_core.iterdir():
-            if item.is_file():
-                shutil.copy2(item, target_core_dir / item.name)
-        print_color("  ✅ Core Standards synced.", GREEN)
+    source_meridian = source_dir / ".meridian"
+    target_meridian = target_dir / ".meridian"
+    
+    # Sync core files and roles
+    for sub in ["core", "roles"]:
+        s_dir = source_meridian / sub
+        t_dir = target_meridian / sub
+        t_dir.mkdir(parents=True, exist_ok=True)
+        if s_dir.exists() and s_dir.resolve() != t_dir.resolve():
+            for item in s_dir.iterdir():
+                if item.is_file():
+                    shutil.copy2(item, t_dir / item.name)
+            print_color(f"  ✅ {sub.title()} synced.", GREEN)
 
-    source_roles = source_dir / ".meridian" / "roles"
-    target_roles_dir = target_dir / ".meridian" / "roles"
-    if source_roles.exists() and source_roles.resolve() != target_roles_dir.resolve():
-        for item in source_roles.iterdir():
-            if item.is_file():
-                shutil.copy2(item, target_roles_dir / item.name)
-        print_color("  ✅ Roles synced.", GREEN)
+    # Sync meridian-agent script
+    s_agent = source_meridian / "meridian-agent"
+    t_agent = target_meridian / "meridian-agent"
+    if s_agent.exists() and s_agent.resolve() != t_agent.resolve():
+        shutil.copy2(s_agent, t_agent)
+        t_agent.chmod(t_agent.stat().st_mode | 0o111)  # Ensure executable
+        print_color("  ✅ meridian-agent script synced.", GREEN)
 
     source_agents_file = source_dir / ".meridian" / "agents.json"
     target_agents_file = target_dir / ".meridian" / "agents.json"
