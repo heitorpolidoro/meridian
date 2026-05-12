@@ -1,47 +1,70 @@
-import path from 'node:path';
-import { z } from 'zod';
-import { IFileSystem } from './interfaces/ICoreServices';
+import path from "node:path";
+import { z } from "zod";
+import { IFileSystem } from "./interfaces/ICoreServices";
 
-export const TrackStatusSchema = z.enum(['Draft', 'Active', 'Completed', 'Archived']);
+export const TrackStatusSchema = z.enum([
+  "Draft",
+  "Active",
+  "Completed",
+  "Archived",
+]);
 
-export const SDSPhaseSchema = z.enum(['1.1', '1.2', '2.1', '3.1', '4.2', '5.0']);
-export const OrchestrationStatusSchema = z.enum(['Idle', 'InProgress', 'HandoffReady', 'Failed']);
+export const SDSPhaseSchema = z.enum([
+  "1.1",
+  "1.2",
+  "2.1",
+  "3.1",
+  "4.2",
+  "5.0",
+]);
+export const OrchestrationStatusSchema = z.enum([
+  "Idle",
+  "InProgress",
+  "HandoffReady",
+  "Failed",
+]);
 
 export const OrchestrationSchema = z.object({
-  currentPhase: SDSPhaseSchema.default('1.1'),
-  status: OrchestrationStatusSchema.default('Idle'),
+  currentPhase: SDSPhaseSchema.default("1.1"),
+  status: OrchestrationStatusSchema.default("Idle"),
   assignedAgent: z.string().optional(),
   handoffTimestamp: z.string().optional(),
-  logs: z.array(z.object({
-    timestamp: z.string(),
-    fromPhase: SDSPhaseSchema.optional(),
-    toPhase: SDSPhaseSchema,
-    status: OrchestrationStatusSchema,
-    agent: z.string().optional(),
-    message: z.string().optional(),
-    trigger: z.enum(['Auto', 'Manual', 'Override']).optional()
-  })).default([])
+  logs: z
+    .array(
+      z.object({
+        timestamp: z.string(),
+        fromPhase: SDSPhaseSchema.optional(),
+        toPhase: SDSPhaseSchema,
+        status: OrchestrationStatusSchema,
+        agent: z.string().optional(),
+        message: z.string().optional(),
+        trigger: z.enum(["Auto", "Manual", "Override"]).optional(),
+      }),
+    )
+    .default([]),
 });
 
 export const TrackMetadataSchema = z.object({
   id: z.string(),
   name: z.string(),
-  status: TrackStatusSchema.default('Draft'),
+  status: TrackStatusSchema.default("Draft"),
   owner: z.string().optional(),
   progress: z.number().min(0).max(100).default(0),
-  dates: z.object({
-    created: z.string(),
-    updated: z.string(),
-    completed: z.string().optional()
-  }).default({
-    created: new Date().toISOString(),
-    updated: new Date().toISOString()
-  }),
+  dates: z
+    .object({
+      created: z.string(),
+      updated: z.string(),
+      completed: z.string().optional(),
+    })
+    .default({
+      created: new Date().toISOString(),
+      updated: new Date().toISOString(),
+    }),
   orchestration: OrchestrationSchema.default({
-    currentPhase: '1.1',
-    status: 'Idle',
-    logs: []
-  })
+    currentPhase: "1.1",
+    status: "Idle",
+    logs: [],
+  }),
 });
 
 export type TrackMetadata = z.infer<typeof TrackMetadataSchema>;
@@ -50,9 +73,12 @@ export type TrackMetadata = z.infer<typeof TrackMetadataSchema>;
  * Service for managing track metadata persistence and schema validation.
  */
 export class TrackMetadataService {
-  private readonly TRACKS_DIR = 'tracks';
+  private readonly TRACKS_DIR = "tracks";
 
-  constructor(private readonly fs: IFileSystem, private readonly meridianDir: string) {}
+  constructor(
+    private readonly fs: IFileSystem,
+    private readonly meridianDir: string,
+  ) {}
 
   /**
    * Returns the base path for all tracks.
@@ -72,7 +98,7 @@ export class TrackMetadataService {
    * Returns the path to the metadata.json file of a track.
    */
   private getMetadataPath(trackId: string): string {
-    return path.join(this.getTrackPath(trackId), 'metadata.json');
+    return path.join(this.getTrackPath(trackId), "metadata.json");
   }
 
   /**
@@ -92,17 +118,22 @@ export class TrackMetadataService {
     }
   }
 
-  private computeDates(
-    currentDates: TrackMetadata['dates'],
-    currentStatus: TrackMetadata['status'],
-    newStatus: TrackMetadata['status'],
-    overrideDates?: Partial<TrackMetadata['dates']>,
-  ): TrackMetadata['dates'] {
-    const merged = { ...currentDates, ...overrideDates, updated: new Date().toISOString() };
-    if (newStatus === 'Completed' && currentStatus !== 'Completed') {
+  /** Merges date fields for a metadata update, stamping `completed` only on transition into Completed status. */
+  private static computeDates(
+    currentDates: TrackMetadata["dates"],
+    currentStatus: TrackMetadata["status"],
+    newStatus: TrackMetadata["status"],
+    overrideDates?: Partial<TrackMetadata["dates"]>,
+  ): TrackMetadata["dates"] {
+    const merged = {
+      ...currentDates,
+      ...overrideDates,
+      updated: new Date().toISOString(),
+    };
+    if (newStatus === "Completed" && currentStatus !== "Completed") {
       return { ...merged, completed: new Date().toISOString() };
     }
-    if (newStatus !== 'Completed') {
+    if (newStatus !== "Completed") {
       const dates = { ...merged };
       delete dates.completed;
       return dates;
@@ -114,7 +145,10 @@ export class TrackMetadataService {
    * Updates track metadata and persists it to disk.
    * Handles automatic timestamps and status transitions.
    */
-  updateTrackMetadata(trackId: string, data: Partial<TrackMetadata>): TrackMetadata {
+  updateTrackMetadata(
+    trackId: string,
+    data: Partial<TrackMetadata>,
+  ): TrackMetadata {
     const trackPath = this.getTrackPath(trackId);
     if (!this.fs.exists(trackPath)) {
       this.fs.mkdir(trackPath);
@@ -123,9 +157,12 @@ export class TrackMetadataService {
     const currentMetadata = this.getTrackMetadata(trackId) || {
       id: trackId,
       name: trackId,
-      status: 'Draft' as const,
+      status: "Draft" as const,
       progress: 0,
-      dates: { created: new Date().toISOString(), updated: new Date().toISOString() }
+      dates: {
+        created: new Date().toISOString(),
+        updated: new Date().toISOString(),
+      },
     };
 
     const newStatus = data.status ?? currentMetadata.status;
@@ -133,11 +170,19 @@ export class TrackMetadataService {
       ...currentMetadata,
       ...data,
       id: trackId,
-      dates: this.computeDates(currentMetadata.dates, currentMetadata.status, newStatus, data.dates),
+      dates: TrackMetadataService.computeDates(
+        currentMetadata.dates,
+        currentMetadata.status,
+        newStatus,
+        data.dates,
+      ),
     };
 
     const parsed = TrackMetadataSchema.parse(updatedMetadata);
-    this.fs.writeFile(this.getMetadataPath(trackId), JSON.stringify(parsed, null, 2));
+    this.fs.writeFile(
+      this.getMetadataPath(trackId),
+      JSON.stringify(parsed, null, 2),
+    );
     return parsed;
   }
 
@@ -149,13 +194,21 @@ export class TrackMetadataService {
     const tracksPath = this.getTracksPath();
     if (!this.fs.exists(tracksPath)) return [];
 
-    const directories = this.fs.readDirectory(tracksPath).filter(file => {
-      return this.fs.isDirectory(path.join(tracksPath, file)) && !file.startsWith('.');
+    const directories = this.fs.readDirectory(tracksPath).filter((file) => {
+      return (
+        this.fs.isDirectory(path.join(tracksPath, file)) &&
+        !file.startsWith(".")
+      );
     });
 
-    return directories.map(trackId =>
-      this.getTrackMetadata(trackId) ??
-      this.updateTrackMetadata(trackId, { name: trackId, status: 'Draft', progress: 0 })
+    return directories.map(
+      (trackId) =>
+        this.getTrackMetadata(trackId) ??
+        this.updateTrackMetadata(trackId, {
+          name: trackId,
+          status: "Draft",
+          progress: 0,
+        }),
     );
   }
 }

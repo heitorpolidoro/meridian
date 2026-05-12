@@ -11,5 +11,4 @@ jobs:
     with:
       node-versions: "['22.x', '24.x']"
       sonar-node-version: "24.x"
-      enable-deepsource: true
     secrets: inherit # pragma: allowlist secret

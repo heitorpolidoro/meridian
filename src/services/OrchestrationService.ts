@@ -129,7 +129,8 @@ export class OrchestrationService {
       this.validatingTracks.delete(trackId);
     }
   }
-  private assertForwardTransitionAllowed(
+  /** Throws if a forward phase transition is attempted before the current phase is HandoffReady. */
+  private static assertForwardTransitionAllowed(
     currentPhase: SDSPhase,
     currentStatus: OrchestrationStatus,
     targetPhase: SDSPhase,
@@ -148,7 +149,8 @@ export class OrchestrationService {
     }
   }
 
-  private assertValidationPassed(
+  /** Throws if the validation result failed and the trigger is not an Override. */
+  private static assertValidationPassed(
     validation: TransitionResult,
     trigger: OrchestrationTrigger,
   ) {
@@ -201,13 +203,13 @@ export class OrchestrationService {
       currentPhase,
       targetPhase,
     );
-    this.assertForwardTransitionAllowed(
+    OrchestrationService.assertForwardTransitionAllowed(
       currentPhase,
       currentStatus,
       targetPhase,
       trigger,
     );
-    this.assertValidationPassed(validation, trigger);
+    OrchestrationService.assertValidationPassed(validation, trigger);
 
     const newAgent = SDSStateMachine.getAssignedRole(targetPhase);
     const timestamp = new Date().toISOString();

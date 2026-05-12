@@ -1,10 +1,16 @@
-import { ITelemetryCollector } from './interfaces/ICoreServices';
-import { TelemetryMetric, TelemetrySummary } from './IPCSchemas';
+import { ITelemetryCollector } from "./interfaces/ICoreServices";
+import { TelemetryMetric, TelemetrySummary } from "./IPCSchemas";
 
+/** Collects and summarises runtime telemetry metrics (latency, tokens, errors). */
 export class TelemetryCollectorService implements ITelemetryCollector {
   private metrics: TelemetryMetric[] = [];
 
-  recordMetric(type: 'latency' | 'tokens' | 'errors', value: number, metadata?: unknown): void {
+  /** Records a single metric observation of the given type. */
+  recordMetric(
+    type: "latency" | "tokens" | "errors",
+    value: number,
+    metadata?: unknown,
+  ): void {
     this.metrics.push({
       type,
       value,
@@ -13,31 +19,41 @@ export class TelemetryCollectorService implements ITelemetryCollector {
     });
   }
 
+  /** Returns aggregated p50/p95 latency, total tokens, and error rate. */
   getSummary(): TelemetrySummary {
     const latencies = this.metrics
-      .filter((m) => m.type === 'latency')
+      .filter((m) => m.type === "latency")
       .map((m) => m.value)
       .sort((a, b) => a - b);
 
     const totalTokens = this.metrics
-      .filter((m) => m.type === 'tokens')
+      .filter((m) => m.type === "tokens")
       .reduce((sum, m) => sum + m.value, 0);
 
-    const errorCount = this.metrics.filter((m) => m.type === 'errors').length;
-    const totalRequests = this.metrics.filter((m) => m.type === 'latency').length;
+    const errorCount = this.metrics.filter((m) => m.type === "errors").length;
+    const totalRequests = this.metrics.filter(
+      (m) => m.type === "latency",
+    ).length;
 
     return {
-      p50Latency: this.calculatePercentile(latencies, 50),
-      p95Latency: this.calculatePercentile(latencies, 95),
+      p50Latency: TelemetryCollectorService.calculatePercentile(latencies, 50),
+      p95Latency: TelemetryCollectorService.calculatePercentile(latencies, 95),
       totalTokens,
       errorRate: totalRequests > 0 ? errorCount / totalRequests : 0,
       history: this.metrics.slice(-100), // Last 100 metrics
     };
   }
 
-  private calculatePercentile(sortedLatencies: number[], percentile: number): number {
+  /** Returns the value at the given percentile (0–100) of a sorted array. */
+  private static calculatePercentile(
+    sortedLatencies: number[],
+    percentile: number,
+  ): number {
     if (sortedLatencies.length === 0) return 0;
-    const index = Math.ceil((percentile / 100) * sortedLatencies.length) - 1;
+    const index = Math.max(
+      0,
+      Math.ceil((percentile / 100) * sortedLatencies.length) - 1,
+    );
     return sortedLatencies[index];
   }
 
