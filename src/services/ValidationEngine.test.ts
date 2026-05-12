@@ -1,8 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import {
-  ValidationEngine,
-  QualityGateFn,
-} from "./ValidationEngine";
+import { ValidationEngine, QualityGateFn } from "./ValidationEngine";
 import { MockFileSystem } from "./mocks/MockFileSystem";
 
 describe("ValidationEngine", () => {
