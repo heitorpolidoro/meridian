@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    uses: heitorpolidoro/.github/.github/workflows/node-standard-ci.yml@master
+    uses: heitorpolidoro/.github/.github/workflows/node-ci.yml@master
     with:
       node-versions: "['22.x', '24.x']"
       sonar-node-version: "24.x"
