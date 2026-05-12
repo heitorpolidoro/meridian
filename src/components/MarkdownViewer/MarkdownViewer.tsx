@@ -78,7 +78,7 @@ export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({
            * @param props Additional anchor element props.
            * @returns The rendered anchor element.
            */
-          a({ node, href, children, ...props }: Record<string, unknown>) {
+          a({ node: _node, href, children, ...props }: Record<string, unknown>) {
             /**
              * Handle click events on the anchor element to navigate within markdown or delegate to external links.
              *
