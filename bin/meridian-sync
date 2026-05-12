@@ -235,6 +235,8 @@ def main():
             print_color("Error: No existing CLI configuration found (.gemini/ or .claude/).", RED)
             print_color("Run 'meridian-sync gemini' or 'meridian-sync claude' first.", CYAN)
             sys.exit(1)
+    elif args.use_bot or args.enable_auto_merge:
+        targets = []
     else:
         parser.error("target is required (gemini or claude)")
 
