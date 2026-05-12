@@ -84,11 +84,13 @@ def ensure_bot_instruction(target_dir, force=False):
 
     bot_id = "3677362"
     bot_instruction = f"""
-### 🤖 Bot Authentication
-To use the GitHub App bot for automation, run:
+### 🤖 PR Workflow (use the bot — required)
+
+All Pull Requests MUST be created using the GitHub App bot token, not the personal account:
+
 ```bash
-GH_TOKEN=$(gh token generate --app-id {bot_id} --key ~/workspace/meridian/meridianagent.2026-05-11.private-key.pem --token-only)
-gh <command>
+GH_TOKEN=$(gh token generate --app-id {bot_id} --key ~/workspace/meridian/meridianagent.2026-05-11.private-key.pem --token-only) \\
+  gh pr create ...
 ```
 """
 
