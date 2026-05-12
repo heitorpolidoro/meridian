@@ -92,7 +92,7 @@ export class TrackMetadataService {
     }
   }
 
-  private computeDates(
+  private static computeDates(
     currentDates: TrackMetadata['dates'],
     currentStatus: TrackMetadata['status'],
     newStatus: TrackMetadata['status'],
@@ -133,7 +133,7 @@ export class TrackMetadataService {
       ...currentMetadata,
       ...data,
       id: trackId,
-      dates: this.computeDates(currentMetadata.dates, currentMetadata.status, newStatus, data.dates),
+      dates: TrackMetadataService.computeDates(currentMetadata.dates, currentMetadata.status, newStatus, data.dates),
     };
 
     const parsed = TrackMetadataSchema.parse(updatedMetadata);

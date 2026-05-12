@@ -27,15 +27,15 @@ export class TelemetryCollectorService implements ITelemetryCollector {
     const totalRequests = this.metrics.filter((m) => m.type === 'latency').length;
 
     return {
-      p50Latency: this.calculatePercentile(latencies, 50),
-      p95Latency: this.calculatePercentile(latencies, 95),
+      p50Latency: TelemetryCollectorService.calculatePercentile(latencies, 50),
+      p95Latency: TelemetryCollectorService.calculatePercentile(latencies, 95),
       totalTokens,
       errorRate: totalRequests > 0 ? errorCount / totalRequests : 0,
       history: this.metrics.slice(-100), // Last 100 metrics
     };
   }
 
-  private calculatePercentile(sortedLatencies: number[], percentile: number): number {
+  private static calculatePercentile(sortedLatencies: number[], percentile: number): number {
     if (sortedLatencies.length === 0) return 0;
     const index = Math.ceil((percentile / 100) * sortedLatencies.length) - 1;
     return sortedLatencies[index];
