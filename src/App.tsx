@@ -68,8 +68,8 @@ function App() {
   const [settings, setSettings] = useState({ rootDir: "" });
   const [agents, setAgents] = useState<Agent[]>([]);
   const [flashes, setFlashes] = useState<{ id: number; text: string }[]>([]);
-  const [telemetry, setTelemetry] = useState<TelemetrySummary | null>(null);
-  const [compliance, setCompliance] = useState<SDSCompliance[]>([]);
+  const [_telemetry, setTelemetry] = useState<TelemetrySummary | null>(null);
+  const [_compliance, setCompliance] = useState<SDSCompliance[]>([]);
   const [_conflicts, setConflicts] = useState<SyncConflict[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
@@ -138,6 +138,7 @@ function App() {
       setProjects(p);
     });
     socket.on("tracks", (data) => setTracks(data));
+    socket.on("agents", (data) => setAgents(data));
 
     socket.on("telemetry-update", (data) => setTelemetry(data));
     socket.on("compliance-update", (data) => setCompliance(data));
