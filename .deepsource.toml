@@ -12,5 +12,9 @@ name = "secrets"
 enabled = true
 
 [[analyzers]]
+name = "test-coverage"
+enabled = false
+
+[[analyzers]]
 name = "docker"
 enabled = true
