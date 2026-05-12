@@ -2,6 +2,15 @@ import { render, screen, fireEvent, act } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { DirectoryPicker } from "./DirectoryPicker";
 
+function getSocketHandler(
+  mockSocket: { on: ReturnType<typeof vi.fn> },
+  event: string,
+): (...args: unknown[]) => void {
+  const call = mockSocket.on.mock.calls.find((c: unknown[]) => c[0] === event);
+  if (!call) throw new Error(`No socket handler registered for "${event}"`);
+  return call[1] as (...args: unknown[]) => void;
+}
+
 describe("DirectoryPicker", () => {
   let mockSocket: { emit: ReturnType<typeof vi.fn>; on: ReturnType<typeof vi.fn>; off: ReturnType<typeof vi.fn> };
   const mockOnSelect = vi.fn();
@@ -41,7 +50,7 @@ describe("DirectoryPicker", () => {
       />
     );
 
-    const onDirContents = mockSocket.on.mock.calls.find((call: unknown[]) => call[0] === "dir-contents")![1];
+    const onDirContents = getSocketHandler(mockSocket, "dir-contents");
     
     act(() => {
       onDirContents(["folder1", "folder2"]);
@@ -62,7 +71,7 @@ describe("DirectoryPicker", () => {
       />
     );
 
-    const onDirContents = mockSocket.on.mock.calls.find((call: unknown[]) => call[0] === "dir-contents")![1];
+    const onDirContents = getSocketHandler(mockSocket, "dir-contents");
     
     act(() => {
       onDirContents([]);
@@ -81,7 +90,7 @@ describe("DirectoryPicker", () => {
       />
     );
 
-    const onDirContents = mockSocket.on.mock.calls.find((call: unknown[]) => call[0] === "dir-contents")![1];
+    const onDirContents = getSocketHandler(mockSocket, "dir-contents");
     
     act(() => {
       onDirContents(["folder1"]);
@@ -104,7 +113,7 @@ describe("DirectoryPicker", () => {
       />
     );
 
-    const onDirContents = mockSocket.on.mock.calls.find((call: unknown[]) => call[0] === "dir-contents")![1];
+    const onDirContents = getSocketHandler(mockSocket, "dir-contents");
     
     act(() => {
       onDirContents(["folder1"]);
@@ -125,7 +134,7 @@ describe("DirectoryPicker", () => {
       />
     );
 
-    const onDirContents = mockSocket.on.mock.calls.find((call: unknown[]) => call[0] === "dir-contents")![1];
+    const onDirContents = getSocketHandler(mockSocket, "dir-contents");
     
     act(() => {
       onDirContents(["folder1"]);
@@ -146,7 +155,7 @@ describe("DirectoryPicker", () => {
       />
     );
 
-    const onDirContents = mockSocket.on.mock.calls.find((call: unknown[]) => call[0] === "dir-contents")![1];
+    const onDirContents = getSocketHandler(mockSocket, "dir-contents");
     
     act(() => {
       onDirContents(["folder1"]);
@@ -181,7 +190,7 @@ describe("DirectoryPicker", () => {
       />
     );
 
-    const onDirContents = mockSocket.on.mock.calls.find((call: unknown[]) => call[0] === "dir-contents")![1];
+    const onDirContents = getSocketHandler(mockSocket, "dir-contents");
     
     act(() => {
       onDirContents(["folder1"]);
@@ -203,7 +212,7 @@ describe("DirectoryPicker", () => {
       />
     );
 
-    const onDirContents = mockSocket.on.mock.calls.find((call: unknown[]) => call[0] === "dir-contents")![1];
+    const onDirContents = getSocketHandler(mockSocket, "dir-contents");
     act(() => {
       onDirContents(["subfolder"]);
     });
@@ -212,7 +221,7 @@ describe("DirectoryPicker", () => {
 
     expect(mockSocket.emit).toHaveBeenCalledWith("get-parent-dir", "/initial/path/folder");
 
-    const onParentDir = mockSocket.on.mock.calls.find((call: unknown[]) => call[0] === "parent-dir")![1];
+    const onParentDir = getSocketHandler(mockSocket, "parent-dir");
     
     act(() => {
       onParentDir("/initial/path");
