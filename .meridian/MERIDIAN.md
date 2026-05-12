@@ -38,3 +38,18 @@ Meridian is an **Intelligent Project Manager with Multi-Agent Orchestration**. I
 
 ---
 *Initialized: May 2026*
+
+### 🤖 PR Workflow (use the bot — required)
+
+All Pull Requests MUST be created using the GitHub App bot token, not the personal account:
+
+```bash
+GH_TOKEN=$(gh token generate --app-id 3677362 --key ~/workspace/meridian/meridianagent.2026-05-11.private-key.pem --token-only) \
+  gh pr create ...
+```
+
+### 🚀 Auto-Merge
+To enable automatic merging for Pull Requests that pass all status checks, run:
+```bash
+gh pr merge --auto --squash --delete-branch
+```
