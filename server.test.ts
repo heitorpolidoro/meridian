@@ -556,7 +556,7 @@ describe("server.ts", () => {
       );
 
       socket.emit.mockClear();
-      exitHandler(undefined);
+      exitHandler();
       expect(socket.emit).toHaveBeenCalledWith(
         "status",
         expect.stringContaining("Process crashed"),
