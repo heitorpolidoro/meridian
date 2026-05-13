@@ -127,6 +127,10 @@ npm test
 - `NodeFilesystemWatcher`: Monitors the file system for real-time reactivity.
 - `SessionManagerService`: Manages user and agent sessions.
 
+### Troubleshooting
+
+If `meridian-agent` fails with a "Private key not found" error, ensure that your `.pem` key is located in the path specified within the script (default: `~/workspace/meridian/`).
+
 ## 📚 Resources
 - [Meridian Standards](.meridian/MERIDIAN.md)
 - [Architecture Overview](conductor/index.md)
