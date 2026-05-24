@@ -10,5 +10,5 @@ jobs:
     uses: heitorpolidoro/.github/.github/workflows/node-ci.yml@master
     with:
       node-versions: "['22.x', '24.x']"
-      sonar-node-version: "24.x"
+      sonar-node-version: ${{ github.actor != 'dependabot[bot]' && '24.x' || '' }}
     secrets: inherit # pragma: allowlist secret
