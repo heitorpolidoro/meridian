@@ -1,0 +1,82 @@
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { execFileSync } = require('node:child_process');
+
+// Builds an isolated fixture workspace: a registry at <ws>/.meridian/projects.json
+// pointing at one project. The server is pointed here with MERIDIAN_RUNNING_DIR so
+// the tests never see the six real projects.
+function workspaceWith(name) {
+    const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'meridian-ws-'));
+    const dir = path.join(ws, 'fixture-project');
+    fs.mkdirSync(path.join(dir, '.meridian'), { recursive: true });
+    fs.writeFileSync(
+        path.join(dir, '.meridian', 'project-info.json'),
+        JSON.stringify({ name, key: 'TST', stack: [], description: 'x' })
+    );
+    fs.mkdirSync(path.join(ws, '.meridian'), { recursive: true });
+    fs.writeFileSync(
+        path.join(ws, '.meridian', 'projects.json'),
+        JSON.stringify({ projects: [{ path: dir }] })
+    );
+    return { ws, dir };
+}
+
+async function withServer(ws, fn) {
+    const port = 3400 + Math.floor(Math.random() * 500);
+    const proc = require('node:child_process').spawn('node', ['server.js'], {
+        env: { ...process.env, PORT: String(port), MERIDIAN_RUNNING_DIR: ws },
+        cwd: path.join(__dirname, '..'),
+        stdio: 'ignore'
+    });
+    try {
+        for (let i = 0; i < 50; i++) {
+            try { await fetch(`http://localhost:${port}/api/status`); break; }
+            catch { await new Promise(r => setTimeout(r, 100)); }
+        }
+        await fn(`http://localhost:${port}`);
+    } finally {
+        proc.kill('SIGKILL');
+    }
+}
+
+test('POST /api/projects/tasks stores the extended fields and stamps dates', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        const res = await fetch(`${base}/api/projects/tasks`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                projectPath: dir,
+                title: 'Add a thing',
+                expected_results: ['The thing exists'],
+                priority: 'high',
+                justification: 'because'
+            })
+        });
+        assert.equal(res.status, 201);
+        const { task } = await res.json();
+        assert.equal(task.id, 'TST-1');
+        assert.equal(task.status, 'backlog');
+        assert.equal(task.priority, 'high');
+        assert.deepEqual(task.expected_results, ['The thing exists']);
+        assert.equal(task.justification, 'because');
+        assert.ok(task.created_at && task.moved_at && task.updated_at);
+    });
+});
+
+test('POST /api/projects/tasks defaults priority to medium', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        const res = await fetch(`${base}/api/projects/tasks`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectPath: dir, title: 'No priority given' })
+        });
+        const { task } = await res.json();
+        assert.equal(task.priority, 'medium');
+        assert.deepEqual(task.expected_results, []);
+    });
+});

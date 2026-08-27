@@ -1,7 +1,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { deriveKey, nextTaskId, getTasks, saveTasks } = require('./lib/tasks');
+const { deriveKey, nextTaskId, getTasks, saveTasks, stampNewTask } = require('./lib/tasks');
 
 const app = express();
 const PORT = process.env.PORT || 3333;
@@ -413,7 +413,7 @@ app.put('/api/projects', (req, res) => {
 // REST API to add a task
 app.post('/api/projects/tasks', (req, res) => {
     try {
-        const { projectPath, title, blockedBy } = req.body;
+        const { projectPath, title, blockedBy, expected_results, priority, justification } = req.body;
         if (!projectPath || !title) {
             return res.status(400).json({ error: 'projectPath and title are required' });
         }
@@ -430,14 +430,16 @@ app.post('/api/projects/tasks', (req, res) => {
             } catch (e) { /* keep default */ }
         }
 
-        const newTask = {
+        const newTask = stampNewTask({
             id: nextTaskId(tasksData.tasks, key),
             title,
             status: 'backlog',
-            justification: '',
+            justification: justification || '',
+            priority: priority || 'medium',
+            expected_results: Array.isArray(expected_results) ? expected_results : [],
             running: false,
             blockedBy: Array.isArray(blockedBy) ? blockedBy : []
-        };
+        });
         
         tasksData.tasks.push(newTask);
         saveTasks(projectPath, tasksData);
