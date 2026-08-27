@@ -285,7 +285,6 @@ function getStatusData(options = {}) {
                     stack: stackArray,
                     description: info.description,
                     tasks: options.limit ? limitPerStatus(tasksData.tasks || [], options.limit) : (tasksData.tasks || []),
-                    lastUpdated: tasksData.lastUpdated,
                     missingAgentsMd: !hasAgentsMd,
                     missingMeridianRules: missingMeridianRules,
                     outdatedMeridianRules: outdatedMeridianRules,
