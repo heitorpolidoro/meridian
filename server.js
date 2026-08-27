@@ -1,7 +1,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { deriveKey, nextTaskId, getTasks, saveTasks, stampNewTask } = require('./lib/tasks');
+const { deriveKey, nextTaskId, getTasks, saveTasks, stampNewTask, stampTaskUpdate } = require('./lib/tasks');
 
 const app = express();
 const PORT = process.env.PORT || 3333;
@@ -454,7 +454,7 @@ app.post('/api/projects/tasks', (req, res) => {
 // REST API to update a task (status, justification)
 app.put('/api/projects/tasks/:taskId', (req, res) => {
     try {
-        const { projectPath, status, justification, title, blockedBy, running } = req.body;
+        const { projectPath } = req.body;
         const taskId = req.params.taskId;
 
         if (!projectPath) {
@@ -468,12 +468,29 @@ app.put('/api/projects/tasks/:taskId', (req, res) => {
             return res.status(404).json({ error: 'Task not found' });
         }
 
-        if (status !== undefined) tasksData.tasks[taskIndex].status = status;
-        if (justification !== undefined) tasksData.tasks[taskIndex].justification = justification;
-        if (title !== undefined) tasksData.tasks[taskIndex].title = title;
-        if (blockedBy !== undefined) tasksData.tasks[taskIndex].blockedBy = Array.isArray(blockedBy) ? blockedBy : [];
-        if (running !== undefined) tasksData.tasks[taskIndex].running = Boolean(running);
-        
+        const task = tasksData.tasks[taskIndex];
+        const prevStatus = task.status;
+
+        const scalarFields = [
+            'status', 'justification', 'title', 'priority', 'spec_path',
+            'spec_iterations', 'code_review_iterations', 'qa_iterations'
+        ];
+        for (const field of scalarFields) {
+            if (req.body[field] !== undefined) task[field] = req.body[field];
+        }
+        if (req.body.blockedBy !== undefined) {
+            task.blockedBy = Array.isArray(req.body.blockedBy) ? req.body.blockedBy : [];
+        }
+        if (req.body.expected_results !== undefined) {
+            task.expected_results = Array.isArray(req.body.expected_results) ? req.body.expected_results : [];
+        }
+        if (req.body.last_review_findings !== undefined) {
+            task.last_review_findings = Array.isArray(req.body.last_review_findings) ? req.body.last_review_findings : [];
+        }
+        if (req.body.running !== undefined) task.running = Boolean(req.body.running);
+
+        stampTaskUpdate(task, prevStatus);
+
         saveTasks(projectPath, tasksData);
         
         res.json({ success: true, task: tasksData.tasks[taskIndex] });
