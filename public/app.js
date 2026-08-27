@@ -1003,18 +1003,24 @@ window.changeTaskStatus = async function(taskId, newStatusId, oldStatus, targetP
         }
     }
     
-    // Find proper string status to save (e.g. "QA / Review")
-    const statusLabel = KANBAN_STATUSES.find(s => s.id === newStatusId).label.replace(' / ', '/').toLowerCase();
-    
+    // Persist the canonical status id (e.g. 'qareview'), never the column label.
+    // The server rejects anything outside the nine canonical statuses.
+    if (!KANBAN_STATUSES.some(s => s.id === newStatusId)) {
+        showFlashMessage(`Unknown status '${newStatusId}'`, 'error');
+        refreshProjectView(); // Revert UI
+        return;
+    }
+
     try {
         const res = await fetch(`/api/projects/tasks/${taskId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ projectPath: projPath, status: statusLabel, justification })
+            body: JSON.stringify({ projectPath: projPath, status: newStatusId, justification })
         });
         
         if (!res.ok) {
-            showFlashMessage('Failed to update task', 'error');
+            const data = await res.json().catch(() => ({}));
+            showFlashMessage(data.error || 'Failed to update task', 'error');
             refreshProjectView(); // Revert UI
         }
     } catch (err) {

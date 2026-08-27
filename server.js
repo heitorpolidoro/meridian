@@ -1,6 +1,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const { deriveKey, nextTaskId, getTasks, saveTasks, stampNewTask, stampTaskUpdate, MalformedTasksError } = require('./lib/tasks');
 
 const app = express();
 const PORT = process.env.PORT || 3333;
@@ -21,26 +22,6 @@ const PROJECTS_JSON_PATH = path.join(WORKSPACE_DIR, '.meridian', 'projects.json'
 
 function getBoilerplate() {
     return fs.readFileSync(path.join(__dirname, 'prompts', 'boilerplate.txt'), 'utf8');
-}
-
-function deriveKey(name) {
-    const words = name.trim().split(/[\s_\-]+/).filter(Boolean);
-    if (words.length === 1) {
-        return words[0].substring(0, 5).toUpperCase();
-    }
-    return words.map(w => w[0]).toUpperCase().join('');
-}
-
-function nextTaskId(tasks, key) {
-    const prefix = key + '-';
-    let max = 0;
-    for (const t of tasks) {
-        if (typeof t.id === 'string' && t.id.startsWith(prefix)) {
-            const n = parseInt(t.id.slice(prefix.length), 10);
-            if (!isNaN(n) && n > max) max = n;
-        }
-    }
-    return `${key}-${max + 1}`;
 }
 
 function getAgentTemplates() {
@@ -157,8 +138,68 @@ function migrateProjects() {
 // Run migration on startup
 migrateProjects();
 
+const VALID_STATUSES = [
+    'backlog', 'specreview', 'readytodo', 'inprogress', 'codereview',
+    'qareview', 'blocked', 'done', 'nope'
+];
+const PRIORITY_ORDER = ['critical', 'high', 'medium', 'low'];
+const DEFAULT_PRIORITY = 'medium';
+
+// An unknown priority must not out-rank `critical`, which is what a raw
+// indexOf() miss (-1) would do. Anything unrecognised reads as the default.
+function priorityRank(priority) {
+    const idx = PRIORITY_ORDER.indexOf(priority);
+    return idx === -1 ? PRIORITY_ORDER.indexOf(DEFAULT_PRIORITY) : idx;
+}
+
+// Rejects a write whose status/priority is outside the canonical set. Returns
+// an error message, or null when the value is acceptable (absent counts as
+// acceptable — the caller decides whether the field is required).
+function validateTaskFields(body) {
+    if (body.status !== undefined && !VALID_STATUSES.includes(body.status)) {
+        return `Invalid status '${body.status}'. Allowed: ${VALID_STATUSES.join(', ')}`;
+    }
+    if (body.priority !== undefined && !PRIORITY_ORDER.includes(body.priority)) {
+        return `Invalid priority '${body.priority}'. Allowed: ${PRIORITY_ORDER.join(', ')}`;
+    }
+    return null;
+}
+
+// Turns a malformed tasks.json into a 500 rather than letting the caller
+// read-modify-write an empty list over the user's backlog.
+function handleTaskReadError(err, res) {
+    if (err instanceof MalformedTasksError) {
+        console.error(err.message);
+        res.status(500).json({ error: err.message + ' — refusing to write; fix the file by hand.' });
+        return true;
+    }
+    return false;
+}
+
+function limitPerStatus(tasks, limit) {
+    const byStatus = new Map();
+    for (const task of tasks) {
+        if (!byStatus.has(task.status)) byStatus.set(task.status, []);
+        byStatus.get(task.status).push(task);
+    }
+    const out = [];
+    for (const [status, list] of byStatus) {
+        list.sort((a, b) => {
+            if (status === 'done') {
+                return String(b.completed_at || '').localeCompare(String(a.completed_at || ''));
+            }
+            const pa = priorityRank(a.priority || DEFAULT_PRIORITY);
+            const pb = priorityRank(b.priority || DEFAULT_PRIORITY);
+            if (pa !== pb) return pa - pb;
+            return String(a.created_at || '').localeCompare(String(b.created_at || ''));
+        });
+        out.push(...list.slice(0, limit));
+    }
+    return out;
+}
+
 // Helper to fetch aggregated data from decentralized storage
-function getStatusData() {
+function getStatusData(options = {}) {
     let data = { projects: [], errors: [] };
     try {
         if (fs.existsSync(PROJECTS_JSON_PATH)) {
@@ -173,6 +214,7 @@ function getStatusData() {
             
             for (const projEntry of parsed.projects || []) {
                 const projPath = projEntry.path;
+                if (options.project && path.resolve(projEntry.path) !== path.resolve(options.project)) continue;
                 if (!fs.existsSync(projPath)) {
                     data.errors.push({ file: 'System', message: `Project path not found: ${projPath}` });
                     continue;
@@ -189,7 +231,12 @@ function getStatusData() {
                     }
                 }
 
-                const tasksData = getTasks(projPath);
+                let tasksData = { tasks: [] };
+                try {
+                    tasksData = getTasks(projPath);
+                } catch (err) {
+                    data.errors.push({ file: `${info.name} (tasks.json)`, message: err.message });
+                }
                 
                 const agentsMdPath = path.join(projPath, 'AGENTS.md');
                 const hasAgentsMd = fs.existsSync(agentsMdPath);
@@ -278,8 +325,7 @@ function getStatusData() {
                     relativePath: relPath,
                     stack: stackArray,
                     description: info.description,
-                    tasks: tasksData.tasks || [],
-                    lastUpdated: tasksData.lastUpdated,
+                    tasks: options.limit ? limitPerStatus(tasksData.tasks || [], options.limit) : (tasksData.tasks || []),
                     missingAgentsMd: !hasAgentsMd,
                     missingMeridianRules: missingMeridianRules,
                     outdatedMeridianRules: outdatedMeridianRules,
@@ -303,7 +349,11 @@ function getStatusData() {
 
 // REST API for initial load
 app.get('/api/status', (req, res) => {
-    res.json(getStatusData());
+    const limit = req.query.limit ? parseInt(req.query.limit, 10) : undefined;
+    res.json(getStatusData({
+        project: req.query.project,
+        limit: Number.isInteger(limit) && limit > 0 ? limit : undefined
+    }));
 });
 
 // REST API to list subdirectories in RUNNING_DIR
@@ -429,41 +479,26 @@ app.put('/api/projects', (req, res) => {
     }
 });
 
-// Helper to read and write tasks for a project
-function getTasks(projPath) {
-    const tasksPath = path.join(projPath, '.meridian', 'tasks.json');
-    if (fs.existsSync(tasksPath)) {
-        try {
-            const parsed = JSON.parse(fs.readFileSync(tasksPath, 'utf8'));
-            if (Array.isArray(parsed)) {
-                return { lastUpdated: null, tasks: parsed };
-            }
-            return parsed;
-        } catch (e) {
-            return { lastUpdated: null, tasks: [] };
-        }
-    }
-    return { lastUpdated: null, tasks: [] };
-}
-
-function saveTasks(projPath, tasksData) {
-    const localMeridianDir = path.join(projPath, '.meridian');
-    if (!fs.existsSync(localMeridianDir)) {
-        fs.mkdirSync(localMeridianDir, { recursive: true });
-    }
-    tasksData.lastUpdated = new Date().toISOString();
-    fs.writeFileSync(path.join(localMeridianDir, 'tasks.json'), JSON.stringify(tasksData, null, 2), 'utf8');
-}
-
 // REST API to add a task
 app.post('/api/projects/tasks', (req, res) => {
     try {
-        const { projectPath, title, blockedBy } = req.body;
+        const { projectPath, title, blockedBy, expected_results, priority, justification } = req.body;
         if (!projectPath || !title) {
             return res.status(400).json({ error: 'projectPath and title are required' });
         }
 
-        const tasksData = getTasks(projectPath);
+        const invalid = validateTaskFields(req.body);
+        if (invalid) {
+            return res.status(400).json({ error: invalid });
+        }
+
+        let tasksData;
+        try {
+            tasksData = getTasks(projectPath);
+        } catch (err) {
+            if (handleTaskReadError(err, res)) return;
+            throw err;
+        }
 
         // Derive key from project-info.json
         const infoPath = path.join(projectPath, '.meridian', 'project-info.json');
@@ -475,14 +510,16 @@ app.post('/api/projects/tasks', (req, res) => {
             } catch (e) { /* keep default */ }
         }
 
-        const newTask = {
+        const newTask = stampNewTask({
             id: nextTaskId(tasksData.tasks, key),
             title,
             status: 'backlog',
-            justification: '',
+            justification: justification || '',
+            priority: priority || DEFAULT_PRIORITY,
+            expected_results: Array.isArray(expected_results) ? expected_results : [],
             running: false,
             blockedBy: Array.isArray(blockedBy) ? blockedBy : []
-        };
+        });
         
         tasksData.tasks.push(newTask);
         saveTasks(projectPath, tasksData);
@@ -494,29 +531,60 @@ app.post('/api/projects/tasks', (req, res) => {
     }
 });
 
-// REST API to update a task (status, justification)
+// REST API to update a task. Accepts the full task schema: status, title,
+// justification, priority, spec_path, spec_iterations, code_review_iterations,
+// qa_iterations, blockedBy, expected_results, last_review_findings, running.
+// Timestamps (updated_at, moved_at, completed_at) are server-owned.
 app.put('/api/projects/tasks/:taskId', (req, res) => {
     try {
-        const { projectPath, status, justification, title, blockedBy, running } = req.body;
+        const { projectPath } = req.body;
         const taskId = req.params.taskId;
 
         if (!projectPath) {
             return res.status(400).json({ error: 'projectPath is required' });
         }
 
-        const tasksData = getTasks(projectPath);
+        const invalid = validateTaskFields(req.body);
+        if (invalid) {
+            return res.status(400).json({ error: invalid });
+        }
+
+        let tasksData;
+        try {
+            tasksData = getTasks(projectPath);
+        } catch (err) {
+            if (handleTaskReadError(err, res)) return;
+            throw err;
+        }
         const taskIndex = tasksData.tasks.findIndex(t => t.id === taskId);
 
         if (taskIndex === -1) {
             return res.status(404).json({ error: 'Task not found' });
         }
 
-        if (status !== undefined) tasksData.tasks[taskIndex].status = status;
-        if (justification !== undefined) tasksData.tasks[taskIndex].justification = justification;
-        if (title !== undefined) tasksData.tasks[taskIndex].title = title;
-        if (blockedBy !== undefined) tasksData.tasks[taskIndex].blockedBy = Array.isArray(blockedBy) ? blockedBy : [];
-        if (running !== undefined) tasksData.tasks[taskIndex].running = Boolean(running);
-        
+        const task = tasksData.tasks[taskIndex];
+        const prevStatus = task.status;
+
+        const scalarFields = [
+            'status', 'justification', 'title', 'priority', 'spec_path',
+            'spec_iterations', 'code_review_iterations', 'qa_iterations'
+        ];
+        for (const field of scalarFields) {
+            if (req.body[field] !== undefined) task[field] = req.body[field];
+        }
+        if (req.body.blockedBy !== undefined) {
+            task.blockedBy = Array.isArray(req.body.blockedBy) ? req.body.blockedBy : [];
+        }
+        if (req.body.expected_results !== undefined) {
+            task.expected_results = Array.isArray(req.body.expected_results) ? req.body.expected_results : [];
+        }
+        if (req.body.last_review_findings !== undefined) {
+            task.last_review_findings = Array.isArray(req.body.last_review_findings) ? req.body.last_review_findings : [];
+        }
+        if (req.body.running !== undefined) task.running = Boolean(req.body.running);
+
+        stampTaskUpdate(task, prevStatus);
+
         saveTasks(projectPath, tasksData);
         
         res.json({ success: true, task: tasksData.tasks[taskIndex] });
@@ -536,7 +604,13 @@ app.delete('/api/projects/tasks/:taskId', (req, res) => {
             return res.status(400).json({ error: 'projectPath is required' });
         }
         
-        const tasksData = getTasks(projectPath);
+        let tasksData;
+        try {
+            tasksData = getTasks(projectPath);
+        } catch (err) {
+            if (handleTaskReadError(err, res)) return;
+            throw err;
+        }
         const initialLen = tasksData.tasks.length;
         tasksData.tasks = tasksData.tasks.filter(t => t.id !== taskId);
         

@@ -27,7 +27,6 @@ Each managed project MUST have a `tasks.json` file at its root. The standard sch
 
 ```json
 {
-  "lastUpdated": "YYYY-MM-DDTHH:MM:SSZ",
   "tasks": [
     {
       "id": "TASK-1",
@@ -49,7 +48,6 @@ Each managed project MUST have a `tasks.json` file at its root. The standard sch
 - When delegating to a subagent, set `assignee` to `"subagent:<name>"`.
 - If blocked, provide the reason in `blockedReason`.
 - Upon completing a task, set `status` to `"done"` and fill in `completedAt` with the date.
-- Always update `lastUpdated` when modifying the file.
 
 ## Subagent Protocol
 
