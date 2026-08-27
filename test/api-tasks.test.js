@@ -239,6 +239,57 @@ test('GET /api/status?project= narrows to one project', async () => {
     });
 });
 
+test('POST refuses to write over a malformed tasks.json', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        await seed(base, dir, { title: 'first' });
+        await seed(base, dir, { title: 'second' });
+        const file = path.join(dir, '.meridian', 'tasks.json');
+        const whole = fs.readFileSync(file, 'utf8');
+        const truncated = whole.slice(0, whole.length - 30);
+        fs.writeFileSync(file, truncated);
+
+        const res = await fetch(`${base}/api/projects/tasks`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectPath: dir, title: 'third' })
+        });
+        assert.equal(res.status, 500);
+        assert.match((await res.json()).error, /Malformed tasks.json/);
+        assert.equal(fs.readFileSync(file, 'utf8'), truncated,
+            'the corrupt file must be left exactly as it was');
+    });
+});
+
+test('PUT refuses to write over a malformed tasks.json', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        await seed(base, dir);
+        const file = path.join(dir, '.meridian', 'tasks.json');
+        fs.writeFileSync(file, '{not json');
+        const res = await fetch(`${base}/api/projects/tasks/TST-1`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectPath: dir, status: 'done' })
+        });
+        assert.equal(res.status, 500);
+        assert.equal(fs.readFileSync(file, 'utf8'), '{not json');
+    });
+});
+
+test('GET /api/status reports a malformed tasks.json instead of showing no tasks', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        await seed(base, dir);
+        fs.writeFileSync(path.join(dir, '.meridian', 'tasks.json'), '{not json');
+        const res = await (await fetch(`${base}/api/status`)).json();
+        assert.equal(res.projects.length, 1);
+        assert.deepEqual(res.projects[0].tasks, []);
+        assert.ok(res.errors.some(e => /Malformed tasks.json/.test(e.message)),
+            'the corruption must surface as an error, not as an empty board');
+    });
+});
+
 test('GET /api/status?limit= caps tasks per status', async () => {
     const { ws, dir } = workspaceWith('Test Project');
     await withServer(ws, async (base) => {
