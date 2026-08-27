@@ -1,0 +1,7 @@
+Analyze this codebase and write a concise, one-sentence description of the project's purpose.
+Rewrite the 'description' field in the `.meridian/project-info.json` file with this text.
+Do not change any other fields in the JSON. Write the updated JSON back to the file.
+
+CRITICAL RULES:
+- DO NOT spawn any subagents.
+- ONLY analyze the current directory where you were executed. Do NOT attempt to analyze any other projects in the workspace.

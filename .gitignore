@@ -1,0 +1,5 @@
+.meridian/
+node_modules/
+*.log
+*.pid
+.DS_Store

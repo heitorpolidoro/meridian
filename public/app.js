@@ -1,0 +1,1171 @@
+const KANBAN_STATUSES = [
+    { id: 'backlog', label: 'Backlog' },
+    { id: 'specreview', label: 'Spec Review' },
+    { id: 'readytodo', label: 'Ready to Do' },
+    { id: 'inprogress', label: 'In Progress' },
+    { id: 'codereview', label: 'Code Review' },
+    { id: 'qareview', label: 'QA / Review' },
+    { id: 'blocked', label: 'Blocked' },
+    { id: 'done', label: 'Done' },
+    { id: 'nope', label: 'Nope' }
+];
+
+const STATUS_PRIORITY = {
+    'blocked': 7,
+    'pending': 7,
+    'qareview': 6,
+    'codereview': 5,
+    'inprogress': 4,
+    'readytodo': 3,
+    'todo': 3,
+    'specreview': 2,
+    'backlog': 1
+};
+
+const projectsContainer = document.getElementById('projects-container');
+const connectionStatus = document.getElementById('connection-status');
+const errorContainer = document.getElementById('error-container');
+let currentProjectsData = [];
+let currentProjectViewPath = null;
+let isInitialRouteHandled = false;
+let hideEmptyColumns = localStorage.getItem('meridian_hide_empty_columns') === 'true';
+
+const dashboardView = document.getElementById('dashboard-view');
+const projectView = document.getElementById('project-view');
+const btnBack = document.getElementById('back-to-dashboard-btn');
+const btnEdit = document.getElementById('pv-edit-btn');
+
+function showFlashMessage(msg, type = 'info') {
+    const container = document.getElementById('flash-message-container');
+    if (!container) return;
+    const flash = document.createElement('div');
+    flash.style.padding = '0.8rem 1.2rem';
+    flash.style.borderRadius = '8px';
+    flash.style.fontSize = '0.9rem';
+    flash.style.fontWeight = '600';
+    flash.style.boxShadow = '0 4px 15px rgba(0,0,0,0.5)';
+    flash.style.background = type === 'error' ? '#ef4444' : '#10b981';
+    flash.style.color = '#ffffff';
+    flash.style.transition = 'all 0.3s ease';
+    flash.textContent = msg;
+    container.appendChild(flash);
+    setTimeout(() => {
+        flash.remove();
+    }, 4000);
+}
+
+function formatStatus(status) {
+    const map = {
+        'todo': 'To Do',
+        'in_progress': 'In Progress',
+        'blocked': 'Blocked',
+        'done': 'Done'
+    };
+    return map[status] || status;
+}
+
+function renderErrors(errors) {
+    if (!errors || errors.length === 0) {
+        errorContainer.innerHTML = '';
+        return;
+    }
+    
+    errorContainer.innerHTML = errors.map(err => `
+        <div class="error-banner">
+            <strong>⚠️ Parse Error in <code>${err.file}</code></strong>
+            <p>${err.message}</p>
+        </div>
+    `).join('');
+}
+
+function renderProjects(data) {
+    renderErrors(data.errors);
+    currentProjectsData = data.projects || [];
+
+    if (currentProjectsData.length === 0) {
+        projectsContainer.innerHTML = `<div class="empty-state" style="grid-column: 1 / -1; font-size: 1.2rem;">No projects found in the current directory.</div>`;
+        return;
+    }
+
+    let hasAnyIssues = false;
+
+    projectsContainer.innerHTML = currentProjectsData.map(proj => {
+        const needsFix = proj.missingAgentsMd || proj.missingMeridianRules || proj.outdatedMeridianRules || proj.missingClaudeAgents || proj.outdatedClaudeAgents || proj.missingAgyAgents || proj.outdatedAgyAgents || proj.missingStack || proj.missingDescription;
+        if (needsFix) hasAnyIssues = true;
+
+        // Convert legacy stack string to array if needed
+        let stackArray = Array.isArray(proj.stack) ? proj.stack : (proj.stack ? proj.stack.split(',').map(s => s.trim()).filter(Boolean) : []);
+        const stackHtml = stackArray.map(tech => `<span class="stack-badge">${tech}</span>`).join('');
+
+        return `
+        <div class="project-card" onclick="showProjectView('${proj.path.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}')">
+            <div class="project-header">
+                <h2 class="project-title">
+                    ${proj.name}
+                </h2>
+                <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap; margin-bottom: 0.5rem; margin-top: 0.5rem;">
+                    ${proj.missingAgentsMd ? '<span class="missing-agents-badge" title="Missing AGENTS.md in project root">⚠️ Missing AGENTS.md</span>' : ''}
+                    ${proj.missingMeridianRules && !proj.missingAgentsMd ? '<span class="outdated-agents-badge" title="Missing Meridian Instructions block">⚠️ Missing Meridian Rules</span>' : ''}
+                    ${proj.outdatedMeridianRules && !proj.missingAgentsMd ? '<span class="outdated-agents-badge" title="Meridian Instructions block is outdated">⚠️ Outdated Meridian Rules</span>' : ''}
+                    ${proj.missingClaudeAgents ? '<span class="outdated-agents-badge" title="Missing Claude Agents (.claude/agents/)">⚠️ Missing Claude Agents</span>' : ''}
+                    ${proj.outdatedClaudeAgents && !proj.missingClaudeAgents ? '<span class="outdated-agents-badge" title="Outdated Claude Agents (.claude/agents/)">⚠️ Outdated Claude Agents</span>' : ''}
+                    ${proj.missingAgyAgents ? '<span class="outdated-agents-badge" title="Missing Agy Agents (.agents/agents/)">⚠️ Missing Agy Agents</span>' : ''}
+                    ${proj.outdatedAgyAgents && !proj.missingAgyAgents ? '<span class="outdated-agents-badge" title="Outdated Agy Agents (.agents/agents/)">⚠️ Outdated Agy Agents</span>' : ''}
+                    ${proj.missingStack ? '<span class="missing-stack-badge" title="Missing Stack">⚠️ Missing Stack</span>' : ''}
+                    ${proj.missingDescription ? '<span class="missing-desc-badge" title="Missing Description">⚠️ Missing Description</span>' : ''}
+                    ${needsFix 
+                        ? `<button class="fix-ai-btn" onclick="openFixModal('${proj.path.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}', '${proj.name.replace(/'/g, "\\'")}', this, ${proj.missingAgentsMd}, ${proj.missingStack}, ${proj.missingDescription}, ${proj.missingMeridianRules}, ${proj.outdatedMeridianRules}, ${proj.missingClaudeAgents}, ${proj.outdatedClaudeAgents}, ${proj.missingAgyAgents}, ${proj.outdatedAgyAgents}); event.stopPropagation();">Fix 🪄</button>` 
+                        : ''}
+                </div>
+                <p class="project-purpose">${proj.description}</p>
+                <div class="project-stack">${stackHtml}</div>
+            </div>
+            
+            <div class="dashboard-tasks-preview">
+                ${renderDashboardTasksPreview(proj.tasks || [])}
+            </div>
+        </div>
+        `;
+    }).join('');
+
+    const fixAllBtn = document.getElementById('fix-all-btn');
+    if (fixAllBtn) {
+        if (hasAnyIssues) {
+            fixAllBtn.classList.remove('hidden');
+        } else {
+            fixAllBtn.classList.add('hidden');
+        }
+    }
+
+    if (!isInitialRouteHandled) {
+        isInitialRouteHandled = true;
+        handleUrlRouting();
+    } else if (currentProjectViewPath) {
+        refreshProjectView();
+    }
+}
+
+function connectSSE() {
+    const eventSource = new EventSource('/api/stream');
+    
+    eventSource.onmessage = (event) => {
+        try {
+            const parsed = JSON.parse(event.data);
+            if (parsed.type === 'init' || parsed.type === 'update') {
+                renderProjects(parsed.data);
+                connectionStatus.textContent = "Live";
+                connectionStatus.className = "status-indicator connected";
+            } else if (parsed.type === 'fix-progress' && parsed.projectPath === document.getElementById('fix-proj-path').value) {
+                const status = parsed.data.status;
+                const msg = parsed.data.message;
+                const percent = parsed.data.percent;
+                
+                if (status === 'log') {
+                    const term = document.getElementById('fix-terminal-log');
+                    term.textContent += msg;
+                    term.scrollTop = term.scrollHeight; // Auto-scroll
+                    return;
+                }
+
+                // Handle progress bar updates
+                const pb = document.getElementById('fix-progress-bar');
+                const pt = document.getElementById('fix-progress-text');
+                const pp = document.getElementById('fix-progress-percent');
+                
+                pb.style.width = `${percent}%`;
+                pt.textContent = msg;
+                pp.textContent = `${percent}%`;
+                
+                if (status === 'error') {
+                    pb.style.background = '#ef4444';
+                    pt.style.color = '#ef4444';
+                    if (window.isFixAllRunning) {
+                        setTimeout(() => window.runNextFixAll(), 1500);
+                    }
+                } else if (status === 'complete') {
+                    pb.style.background = '#10b981';
+                    pt.style.color = '#10b981';
+                    
+                    if (window.isFixAllRunning) {
+                        setTimeout(() => window.runNextFixAll(), 1500);
+                    } else {
+                        const fixSubmitBtn = document.getElementById('fix-submit-btn');
+                        if (fixSubmitBtn) fixSubmitBtn.classList.add('hidden');
+                        const fixDoneBtn = document.getElementById('fix-done-btn');
+                        if (fixDoneBtn) fixDoneBtn.classList.remove('hidden');
+                        const cancelBtn = document.querySelector('.close-fix-modal-btn');
+                        if (cancelBtn) cancelBtn.classList.add('hidden');
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('Error parsing SSE:', e);
+        }
+    };
+
+    eventSource.onerror = () => {
+        console.error('SSE connection lost. Reconnecting in 3s...');
+        connectionStatus.textContent = "Disconnected (Retrying...)";
+        connectionStatus.className = "status-indicator";
+        eventSource.close();
+        
+        setTimeout(connectSSE, 3000);
+    };
+}
+
+connectSSE();
+
+// Modal Logic
+const modal = document.getElementById('add-project-modal');
+const openAddModalBtn = document.getElementById('open-add-modal-btn');
+const closeModalBtns = document.querySelectorAll('.close-modal-btn');
+const addProjectForm = document.getElementById('add-project-form');
+const projPathSelect = document.getElementById('proj-path-select');
+const pathGroup = document.getElementById('path-form-group');
+const modalTitle = document.getElementById('modal-title');
+const originalPathInput = document.getElementById('proj-path-hidden');
+
+// Tag Logic
+let currentStackTags = [];
+const stackInput = document.getElementById('stack-input');
+const addStackBtn = document.getElementById('add-stack-btn');
+const stackTagsContainer = document.getElementById('stack-tags-container');
+
+function renderStackTags() {
+    if (stackTagsContainer) {
+        stackTagsContainer.innerHTML = currentStackTags.map((tag, i) => `
+            <span class="tag-item">
+                ${tag}
+                <span class="remove-tag" onclick="removeStackTag(${i}); event.stopPropagation();">&times;</span>
+            </span>
+        `).join('');
+    }
+}
+
+function addStackTag() {
+    if (!stackInput) return;
+    const val = stackInput.value.trim();
+    if (val && !currentStackTags.includes(val)) {
+        currentStackTags.push(val);
+        stackInput.value = '';
+        renderStackTags();
+    }
+}
+
+window.removeStackTag = function(index) {
+    currentStackTags.splice(index, 1);
+    renderStackTags();
+};
+
+if (stackInput) {
+    stackInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault(); // Prevent form submission
+            addStackTag();
+        }
+    });
+}
+if (addStackBtn) {
+    addStackBtn.addEventListener('click', addStackTag);
+}
+
+
+async function openAddModal() {
+    addProjectForm.reset();
+    currentStackTags = [];
+    renderStackTags();
+    originalPathInput.value = '';
+    modalTitle.textContent = "Add New Project";
+    pathGroup.style.display = 'block';
+    projPathSelect.required = true;
+    if (projKeyInput) { projKeyInput.value = ''; projKeyInput.dataset.manuallySet = ''; }
+    
+    modal.classList.remove('hidden');
+    projPathSelect.innerHTML = '<option value="">Loading directories...</option>';
+    
+    try {
+        const res = await fetch('/api/directories');
+        const data = await res.json();
+        
+        if (data.directories && data.directories.length > 0) {
+            projPathSelect.innerHTML = '<option value="" disabled selected>Select a folder...</option>' + 
+                data.directories.map(d => `<option value="${d}">${d}</option>`).join('');
+        } else {
+            projPathSelect.innerHTML = '<option value="" disabled>No valid directories found</option>';
+        }
+    } catch (err) {
+        projPathSelect.innerHTML = '<option value="" disabled>Error loading directories</option>';
+    }
+}
+
+function openEditModal(path) {
+    const proj = currentProjectsData.find(p => p.path === path);
+    if (!proj) return;
+
+    originalPathInput.value = proj.path;
+    document.getElementById('proj-name').value = proj.name;
+    document.getElementById('proj-key').value = proj.key || '';
+    document.getElementById('proj-purpose').value = proj.description || proj.purpose || '';
+    
+    // Load existing tags
+    currentStackTags = Array.isArray(proj.stack) ? [...proj.stack] : (proj.stack ? proj.stack.split(',').map(s => s.trim()).filter(Boolean) : []);
+    renderStackTags();
+    
+    modalTitle.textContent = "Edit Project";
+    pathGroup.style.display = 'none';
+    projPathSelect.required = false;
+
+    modal.classList.remove('hidden');
+}
+
+// Auto-derive key from project name
+const projNameInput = document.getElementById('proj-name');
+const projKeyInput = document.getElementById('proj-key');
+if (projNameInput && projKeyInput) {
+    projNameInput.addEventListener('input', () => {
+        if (projKeyInput.dataset.manuallySet) return;
+        const name = projNameInput.value.trim();
+        if (!name) { projKeyInput.placeholder = 'Auto-derived from name'; return; }
+        const words = name.split(/[\s_\-]+/).filter(Boolean);
+        const key = words.length === 1
+            ? words[0].substring(0, 5).toUpperCase()
+            : words.map(w => w[0]).join('').toUpperCase();
+        projKeyInput.value = key;
+    });
+    projKeyInput.addEventListener('input', () => {
+        projKeyInput.dataset.manuallySet = projKeyInput.value ? '1' : '';
+    });
+}
+
+function closeModal() {
+    modal.classList.add('hidden');
+}
+
+if (openAddModalBtn) openAddModalBtn.addEventListener('click', openAddModal);
+if (closeModalBtns) closeModalBtns.forEach(btn => btn.addEventListener('click', closeModal));
+
+// Form Submission
+addProjectForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    // Attempt to add any text still in the input as a tag before submitting
+    addStackTag();
+    
+    const isEdit = !!document.getElementById('proj-path-hidden').value;
+    const method = isEdit ? 'PUT' : 'POST';
+
+    const payload = {
+        name: document.getElementById('proj-name').value.trim(),
+        key: (document.getElementById('proj-key').value || '').trim().toUpperCase() || undefined,
+        description: document.getElementById('proj-purpose').value.trim(),
+        stack: currentStackTags,
+    };
+
+    if (isEdit) {
+        payload.originalPath = document.getElementById('proj-path-hidden').value;
+    } else {
+        payload.path = document.getElementById('proj-path-select').value;
+    }
+
+    try {
+        const res = await fetch('/api/projects', {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+            closeModal();
+        } else {
+            const data = await res.json();
+            showFlashMessage('Error saving project: ' + (data.error || 'Unknown error'), 'error');
+        }
+    } catch (err) {
+        showFlashMessage('Network error saving project', 'error');
+    }
+});
+
+// Fix with AI Modal Logic
+const fixModal = document.getElementById('fix-progress-modal');
+const closeFixModalBtns = document.querySelectorAll('.close-fix-modal-btn');
+const fixForm = document.getElementById('fix-progress-form');
+const fixProjPathInput = document.getElementById('fix-proj-path');
+const fixCheckboxesContainer = document.getElementById('fix-checkboxes-container');
+const fixSubmitBtn = document.getElementById('fix-submit-btn');
+const fixProgressContainer = document.getElementById('fix-status-area');
+
+window.openFixModal = function(path, projName, btnEl, missingAgents, missingStack, missingDesc, missingMeridianRules, outdatedMeridianRules, missingClaudeAgents, outdatedClaudeAgents, missingAgyAgents, outdatedAgyAgents) {
+    if (document.getElementById('fix-proj-path')) document.getElementById('fix-proj-path').value = path;
+    const titleEl = document.getElementById('fix-modal-title') || document.getElementById('fix-title');
+    if (titleEl) titleEl.textContent = 'Fixing ' + projName;
+    
+    // Reset any "Fix All" hidden states
+    if (fixCheckboxesContainer) fixCheckboxesContainer.classList.remove('hidden');
+    if (fixSubmitBtn) fixSubmitBtn.classList.remove('hidden');
+    
+    if (fixCheckboxesContainer) fixCheckboxesContainer.innerHTML = '';
+    
+    if (missingAgents && fixCheckboxesContainer) {
+        fixCheckboxesContainer.innerHTML += `
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                <input type="checkbox" name="fixes" value="agents" checked>
+                Generate AGENTS.md
+            </label>
+        `;
+    }
+    
+    if (!missingAgents && (missingMeridianRules || outdatedMeridianRules) && fixCheckboxesContainer) {
+        const labelText = outdatedMeridianRules ? "Update Meridian Rules (System)" : "Inject Meridian Rules (System)";
+        fixCheckboxesContainer.innerHTML += `
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                <input type="checkbox" name="fixes" value="meridian-rules" checked>
+                ${labelText}
+            </label>
+        `;
+    }
+
+    if ((missingClaudeAgents || outdatedClaudeAgents) && fixCheckboxesContainer) {
+        const labelText = outdatedClaudeAgents ? "Update Claude Meridian Agents (.claude/agents/)" : "Inject Claude Meridian Agents (.claude/agents/)";
+        fixCheckboxesContainer.innerHTML += `
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                <input type="checkbox" name="fixes" value="claude-agents" checked>
+                ${labelText}
+            </label>
+        `;
+    }
+
+    if ((missingAgyAgents || outdatedAgyAgents) && fixCheckboxesContainer) {
+        const labelText = outdatedAgyAgents ? "Update Agy Meridian Agents (.agents/agents/)" : "Inject Agy Meridian Agents (.agents/agents/)";
+        fixCheckboxesContainer.innerHTML += `
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                <input type="checkbox" name="fixes" value="agy-agents" checked>
+                ${labelText}
+            </label>
+        `;
+    }
+
+    if (missingStack && fixCheckboxesContainer) {
+        fixCheckboxesContainer.innerHTML += `
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                <input type="checkbox" name="fixes" value="stack" checked>
+                Auto-detect Technology Stack
+            </label>
+        `;
+    }
+    if (missingDesc && fixCheckboxesContainer) {
+        fixCheckboxesContainer.innerHTML += `
+            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                <input type="checkbox" name="fixes" value="description" checked>
+                Auto-generate Description
+            </label>
+        `;
+    }
+
+    // Reset progress UI
+    if (fixProgressContainer) fixProgressContainer.classList.add('hidden');
+    if (document.getElementById('fix-progress-bar')) {
+        document.getElementById('fix-progress-bar').style.width = '0%';
+        document.getElementById('fix-progress-bar').style.background = 'var(--accent)';
+    }
+    if (document.getElementById('fix-progress-text')) document.getElementById('fix-progress-text').style.color = 'var(--text-secondary)';
+    
+    const fixDoneBtn = document.getElementById('fix-done-btn');
+    if (fixDoneBtn) fixDoneBtn.classList.add('hidden');
+    
+    if (fixSubmitBtn) {
+        fixSubmitBtn.classList.remove('hidden');
+        fixSubmitBtn.disabled = false;
+        fixSubmitBtn.textContent = 'Fix 🪄';
+    }
+    
+    const cancelBtn = document.querySelector('.close-fix-modal-btn');
+    if (cancelBtn) {
+        cancelBtn.classList.remove('hidden');
+        cancelBtn.textContent = 'Cancel';
+    }
+    
+    // Ensure all inputs and selects are enabled (in case they were disabled by a previous failed run)
+    if (fixForm) fixForm.querySelectorAll('input, select').forEach(el => el.disabled = false);
+
+    if (fixModal) fixModal.classList.remove('hidden');
+};
+
+window.closeFixModal = function() {
+    if (fixModal) fixModal.classList.add('hidden');
+};
+
+const fixDoneBtn = document.getElementById('fix-done-btn');
+if (fixDoneBtn) {
+    fixDoneBtn.addEventListener('click', closeFixModal);
+}
+
+if (closeFixModalBtns) closeFixModalBtns.forEach(btn => btn.addEventListener('click', closeFixModal));
+
+if (fixForm) {
+    fixForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const formData = new FormData(fixForm);
+    
+    // FormData doesn't handle multiple checkboxes well with Object.fromEntries if they have the same name.
+    const fixes = formData.getAll('fixes');
+    const tool = formData.get('tool') || 'agy';
+    const projectPath = formData.get('projectPath') || (document.getElementById('fix-proj-path') ? document.getElementById('fix-proj-path').value : '');
+    
+    if (window.isFixAllMode) {
+        window.fixAllTool = tool;
+        
+        const newQueue = [];
+        window.fixAllOriginalQueue.forEach((proj, idx) => {
+            const checkedFixes = formData.getAll(`fixes_${idx}`);
+            if (checkedFixes.length > 0) {
+                newQueue.push({
+                    path: proj.path,
+                    name: proj.name,
+                    fixes: checkedFixes
+                });
+            }
+        });
+        
+        if (newQueue.length === 0) {
+            showFlashMessage("Please select at least one fix from any project.", 'error');
+            return;
+        }
+        
+        window.fixAllQueue = newQueue;
+        
+        fixSubmitBtn.classList.add('hidden');
+        fixProgressContainer.classList.remove('hidden');
+        const term = document.getElementById('fix-terminal-log');
+        term.classList.remove('hidden');
+        term.textContent = 'Starting Fix All sequence...\n';
+        
+        window.isFixAllRunning = true;
+        if (fixCheckboxesContainer) fixCheckboxesContainer.classList.add('hidden');
+        
+        window.runNextFixAll();
+        return;
+    }
+    
+    if (fixes.length === 0) {
+        showFlashMessage("Please select at least one fix.", 'error');
+        return;
+    }
+
+    fixSubmitBtn.disabled = true;
+    fixSubmitBtn.textContent = 'Fixing... ⏳';
+    fixProgressContainer.classList.remove('hidden');
+    
+    // Setup terminal log
+    const term = document.getElementById('fix-terminal-log');
+    term.classList.remove('hidden');
+    term.textContent = '';
+    
+    document.getElementById('fix-progress-text').textContent = 'Initializing...';
+    
+    // Disable checkboxes during processing
+    fixForm.querySelectorAll('input[type="checkbox"], select').forEach(el => el.disabled = true);
+
+    try {
+        const res = await fetch('/api/fix-with-ai', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectPath, tool, fixes })
+        });
+
+        if (!res.ok) {
+            const data = await res.json();
+            showFlashMessage('Error starting fixes: ' + (data.error || 'Unknown error', 'error'));
+            fixSubmitBtn.disabled = false;
+            fixSubmitBtn.textContent = 'Fix Selected 🪄';
+            fixForm.querySelectorAll('input[type="checkbox"], select').forEach(el => el.disabled = false);
+        }
+        // If ok, the background process is running and will broadcast SSE updates!
+    } catch (err) {
+        showFlashMessage('Network error during fixes', 'error');
+        fixSubmitBtn.disabled = false;
+        fixSubmitBtn.textContent = 'Fix Selected 🪄';
+        fixForm.querySelectorAll('input[type="checkbox"], select').forEach(el => el.disabled = false);
+    }
+});
+}
+
+/* =========================================
+   SPA Routing & Kanban Logic 
+   ========================================= */
+
+const addTaskForm = document.getElementById('add-task-form');
+
+function renderDashboardTasksPreview(tasks) {
+    if (!tasks || tasks.length === 0) return '';
+    
+    // Filter out Done and Nope, sort by priority descending
+    const activeTasks = tasks
+        .filter(t => t.status !== 'done' && t.status !== 'nope' && t.status !== 'completed')
+        .sort((a, b) => (STATUS_PRIORITY[b.status] || 0) - (STATUS_PRIORITY[a.status] || 0))
+        .slice(0, 2);
+        
+    if (activeTasks.length === 0) return '<div class="empty-state">No active tasks.</div>';
+    
+    return activeTasks.map(t => {
+        const statusId = t.status.replace(/_/g, '').replace(/ /g, '').toLowerCase();
+        const kanbanStatus = KANBAN_STATUSES.find(s => s.id === statusId);
+        const displayStatus = kanbanStatus ? kanbanStatus.label : t.status;
+        const idDisplay = t.id ? `[${t.id}] ` : '';
+        return `
+        <div class="preview-task-item">
+            <span class="status-badge status-${statusId}">${displayStatus}</span>
+            <span class="preview-task-title" title="${idDisplay}${t.title.replace(/"/g, '&quot;')}"><span class="task-id-code">${idDisplay}</span>${t.title}</span>
+        </div>
+        `;
+    }).join('');
+}
+
+function handleUrlRouting() {
+    const rawPath = window.location.pathname.replace(/^\/+|\/+$/g, '');
+    if (!rawPath) {
+        showDashboard(false);
+        return;
+    }
+
+    if (rawPath.toLowerCase() === 'tickets' || rawPath.toLowerCase() === 'all-tickets' || rawPath.toLowerCase() === 'global') {
+        showGlobalTicketsView(false);
+        return;
+    }
+    
+    const proj = currentProjectsData.find(p => {
+        const relPath = p.relativePath || p.path.split('/').pop();
+        return relPath.toLowerCase() === rawPath.toLowerCase() || p.name.toLowerCase() === rawPath.toLowerCase();
+    });
+    
+    if (proj) {
+        showProjectView(proj.path, false);
+    } else {
+        showDashboard(false);
+    }
+}
+
+window.addEventListener('popstate', () => {
+    handleUrlRouting();
+});
+
+function showDashboard(pushState = true) {
+    currentProjectViewPath = null;
+    projectView.classList.add('hidden');
+    dashboardView.classList.remove('hidden');
+    if (btnBack) btnBack.classList.add('hidden');
+    if (pushState && window.location.pathname !== '/') {
+        history.pushState(null, '', '/');
+    }
+}
+
+window.showProjectView = function(projPath, pushState = true) {
+    currentProjectViewPath = projPath;
+    dashboardView.classList.add('hidden');
+    projectView.classList.remove('hidden');
+    if (btnBack) btnBack.classList.remove('hidden');
+    refreshProjectView();
+    
+    if (pushState && currentProjectsData.length > 0) {
+        const proj = currentProjectsData.find(p => p.path === projPath);
+        const relPath = proj ? (proj.relativePath || proj.path.split('/').pop()) : projPath.split('/').pop();
+        const targetUrl = '/' + relPath;
+        if (window.location.pathname !== targetUrl) {
+            history.pushState({ projPath }, '', targetUrl);
+        }
+    }
+};
+
+window.showGlobalTicketsView = function(pushState = true) {
+    currentProjectViewPath = '__GLOBAL__';
+    dashboardView.classList.add('hidden');
+    projectView.classList.remove('hidden');
+    if (btnBack) btnBack.classList.remove('hidden');
+    refreshProjectView();
+    
+    if (pushState && window.location.pathname !== '/tickets') {
+        history.pushState(null, '', '/tickets');
+    }
+};
+
+const globalTicketsBtn = document.getElementById('global-tickets-btn');
+if (globalTicketsBtn) {
+    globalTicketsBtn.addEventListener('click', () => showGlobalTicketsView(true));
+}
+
+const headerTitle = document.querySelector('header h1');
+if (headerTitle) {
+    headerTitle.style.cursor = 'pointer';
+    headerTitle.addEventListener('click', () => showDashboard(true));
+}
+
+if (btnBack) {
+    btnBack.addEventListener('click', () => showDashboard(true));
+}
+
+btnEdit.addEventListener('click', () => {
+    if (currentProjectViewPath) {
+        openEditModal(currentProjectViewPath);
+    }
+});
+
+function refreshProjectView() {
+    if (!currentProjectViewPath) return;
+
+    if (currentProjectViewPath === '__GLOBAL__') {
+        document.getElementById('pv-title').textContent = 'Global Tickets View 🌐';
+        document.getElementById('pv-desc').textContent = 'Aggregated Kanban view of tasks across all monitored workspace projects.';
+        document.getElementById('pv-stack').innerHTML = `<span class="stack-badge" style="background: rgba(99, 102, 241, 0.2); color: #a5b4fc; border-color: rgba(99, 102, 241, 0.4);">All ${currentProjectsData.length} Projects</span>`;
+        
+        btnEdit.style.display = 'none';
+        addTaskForm.style.display = 'none';
+
+        let allTasks = [];
+        currentProjectsData.forEach(proj => {
+            (proj.tasks || []).forEach(t => {
+                allTasks.push({
+                    ...t,
+                    projectName: proj.name,
+                    projectPath: proj.path
+                });
+            });
+        });
+
+        renderKanbanBoard(allTasks);
+        return;
+    }
+    
+    btnEdit.style.display = '';
+    addTaskForm.style.display = 'flex';
+    
+    const proj = currentProjectsData.find(p => p.path === currentProjectViewPath);
+    if (!proj) {
+        showDashboard();
+        return;
+    }
+    
+    // Update Header
+    document.getElementById('pv-title').textContent = proj.name;
+    document.getElementById('pv-desc').textContent = proj.description || 'No description provided.';
+    
+    const stackArray = Array.isArray(proj.stack) ? proj.stack : (proj.stack ? proj.stack.split(',').map(s => s.trim()).filter(Boolean) : []);
+    document.getElementById('pv-stack').innerHTML = stackArray.map(tech => `<span class="stack-badge">${tech}</span>`).join('');
+    
+    // Render Kanban
+    renderKanbanBoard(proj.tasks || []);
+}
+
+function isStandardTId(id) {
+    return typeof id === 'string' && /^T\d+$/i.test(id.trim());
+}
+
+function parseTIdNumber(id) {
+    if (!isStandardTId(id)) return Infinity;
+    return parseInt(id.trim().substring(1), 10);
+}
+
+function sortColumnTasks(tasks, isDoneColumn = false) {
+    return [...tasks].sort((a, b) => {
+        const isStdA = isStandardTId(a.id);
+        const isStdB = isStandardTId(b.id);
+
+        if (isStdA && !isStdB) return -1;
+        if (!isStdA && isStdB) return 1;
+
+        if (isStdA && isStdB) {
+            const numA = parseTIdNumber(a.id);
+            const numB = parseTIdNumber(b.id);
+            return isDoneColumn ? numB - numA : numA - numB;
+        }
+
+        return 0;
+    });
+}
+
+function interleavedByProject(tasks) {
+    const buckets = new Map();
+    for (const task of tasks) {
+        const key = task.projectName || '__none__';
+        if (!buckets.has(key)) buckets.set(key, []);
+        buckets.get(key).push(task);
+    }
+    const groups = [...buckets.values()];
+    if (groups.length <= 1) return tasks;
+
+    const result = [];
+    const maxLen = Math.max(...groups.map(g => g.length));
+    for (let i = 0; i < maxLen; i++) {
+        for (const group of groups) {
+            if (i < group.length) result.push(group[i]);
+        }
+    }
+    return result;
+}
+
+function renderRunningTickets(tasks) {
+    const section = document.getElementById('running-tickets-section');
+    const list = document.getElementById('running-tickets-list');
+    const countEl = document.getElementById('running-tickets-count');
+    if (!section || !list) return;
+
+    const running = tasks.filter(t => t.running);
+
+    if (running.length === 0) {
+        section.classList.add('hidden');
+        return;
+    }
+
+    section.classList.remove('hidden');
+    if (countEl) countEl.textContent = running.length;
+
+    const statusLabel = id => {
+        const s = KANBAN_STATUSES.find(k => k.id === id);
+        return s ? s.label : id;
+    };
+
+    list.innerHTML = running.map(task => {
+        const projBadge = task.projectName
+            ? `<span class="running-ticket-proj">· ${task.projectName}</span>`
+            : '';
+        return `
+            <div class="running-ticket-card" title="${task.title}">
+                <div class="running-ticket-id">${task.id || ''}</div>
+                <div class="running-ticket-title">${task.title}</div>
+                <div class="running-ticket-meta">
+                    <span class="running-ticket-status">${statusLabel(task.status)}</span>
+                    ${projBadge}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function renderKanbanBoard(tasks) {
+    const board = document.getElementById('kanban-board');
+    const summaryBar = document.getElementById('status-summary-bar');
+    const toggleEmptyColsInput = document.getElementById('toggle-empty-cols');
+    const isGlobal = currentProjectViewPath === '__GLOBAL__';
+
+    if (toggleEmptyColsInput) {
+        toggleEmptyColsInput.checked = hideEmptyColumns;
+        toggleEmptyColsInput.onchange = (e) => {
+            hideEmptyColumns = e.target.checked;
+            localStorage.setItem('meridian_hide_empty_columns', e.target.checked);
+            refreshProjectView();
+        };
+    }
+
+    renderRunningTickets(tasks);
+
+    board.innerHTML = '';
+    if (summaryBar) summaryBar.innerHTML = '';
+    
+    let summaryHtml = '';
+
+    KANBAN_STATUSES.forEach(statusCol => {
+        let colTasks = tasks.filter(t => t.status.toLowerCase().replace(/_/g, '').replace(/ /g, '') === statusCol.id);
+        colTasks = sortColumnTasks(colTasks, statusCol.id === 'done');
+        if (isGlobal) colTasks = interleavedByProject(colTasks);
+        const firstTask = colTasks[0];
+        const firstTaskIdDisplay = (firstTask && firstTask.id) ? `[${firstTask.id}] ` : '';
+        const firstTaskFullTitle = firstTask ? `${firstTaskIdDisplay}${firstTask.title}` : '';
+        
+        if (colTasks.length > 0) {
+            summaryHtml += `
+                <div class="summary-card status-${statusCol.id}" onclick="scrollToKanbanColumn('${statusCol.id}')" title="Click to jump to ${statusCol.label}">
+                    <div class="summary-card-top">
+                        <span class="summary-status-label">${statusCol.label}</span>
+                        <span class="summary-status-count active">${colTasks.length}</span>
+                    </div>
+                    <div class="summary-first-task" title="${firstTaskFullTitle.replace(/"/g, '&quot;')}">
+                        <span class="summary-task-icon">📌</span> <span class="task-id-code">${firstTaskIdDisplay}</span>${firstTask ? firstTask.title : ''}
+                    </div>
+                </div>
+            `;
+        }
+
+        if (hideEmptyColumns && colTasks.length === 0) {
+            return; // Skip rendering empty column
+        }
+
+        const colHtml = `
+            <div class="kanban-column" data-status-id="${statusCol.id}">
+                <div class="kanban-column-header">
+                    <span>${statusCol.label}</span>
+                    <span class="kanban-column-count">${colTasks.length}</span>
+                </div>
+                <div class="kanban-tasks">
+                    ${colTasks.map(task => {
+                        const taskIdDisplay = task.id ? `[${task.id}] ` : '';
+                        const projPathAttr = task.projectPath ? task.projectPath.replace(/\\/g, '\\\\').replace(/'/g, "\\'") : '';
+                        const projectBadge = task.projectName ? `<span class="project-tag-badge" title="${task.projectName}">${task.projectName}</span>` : '';
+                        const uid = `j-${task.id}`.replace(/[^a-zA-Z0-9\-]/g, '_');
+                        const runningClass = task.running ? ' task-card--running' : '';
+                        const runningBadge = task.running ? '<span class="running-inline-dot" title="Agent is working on this task"></span>' : '';
+                        return `
+                            <div class="task-card${runningClass}">
+                                <div class="task-title">${runningBadge}${projectBadge}<span class="task-id-code">${taskIdDisplay}</span>${task.title}</div>
+                                ${task.justification ? `
+                                <div class="task-justification-toggle" onclick="toggleJustification('${uid}', this)" title="Show/hide details">
+                                    <span class="toggle-arrow">▶</span> <em>details</em>
+                                </div>
+                                <div class="task-justification" id="${uid}">${task.justification}</div>
+                                ` : ''}
+                                <div class="task-actions">
+                                    <select class="task-status-select" onchange="changeTaskStatus('${task.id}', this.value, '${task.status}', '${projPathAttr}')">
+                                        ${KANBAN_STATUSES.map(s => `<option value="${s.id}" ${task.status.toLowerCase().replace(/_/g, '').replace(/ /g, '') === s.id ? 'selected' : ''}>${s.label}</option>`).join('')}
+                                    </select>
+                                    <button class="task-delete-btn" onclick="deleteTask('${task.id}', '${projPathAttr}')" title="Delete Task">🗑️</button>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+        `;
+        
+        board.insertAdjacentHTML('beforeend', colHtml);
+    });
+
+    if (summaryBar) {
+        summaryBar.innerHTML = summaryHtml;
+    }
+}
+
+window.toggleJustification = function(uid, toggleEl) {
+    const content = document.getElementById(uid);
+    if (!content) return;
+    const isOpen = content.classList.toggle('visible');
+    toggleEl.classList.toggle('open', isOpen);
+};
+
+window.scrollToKanbanColumn = function(statusId) {
+    const col = document.querySelector(`.kanban-column[data-status-id="${statusId}"]`);
+    if (col) {
+        col.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+        col.classList.add('column-highlight');
+        setTimeout(() => col.classList.remove('column-highlight'), 1200);
+    }
+};
+
+// Intercept SSE updates so if we are in project view, it updates live
+const originalRenderProjects = renderProjects;
+window.renderProjects = function(data) {
+    originalRenderProjects(data); // Rebuilds the DOM for dashboard behind the scenes
+    if (currentProjectViewPath) {
+        refreshProjectView(); // Re-render kanban without reloading page
+    }
+};
+
+addTaskForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!currentProjectViewPath || currentProjectViewPath === '__GLOBAL__') return;
+    
+    const input = document.getElementById('new-task-input');
+    const title = input.value.trim();
+    if (!title) return;
+    
+    input.disabled = true;
+    try {
+        const res = await fetch('/api/projects/tasks', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectPath: currentProjectViewPath, title })
+        });
+        if (res.ok) {
+            input.value = '';
+        } else {
+            const data = await res.json();
+            showFlashMessage('Error adding task: ' + data.error);
+        }
+    } catch (err) {
+        showFlashMessage('Network error adding task', 'error', 'error');
+    } finally {
+        input.disabled = false;
+        input.focus();
+    }
+});
+
+window.changeTaskStatus = async function(taskId, newStatusId, oldStatus, targetProjPath) {
+    const projPath = targetProjPath || currentProjectViewPath;
+    if (!projPath || projPath === '__GLOBAL__') return;
+    
+    let justification = '';
+    if (newStatusId === 'blocked' || newStatusId === 'nope') {
+        justification = prompt(`Please provide a justification for moving this task to ${newStatusId.toUpperCase()}:`);
+        if (justification === null) {
+            refreshProjectView(); // Revert UI
+            return; 
+        }
+        if (justification.trim() === '') {
+            showFlashMessage('Justification is required for this status.', 'error');
+            refreshProjectView(); // Revert UI
+            return;
+        }
+    }
+    
+    // Find proper string status to save (e.g. "QA / Review")
+    const statusLabel = KANBAN_STATUSES.find(s => s.id === newStatusId).label.replace(' / ', '/').toLowerCase();
+    
+    try {
+        const res = await fetch(`/api/projects/tasks/${taskId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectPath: projPath, status: statusLabel, justification })
+        });
+        
+        if (!res.ok) {
+            showFlashMessage('Failed to update task', 'error');
+            refreshProjectView(); // Revert UI
+        }
+    } catch (err) {
+        showFlashMessage('Network error updating task', 'error');
+        refreshProjectView(); // Revert UI
+    }
+};
+
+window.deleteTask = async function(taskId, targetProjPath) {
+    const projPath = targetProjPath || currentProjectViewPath;
+    if (!projPath || projPath === '__GLOBAL__') return;
+    if (!confirm('Are you sure you want to delete this task?')) return;
+    
+    try {
+        const res = await fetch(`/api/projects/tasks/${taskId}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectPath: projPath })
+        });
+        
+        if (!res.ok) {
+            showFlashMessage('Failed to delete task', 'error');
+        }
+    } catch (err) {
+        showFlashMessage('Network error deleting task', 'error');
+    }
+};
+
+/* =========================================
+   Fix All Logic
+   ========================================= */
+
+window.isFixAllMode = false;
+window.isFixAllRunning = false;
+window.fixAllQueue = [];
+
+const fixAllBtn = document.getElementById('fix-all-btn');
+if (fixAllBtn) {
+    fixAllBtn.addEventListener('click', () => {
+        const projectsWithIssues = currentProjectsData.filter(p => p.missingAgentsMd || p.missingMeridianRules || p.outdatedMeridianRules || p.missingClaudeAgents || p.outdatedClaudeAgents || p.missingAgyAgents || p.outdatedAgyAgents || p.missingStack || p.missingDescription);
+        if (projectsWithIssues.length === 0) return;
+        
+        window.isFixAllMode = true;
+        window.fixAllOriginalQueue = projectsWithIssues;
+        
+        fixModal.classList.remove('hidden');
+        document.getElementById('fix-modal-title').textContent = 'Fixing All Projects';
+        
+        const checkboxesContainer = document.getElementById('fix-checkboxes-container');
+        if (checkboxesContainer) checkboxesContainer.classList.remove('hidden');
+        
+        let html = '<div style="max-height: 250px; overflow-y: auto; padding-right: 0.5rem;">';
+        projectsWithIssues.forEach((proj, idx) => {
+            html += `<div style="margin-bottom: 1rem;">
+                <div style="font-weight: 600; margin-bottom: 0.5rem; color: #fff;">${proj.name}</div>
+                <div style="display: flex; flex-direction: column; gap: 0.4rem; padding-left: 0.5rem; border-left: 2px solid var(--border);">`;
+            
+            if (proj.missingAgentsMd) {
+                html += `<label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.85rem;">
+                    <input type="checkbox" name="fixes_${idx}" value="agents" checked> Generate AGENTS.md
+                </label>`;
+            }
+            if (!proj.missingAgentsMd && (proj.missingMeridianRules || proj.outdatedMeridianRules)) {
+                const labelText = proj.outdatedMeridianRules ? "Update Meridian Rules" : "Inject Meridian Rules";
+                html += `<label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.85rem;">
+                    <input type="checkbox" name="fixes_${idx}" value="meridian-rules" checked> ${labelText}
+                </label>`;
+            }
+            if (proj.missingClaudeAgents || proj.outdatedClaudeAgents) {
+                const labelText = proj.outdatedClaudeAgents ? "Update Claude Agents (.claude/agents/)" : "Inject Claude Agents (.claude/agents/)";
+                html += `<label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.85rem;">
+                    <input type="checkbox" name="fixes_${idx}" value="claude-agents" checked> ${labelText}
+                </label>`;
+            }
+            if (proj.missingAgyAgents || proj.outdatedAgyAgents) {
+                const labelText = proj.outdatedAgyAgents ? "Update Agy Agents (.agents/agents/)" : "Inject Agy Agents (.agents/agents/)";
+                html += `<label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.85rem;">
+                    <input type="checkbox" name="fixes_${idx}" value="agy-agents" checked> ${labelText}
+                </label>`;
+            }
+            if (proj.missingStack) {
+                html += `<label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.85rem;">
+                    <input type="checkbox" name="fixes_${idx}" value="stack" checked> Auto-generate Stack
+                </label>`;
+            }
+            if (proj.missingDescription) {
+                html += `<label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.85rem;">
+                    <input type="checkbox" name="fixes_${idx}" value="description" checked> Auto-generate Description
+                </label>`;
+            }
+            html += '</div></div>';
+        });
+        html += '</div>';
+        
+        checkboxesContainer.innerHTML = html;
+        const fixToolEl = document.getElementById('fix-tool');
+        if (fixToolEl && fixToolEl.parentElement) fixToolEl.parentElement.classList.remove('hidden');
+        
+        const term = document.getElementById('fix-terminal-log');
+        term.classList.add('hidden');
+        term.textContent = '';
+        
+        fixSubmitBtn.classList.remove('hidden');
+        fixSubmitBtn.disabled = false;
+        fixSubmitBtn.textContent = 'Fix Selected in All 🪄';
+        
+        const cancelBtn = document.querySelector('.close-fix-modal-btn');
+        if (cancelBtn) cancelBtn.textContent = 'Cancel';
+        
+        fixProgressContainer.classList.add('hidden');
+    });
+}
+
+window.runNextFixAll = function() {
+    if (window.fixAllQueue.length === 0) {
+        document.getElementById('fix-progress-text').textContent = 'All projects fixed!';
+        document.getElementById('fix-progress-bar').style.width = '100%';
+        document.getElementById('fix-progress-bar').style.background = '#10b981';
+        const term = document.getElementById('fix-terminal-log');
+        term.textContent += '\n\n✅ Fix All Completed!';
+        window.isFixAllRunning = false;
+        
+        const fixSubmitBtn = document.getElementById('fix-submit-btn');
+        if (fixSubmitBtn) fixSubmitBtn.classList.add('hidden');
+        const fixDoneBtn = document.getElementById('fix-done-btn');
+        if (fixDoneBtn) fixDoneBtn.classList.remove('hidden');
+        const cancelBtn = document.querySelector('.close-fix-modal-btn');
+        if (cancelBtn) cancelBtn.classList.add('hidden');
+        return;
+    }
+    
+    const proj = window.fixAllQueue.shift();
+    const term = document.getElementById('fix-terminal-log');
+    term.textContent += `\n\n=== Fixing Project: ${proj.name} ===\n`;
+    term.scrollTop = term.scrollHeight;
+    
+    const fixes = proj.fixes;
+    
+    document.getElementById('fix-proj-path').value = proj.path;
+    document.getElementById('fix-progress-text').textContent = `Fixing ${proj.name}...`;
+    document.getElementById('fix-progress-bar').style.width = '0%';
+    document.getElementById('fix-progress-bar').style.background = 'var(--accent)';
+    
+    const tool = window.fixAllTool || 'agy';
+    
+    fetch('/api/fix-with-ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectPath: proj.path, tool: tool, fixes })
+    }).catch(err => {
+        term.textContent += `\nError starting fix for ${proj.name}: ${err.message}\n`;
+        setTimeout(window.runNextFixAll, 1000);
+    });
+};

@@ -1,0 +1,856 @@
+const express = require('express');
+const fs = require('fs');
+const path = require('path');
+
+const app = express();
+const PORT = process.env.PORT || 3333;
+function findWorkspaceRoot(startDir) {
+    let currentDir = startDir;
+    while (currentDir !== '/') {
+        if (fs.existsSync(path.join(currentDir, '.meridian', 'projects.json'))) {
+            return currentDir;
+        }
+        currentDir = path.dirname(currentDir);
+    }
+    return startDir;
+}
+
+const RUNNING_DIR = process.env.MERIDIAN_RUNNING_DIR || process.cwd();
+const WORKSPACE_DIR = findWorkspaceRoot(RUNNING_DIR);
+const PROJECTS_JSON_PATH = path.join(WORKSPACE_DIR, '.meridian', 'projects.json');
+
+function getBoilerplate() {
+    return fs.readFileSync(path.join(__dirname, 'prompts', 'boilerplate.txt'), 'utf8');
+}
+
+function deriveKey(name) {
+    const words = name.trim().split(/[\s_\-]+/).filter(Boolean);
+    if (words.length === 1) {
+        return words[0].substring(0, 5).toUpperCase();
+    }
+    return words.map(w => w[0]).toUpperCase().join('');
+}
+
+function nextTaskId(tasks, key) {
+    const prefix = key + '-';
+    let max = 0;
+    for (const t of tasks) {
+        if (typeof t.id === 'string' && t.id.startsWith(prefix)) {
+            const n = parseInt(t.id.slice(prefix.length), 10);
+            if (!isNaN(n) && n > max) max = n;
+        }
+    }
+    return `${key}-${max + 1}`;
+}
+
+function getAgentTemplates() {
+    const agentsDir = path.join(__dirname, 'agents');
+    const agentNames = ['pm', 'developer', 'qa', 'code-reviewer', 'spec-generator', 'spec-reviewer'];
+    const templates = {};
+    for (const name of agentNames) {
+        const filePath = path.join(agentsDir, `${name}.md`);
+        if (fs.existsSync(filePath)) {
+            templates[name] = fs.readFileSync(filePath, 'utf8');
+        }
+    }
+    return templates;
+}
+
+function generateClaudeAgentContent(agentName, bodyContent) {
+    const descriptions = {
+        'pm': 'Orchestrates the Meridian task pipeline across statuses in .meridian/tasks.json',
+        'developer': 'Implements Meridian tasks using strict TDD workflow',
+        'code-reviewer': 'Independently reviews code changes for architecture, patterns, security, and unit test quality before QA',
+        'qa': 'Independently verifies completed Meridian tasks against expected results',
+        'spec-generator': 'Writes and revises implementation specs for Meridian tasks',
+        'spec-reviewer': 'Independently reviews task implementation specs for completeness and clarity'
+    };
+    const fullName = `meridian-${agentName}`;
+    const desc = descriptions[agentName] || `Meridian ${agentName} agent`;
+    const frontmatter = `---
+name: ${fullName}
+description: ${desc}
+tools: Read, Write, Edit, Bash, Grep, Glob
+---
+
+`;
+    return frontmatter + bodyContent.trim() + '\n';
+}
+
+function generateAgyAgentContent(agentName, bodyContent) {
+    const descriptions = {
+        'pm': 'Orchestrates the Meridian task pipeline across statuses in .meridian/tasks.json',
+        'developer': 'Implements Meridian tasks using strict TDD workflow',
+        'code-reviewer': 'Independently reviews code changes for architecture, patterns, security, and unit test quality before QA',
+        'qa': 'Independently verifies completed Meridian tasks against expected results',
+        'spec-generator': 'Writes and revises implementation specs for Meridian tasks',
+        'spec-reviewer': 'Independently reviews task implementation specs for completeness and clarity'
+    };
+    const fullName = `meridian-${agentName}`;
+    const desc = descriptions[agentName] || `Meridian ${agentName} agent`;
+    const frontmatter = `---
+name: ${fullName}
+description: '${desc}'
+tools:
+    - view_file
+    - replace_file_content
+    - write_to_file
+    - run_command
+    - grep_search
+    - list_dir
+inheritMcp: true
+---
+
+`;
+    return frontmatter + bodyContent.trim() + '\n';
+}
+
+app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.json());
+
+// Migrate from old projects.json to new decentralized architecture
+function migrateProjects() {
+    if (fs.existsSync(PROJECTS_JSON_PATH)) {
+        try {
+            const raw = fs.readFileSync(PROJECTS_JSON_PATH, 'utf8');
+            let parsed = JSON.parse(raw);
+            let migrated = false;
+            let newProjectsList = { projects: [] };
+
+            for (let proj of parsed.projects || []) {
+                newProjectsList.projects.push({ path: proj.path });
+
+                // If old properties exist (name, stack, purpose), it means it needs migration
+                if (proj.name || proj.purpose) {
+                    migrated = true;
+                    const meridianDir = path.join(proj.path, '.meridian');
+                    if (!fs.existsSync(meridianDir)) {
+                        fs.mkdirSync(meridianDir, { recursive: true });
+                    }
+                    const infoPath = path.join(meridianDir, 'project-info.json');
+                    
+                    let info = {};
+                    if (fs.existsSync(infoPath)) {
+                        info = JSON.parse(fs.readFileSync(infoPath, 'utf8'));
+                    }
+                    
+                    // Only overwrite if info doesn't have a name yet
+                    if (!info.name) {
+                        info.name = proj.name;
+                        info.description = proj.purpose || info.description || '';
+                        info.stack = proj.stack || info.stack || [];
+                        fs.writeFileSync(infoPath, JSON.stringify(info, null, 2), 'utf8');
+                    }
+                }
+            }
+
+            if (migrated) {
+                fs.writeFileSync(PROJECTS_JSON_PATH, JSON.stringify(newProjectsList, null, 2), 'utf8');
+                console.log('Migrated old projects.json to decentralized architecture.');
+            }
+        } catch (err) {
+            console.error('Error during migration:', err.message);
+        }
+    }
+}
+
+// Run migration on startup
+migrateProjects();
+
+// Helper to fetch aggregated data from decentralized storage
+function getStatusData() {
+    let data = { projects: [], errors: [] };
+    try {
+        if (fs.existsSync(PROJECTS_JSON_PATH)) {
+            const raw = fs.readFileSync(PROJECTS_JSON_PATH, 'utf8');
+            let parsed;
+            try {
+                parsed = JSON.parse(raw);
+            } catch (err) {
+                data.errors.push({ file: '.meridian/projects.json', message: 'Malformed JSON: ' + err.message });
+                return data; // Exit early if we can't parse global projects
+            }
+            
+            for (const projEntry of parsed.projects || []) {
+                const projPath = projEntry.path;
+                if (!fs.existsSync(projPath)) {
+                    data.errors.push({ file: 'System', message: `Project path not found: ${projPath}` });
+                    continue;
+                }
+
+                // Read project-info.json
+                const infoPath = path.join(projPath, '.meridian', 'project-info.json');
+                let info = { name: path.basename(projPath), description: '', stack: [] };
+                if (fs.existsSync(infoPath)) {
+                    try {
+                        info = JSON.parse(fs.readFileSync(infoPath, 'utf8'));
+                    } catch (err) {
+                        data.errors.push({ file: `${info.name} (project-info.json)`, message: 'Malformed JSON: ' + err.message });
+                    }
+                }
+
+                const tasksData = getTasks(projPath);
+                
+                const agentsMdPath = path.join(projPath, 'AGENTS.md');
+                const hasAgentsMd = fs.existsSync(agentsMdPath);
+                
+                let missingMeridianRules = false;
+                let outdatedMeridianRules = false;
+                
+                if (hasAgentsMd) {
+                    try {
+                        const content = fs.readFileSync(agentsMdPath, 'utf8');
+                        const startTag = '<!-- MERIDIAN_INSTRUCTIONS_START -->';
+                        const endTag = '<!-- MERIDIAN_INSTRUCTIONS_END -->';
+                        const startIndex = content.indexOf(startTag);
+                        const endIndex = content.indexOf(endTag);
+                        
+                        if (startIndex === -1 || endIndex === -1) {
+                            missingMeridianRules = true;
+                        } else {
+                            const block = content.substring(startIndex, endIndex + endTag.length);
+                            console.log(`[DEBUG] Project: ${info.name}`);
+                            console.log(`[DEBUG] block.trim() === getBoilerplate().trim(): ${block.trim() === getBoilerplate().trim()}`);
+                            // Compare exact trimmed content without the leading \n\n
+                            if (block.trim() !== getBoilerplate().trim()) {
+                                outdatedMeridianRules = true;
+                            }
+                        }
+                    } catch (err) {
+                        console.error(`Error reading AGENTS.md for ${info.name}:`, err.message);
+                    }
+                }
+                
+                const stackArray = Array.isArray(info.stack) ? info.stack : (info.stack ? info.stack.split(',').map(s => s.trim()).filter(Boolean) : []);
+                
+                // Agent Validations for Claude and Agy
+                const agentNames = ['pm', 'developer', 'qa', 'code-reviewer', 'spec-generator', 'spec-reviewer'];
+                const templates = getAgentTemplates();
+                
+                // Claude Agents check (.claude/agents/meridian-*.md)
+                let missingClaudeAgents = false;
+                let outdatedClaudeAgents = false;
+                const claudeDir = path.join(projPath, '.claude', 'agents');
+                for (const name of agentNames) {
+                    const filePath = path.join(claudeDir, `meridian-${name}.md`);
+                    if (!fs.existsSync(filePath)) {
+                        missingClaudeAgents = true;
+                    } else {
+                        try {
+                            const content = fs.readFileSync(filePath, 'utf8');
+                            const expected = generateClaudeAgentContent(name, templates[name] || '');
+                            if (content.trim() !== expected.trim()) {
+                                outdatedClaudeAgents = true;
+                            }
+                        } catch (e) {
+                            outdatedClaudeAgents = true;
+                        }
+                    }
+                }
+
+                // Agy Agents check (.agents/agents/meridian-*.md)
+                let missingAgyAgents = false;
+                let outdatedAgyAgents = false;
+                const agyDir = path.join(projPath, '.agents', 'agents');
+                for (const name of agentNames) {
+                    const filePath = path.join(agyDir, `meridian-${name}.md`);
+                    if (!fs.existsSync(filePath)) {
+                        missingAgyAgents = true;
+                    } else {
+                        try {
+                            const content = fs.readFileSync(filePath, 'utf8');
+                            const expected = generateAgyAgentContent(name, templates[name] || '');
+                            if (content.trim() !== expected.trim()) {
+                                outdatedAgyAgents = true;
+                            }
+                        } catch (e) {
+                            outdatedAgyAgents = true;
+                        }
+                    }
+                }
+
+                const relPath = path.relative(WORKSPACE_DIR, projPath) || path.basename(projPath);
+
+                data.projects.push({
+                    name: info.name,
+                    key: info.key || '',
+                    path: projPath,
+                    relativePath: relPath,
+                    stack: stackArray,
+                    description: info.description,
+                    tasks: tasksData.tasks || [],
+                    lastUpdated: tasksData.lastUpdated,
+                    missingAgentsMd: !hasAgentsMd,
+                    missingMeridianRules: missingMeridianRules,
+                    outdatedMeridianRules: outdatedMeridianRules,
+                    missingClaudeAgents: missingClaudeAgents,
+                    outdatedClaudeAgents: outdatedClaudeAgents,
+                    missingAgyAgents: missingAgyAgents,
+                    outdatedAgyAgents: outdatedAgyAgents,
+                    missingStack: stackArray.length === 0,
+                    missingDescription: !info.description || info.description.trim() === ''
+                });
+            }
+        } else {
+             data.errors.push({ file: '.meridian/projects.json', message: 'File not found. Please create it or let Odin initialize it.' });
+        }
+    } catch (err) {
+        console.error('Error fetching status data:', err.message);
+        data.errors.push({ file: 'System', message: 'Internal Server Error: ' + err.message });
+    }
+    return data;
+}
+
+// REST API for initial load
+app.get('/api/status', (req, res) => {
+    res.json(getStatusData());
+});
+
+// REST API to list subdirectories in RUNNING_DIR
+app.get('/api/directories', (req, res) => {
+    try {
+        const items = fs.readdirSync(RUNNING_DIR, { withFileTypes: true });
+        
+        // Load existing projects to filter them out
+        let existingPaths = new Set();
+        if (fs.existsSync(PROJECTS_JSON_PATH)) {
+            try {
+                const parsed = JSON.parse(fs.readFileSync(PROJECTS_JSON_PATH, 'utf8'));
+                (parsed.projects || []).forEach(p => existingPaths.add(p.path));
+            } catch (e) {
+                // Ignore parse errors here, let the status API handle reporting
+            }
+        }
+
+        const dirs = items
+            .filter(item => item.isDirectory() && !item.name.startsWith('.'))
+            .filter(item => !existingPaths.has(path.resolve(RUNNING_DIR, item.name)))
+            .map(item => item.name);
+            
+        res.json({ directories: dirs });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// REST API to add a project
+app.post('/api/projects', (req, res) => {
+    try {
+        const { name, path: rawPath, stack, description } = req.body;
+        if (!name || !rawPath) {
+            return res.status(400).json({ error: 'Name and path are required' });
+        }
+
+        const projPath = path.resolve(RUNNING_DIR, rawPath);
+
+        // Ensure global directory exists
+        const fsDir = path.dirname(PROJECTS_JSON_PATH);
+        if (!fs.existsSync(fsDir)) {
+            fs.mkdirSync(fsDir, { recursive: true });
+        }
+
+        let projectsList = { projects: [] };
+        if (fs.existsSync(PROJECTS_JSON_PATH)) {
+            projectsList = JSON.parse(fs.readFileSync(PROJECTS_JSON_PATH, 'utf8'));
+        }
+
+        // Avoid duplicates by path
+        if (projectsList.projects.find(p => p.path === projPath)) {
+            return res.status(409).json({ error: 'Project already exists' });
+        }
+
+        // Save path to global projects.json
+        projectsList.projects.push({ path: projPath });
+        fs.writeFileSync(PROJECTS_JSON_PATH, JSON.stringify(projectsList, null, 2), 'utf8');
+
+        // Create local .meridian directory and project-info.json
+        const localMeridianDir = path.join(projPath, '.meridian');
+        if (!fs.existsSync(localMeridianDir)) {
+            fs.mkdirSync(localMeridianDir, { recursive: true });
+        }
+        const infoPath = path.join(localMeridianDir, 'project-info.json');
+        const key = deriveKey(name);
+        const infoData = {
+            name,
+            key,
+            stack: stack || [],
+            description: description || ''
+        };
+        fs.writeFileSync(infoPath, JSON.stringify(infoData, null, 2), 'utf8');
+
+        res.status(201).json({ success: true });
+    } catch (err) {
+        console.error('Error adding project:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// REST API to edit a project
+app.put('/api/projects', (req, res) => {
+    try {
+        const { originalPath, name, stack, description, key } = req.body;
+        if (!originalPath || !name) {
+            return res.status(400).json({ error: 'Original path and name are required' });
+        }
+
+        let projectsList = { projects: [] };
+        if (fs.existsSync(PROJECTS_JSON_PATH)) {
+            projectsList = JSON.parse(fs.readFileSync(PROJECTS_JSON_PATH, 'utf8'));
+        }
+
+        const projIndex = projectsList.projects.findIndex(p => p.path === originalPath);
+        if (projIndex === -1) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+
+        const projPath = projectsList.projects[projIndex].path;
+        const localMeridianDir = path.join(projPath, '.meridian');
+        if (!fs.existsSync(localMeridianDir)) {
+            fs.mkdirSync(localMeridianDir, { recursive: true });
+        }
+        
+        const infoPath = path.join(localMeridianDir, 'project-info.json');
+        let infoData = { name: path.basename(projPath), stack: [], description: '' };
+        if (fs.existsSync(infoPath)) {
+            infoData = JSON.parse(fs.readFileSync(infoPath, 'utf8'));
+        }
+        
+        infoData.name = name;
+        infoData.key = key && key.trim() ? key.trim().toUpperCase() : (infoData.key || deriveKey(name));
+        infoData.stack = stack || [];
+        infoData.description = description || '';
+        
+        fs.writeFileSync(infoPath, JSON.stringify(infoData, null, 2), 'utf8');
+
+        res.json({ success: true, key: infoData.key });
+    } catch (err) {
+        console.error('Error editing project:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Helper to read and write tasks for a project
+function getTasks(projPath) {
+    const tasksPath = path.join(projPath, '.meridian', 'tasks.json');
+    if (fs.existsSync(tasksPath)) {
+        try {
+            const parsed = JSON.parse(fs.readFileSync(tasksPath, 'utf8'));
+            if (Array.isArray(parsed)) {
+                return { lastUpdated: null, tasks: parsed };
+            }
+            return parsed;
+        } catch (e) {
+            return { lastUpdated: null, tasks: [] };
+        }
+    }
+    return { lastUpdated: null, tasks: [] };
+}
+
+function saveTasks(projPath, tasksData) {
+    const localMeridianDir = path.join(projPath, '.meridian');
+    if (!fs.existsSync(localMeridianDir)) {
+        fs.mkdirSync(localMeridianDir, { recursive: true });
+    }
+    tasksData.lastUpdated = new Date().toISOString();
+    fs.writeFileSync(path.join(localMeridianDir, 'tasks.json'), JSON.stringify(tasksData, null, 2), 'utf8');
+}
+
+// REST API to add a task
+app.post('/api/projects/tasks', (req, res) => {
+    try {
+        const { projectPath, title, blockedBy } = req.body;
+        if (!projectPath || !title) {
+            return res.status(400).json({ error: 'projectPath and title are required' });
+        }
+
+        const tasksData = getTasks(projectPath);
+
+        // Derive key from project-info.json
+        const infoPath = path.join(projectPath, '.meridian', 'project-info.json');
+        let key = 'TASK';
+        if (fs.existsSync(infoPath)) {
+            try {
+                const info = JSON.parse(fs.readFileSync(infoPath, 'utf8'));
+                key = info.key || deriveKey(info.name || path.basename(projectPath));
+            } catch (e) { /* keep default */ }
+        }
+
+        const newTask = {
+            id: nextTaskId(tasksData.tasks, key),
+            title,
+            status: 'backlog',
+            justification: '',
+            running: false,
+            blockedBy: Array.isArray(blockedBy) ? blockedBy : []
+        };
+        
+        tasksData.tasks.push(newTask);
+        saveTasks(projectPath, tasksData);
+        
+        res.status(201).json({ success: true, task: newTask });
+    } catch (err) {
+        console.error('Error adding task:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// REST API to update a task (status, justification)
+app.put('/api/projects/tasks/:taskId', (req, res) => {
+    try {
+        const { projectPath, status, justification, title, blockedBy, running } = req.body;
+        const taskId = req.params.taskId;
+
+        if (!projectPath) {
+            return res.status(400).json({ error: 'projectPath is required' });
+        }
+
+        const tasksData = getTasks(projectPath);
+        const taskIndex = tasksData.tasks.findIndex(t => t.id === taskId);
+
+        if (taskIndex === -1) {
+            return res.status(404).json({ error: 'Task not found' });
+        }
+
+        if (status !== undefined) tasksData.tasks[taskIndex].status = status;
+        if (justification !== undefined) tasksData.tasks[taskIndex].justification = justification;
+        if (title !== undefined) tasksData.tasks[taskIndex].title = title;
+        if (blockedBy !== undefined) tasksData.tasks[taskIndex].blockedBy = Array.isArray(blockedBy) ? blockedBy : [];
+        if (running !== undefined) tasksData.tasks[taskIndex].running = Boolean(running);
+        
+        saveTasks(projectPath, tasksData);
+        
+        res.json({ success: true, task: tasksData.tasks[taskIndex] });
+    } catch (err) {
+        console.error('Error updating task:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// REST API to delete a task
+app.delete('/api/projects/tasks/:taskId', (req, res) => {
+    try {
+        const { projectPath } = req.body;
+        const taskId = req.params.taskId;
+        
+        if (!projectPath) {
+            return res.status(400).json({ error: 'projectPath is required' });
+        }
+        
+        const tasksData = getTasks(projectPath);
+        const initialLen = tasksData.tasks.length;
+        tasksData.tasks = tasksData.tasks.filter(t => t.id !== taskId);
+        
+        if (tasksData.tasks.length === initialLen) {
+            return res.status(404).json({ error: 'Task not found' });
+        }
+        
+        saveTasks(projectPath, tasksData);
+        
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Error deleting task:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// REST API to fix project issues with AI
+app.post('/api/fix-with-ai', (req, res) => {
+    try {
+        const { projectPath, tool = 'agy', fixes } = req.body;
+        const selectedTool = tool || 'agy';
+        if (!projectPath || !fixes || !Array.isArray(fixes)) {
+            return res.status(400).json({ error: 'projectPath and fixes array are required' });
+        }
+
+        // Validate it's a known project
+        let projectsList = { projects: [] };
+        if (fs.existsSync(PROJECTS_JSON_PATH)) {
+            projectsList = JSON.parse(fs.readFileSync(PROJECTS_JSON_PATH, 'utf8'));
+        }
+        if (!projectsList.projects.find(p => p.path === projectPath)) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+        
+        // Return immediately so UI doesn't block
+        res.status(202).json({ success: true, message: 'Fixes started' });
+
+        const { spawn } = require('child_process');
+        
+        // Send a specific progress update via SSE
+        const sendProgress = (msg, percent, type = 'progress') => {
+            const payload = `data: ${JSON.stringify({ type: 'fix-progress', projectPath, data: { status: type, message: msg, percent } })}\n\n`;
+            clients.forEach(c => c.write(payload));
+        };
+        
+        const runFix = async (fixName, index, total) => {
+            return new Promise((resolve, reject) => {
+                const percent = Math.round((index / total) * 100);
+                
+                let promptTemplatePath = '';
+                let defaultPromptText = '';
+                let cmdString = '';
+
+                if (fixName === 'meridian-rules') {
+                    sendProgress('Updating Meridian Rules (System)...', percent);
+                    try {
+                        const agentsPath = path.join(projectPath, 'AGENTS.md');
+                        if (!fs.existsSync(agentsPath)) {
+                            fs.writeFileSync(agentsPath, '# AGENTS.md\n', 'utf8');
+                        }
+                        let content = fs.readFileSync(agentsPath, 'utf8');
+                        
+                        const startTag = '<!-- MERIDIAN_INSTRUCTIONS_START -->';
+                        const endTag = '<!-- MERIDIAN_INSTRUCTIONS_END -->';
+                        const startIndex = content.indexOf(startTag);
+                        const endIndex = content.indexOf(endTag);
+                        
+                        if (startIndex !== -1 && endIndex !== -1) {
+                            // Replace old rules
+                            content = content.substring(0, startIndex) + content.substring(endIndex + endTag.length);
+                        }
+                        content += getBoilerplate();
+                        
+                        fs.writeFileSync(agentsPath, content, 'utf8');
+                        sendProgress('Meridian Rules injected successfully! 🚀\n', percent, 'log');
+                        return resolve();
+                    } catch (e) {
+                        return reject(new Error('Failed to update Meridian Rules: ' + e.message));
+                    }
+                } else if (fixName === 'claude-agents') {
+                    sendProgress('Updating Claude Meridian Agents (.claude/agents/)...', percent);
+                    try {
+                        const claudeDir = path.join(projectPath, '.claude', 'agents');
+                        if (!fs.existsSync(claudeDir)) {
+                            fs.mkdirSync(claudeDir, { recursive: true });
+                        }
+                        const templates = getAgentTemplates();
+                        const agentNames = ['pm', 'developer', 'qa', 'code-reviewer', 'spec-generator', 'spec-reviewer'];
+                        for (const name of agentNames) {
+                            const filePath = path.join(claudeDir, `meridian-${name}.md`);
+                            const content = generateClaudeAgentContent(name, templates[name] || '');
+                            fs.writeFileSync(filePath, content, 'utf8');
+                        }
+                        sendProgress('Claude Meridian Agents injected successfully! 🤖\n', percent, 'log');
+                        return resolve();
+                    } catch (e) {
+                        return reject(new Error('Failed to update Claude Agents: ' + e.message));
+                    }
+                } else if (fixName === 'agy-agents') {
+                    sendProgress('Updating Agy Meridian Agents (.agents/agents/)...', percent);
+                    try {
+                        const agyDir = path.join(projectPath, '.agents', 'agents');
+                        if (!fs.existsSync(agyDir)) {
+                            fs.mkdirSync(agyDir, { recursive: true });
+                        }
+                        const templates = getAgentTemplates();
+                        const agentNames = ['pm', 'developer', 'qa', 'code-reviewer', 'spec-generator', 'spec-reviewer'];
+                        for (const name of agentNames) {
+                            const filePath = path.join(agyDir, `meridian-${name}.md`);
+                            const content = generateAgyAgentContent(name, templates[name] || '');
+                            fs.writeFileSync(filePath, content, 'utf8');
+                        }
+                        sendProgress('Agy Meridian Agents injected successfully! 🪄\n', percent, 'log');
+                        return resolve();
+                    } catch (e) {
+                        return reject(new Error('Failed to update Agy Agents: ' + e.message));
+                    }
+                } else if (fixName === 'agents') {
+                    sendProgress('Generating AGENTS.md...', percent);
+                    promptTemplatePath = path.join(__dirname, 'prompts', 'agents.txt');
+                    defaultPromptText = `Write an AGENTS.md file in the root directory detailing the project context, architecture, stack, and domain concepts. Write the final output ONLY to AGENTS.md.`;
+                } else if (fixName === 'stack') {
+                    sendProgress('Analyzing stack...', percent);
+                    promptTemplatePath = path.join(__dirname, 'prompts', 'stack.txt');
+                    defaultPromptText = `Analyze this codebase and determine the core technologies, languages, and frameworks used.\nRewrite the 'stack' field in the \`.meridian/project-info.json\` file with a JSON array of strings containing these technologies.\nDo not change any other fields in the JSON. Write the updated JSON back to the file.`;
+                } else if (fixName === 'description') {
+                    sendProgress('Analyzing description...', percent);
+                    promptTemplatePath = path.join(__dirname, 'prompts', 'description.txt');
+                    defaultPromptText = `Analyze this codebase and write a concise, one-sentence description of the project's purpose.\nRewrite the 'description' field in the \`.meridian/project-info.json\` file with this text.\nDo not change any other fields in the JSON. Write the updated JSON back to the file.`;
+                } else {
+                    return resolve(); // Unknown fix
+                }
+
+                let promptText = '';
+                if (fs.existsSync(promptTemplatePath)) {
+                    promptText = fs.readFileSync(promptTemplatePath, 'utf8');
+                } else {
+                    promptText = defaultPromptText;
+                }
+
+                promptText += `\n\nCRITICAL INSTRUCTION: You are analyzing the project located EXACTLY in "${projectPath}". You MUST NOT scan, read, or infer context from parent directories. Limit your analysis ONLY to the contents of the current working directory. You MUST NOT execute shell/terminal commands (e.g. ls, git, cd). Use file reading and editing tools ONLY.`;
+
+                if (tool === 'claude') {
+                    cmdString = `claude -p "$PROMPT" --tools "Edit,Read,Write,Glob,Grep" --permission-mode acceptEdits`;
+                } else if (tool === 'agy') {
+                    cmdString = `agy -p "$PROMPT" --mode accept-edits --sandbox`;
+                }
+
+                const child = spawn(cmdString, { 
+                    cwd: projectPath, 
+                    shell: true,
+                    stdio: ['ignore', 'pipe', 'pipe'],
+                    env: {
+                        ...process.env,
+                        FORCE_COLOR: '1',
+                        CI: '1',
+                        PROMPT: promptText
+                    }
+                });
+
+                child.stdout.on('data', (data) => {
+                    sendProgress(data.toString(), percent, 'log');
+                });
+
+                child.stderr.on('data', (data) => {
+                    sendProgress(data.toString(), percent, 'log');
+                });
+
+                child.on('error', (err) => {
+                    reject(new Error(`Failed to start subprocess: ${err.message}`));
+                });
+
+                child.on('close', (code) => {
+                    if (code !== 0) {
+                        reject(new Error(`Process exited with code ${code}`));
+                    } else {
+                        if (fixName === 'agents') {
+                            const agentsPath = path.join(projectPath, 'AGENTS.md');
+                            if (fs.existsSync(agentsPath)) {
+                                let content = fs.readFileSync(agentsPath, 'utf8');
+                                // if it already has rules, skip or replace. for simplicity, append if missing
+                                if (!content.includes('MERIDIAN_INSTRUCTIONS_START')) {
+                                    fs.appendFileSync(agentsPath, getBoilerplate(), 'utf8');
+                                }
+                            }
+                        }
+                        resolve();
+                    }
+                });
+            });
+        };
+
+        // Run sequentially
+        (async () => {
+            try {
+                for (let i = 0; i < fixes.length; i++) {
+                    await runFix(fixes[i], i, fixes.length);
+                }
+                sendProgress('All fixes complete! ✨', 100, 'complete');
+                broadcastUpdate(); // refresh UI
+            } catch (err) {
+                console.error('Error running fixes:', err.message);
+                sendProgress(err.message, 100, 'error');
+                broadcastUpdate();
+            }
+        })();
+
+    } catch (err) {
+        console.error('Error starting fixes:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// SSE Setup
+let clients = [];
+
+app.get('/api/stream', (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    clients.push(res);
+    
+    res.write(`data: ${JSON.stringify({ type: 'init', data: getStatusData() })}\n\n`);
+
+    req.on('close', () => {
+        clients = clients.filter(client => client !== res);
+    });
+});
+
+let debounceTimer = null;
+function broadcastUpdate() {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+        const data = getStatusData();
+        const payload = `data: ${JSON.stringify({ type: 'update', data })}\n\n`;
+        clients.forEach(client => client.write(payload));
+    }, 100);
+}
+
+// File watching logic
+const watchers = new Map();
+
+function setupWatchers() {
+    // Clear old watchers
+    for (const [key, watcher] of watchers.entries()) {
+        try { watcher.close(); } catch (e) {}
+    }
+    watchers.clear();
+
+    const watchPath = (targetPath, isDir = false) => {
+        if (fs.existsSync(targetPath) && !watchers.has(targetPath)) {
+            try {
+                const watcher = fs.watch(targetPath, { recursive: isDir }, (eventType, filename) => {
+                    broadcastUpdate();
+                    // If projects.json changes or a directory changes, refresh watchers
+                    if (targetPath === PROJECTS_JSON_PATH || isDir) {
+                        setTimeout(setupWatchers, 300);
+                    }
+                });
+                watchers.set(targetPath, watcher);
+            } catch (err) {
+                console.error(`Error watching ${targetPath}:`, err.message);
+            }
+        }
+    };
+
+    // Watch projects.json
+    watchPath(PROJECTS_JSON_PATH);
+
+    // Watch all project directories and their .meridian folders
+    try {
+        if (fs.existsSync(PROJECTS_JSON_PATH)) {
+            const raw = fs.readFileSync(PROJECTS_JSON_PATH, 'utf8');
+            const parsed = JSON.parse(raw);
+            (parsed.projects || []).forEach(proj => {
+                const meridianDir = path.join(proj.path, '.meridian');
+                if (!fs.existsSync(meridianDir)) {
+                    try { fs.mkdirSync(meridianDir, { recursive: true }); } catch (e) {}
+                }
+                watchPath(meridianDir, true);
+                
+                const agentsMdPath = path.join(proj.path, 'AGENTS.md');
+                watchPath(agentsMdPath);
+
+                const claudeAgentsDir = path.join(proj.path, '.claude', 'agents');
+                watchPath(claudeAgentsDir, true);
+
+                const agyAgentsDir = path.join(proj.path, '.agents', 'agents');
+                watchPath(agyAgentsDir, true);
+            });
+        }
+    } catch (err) {
+        console.error('Failed to setup task watchers:', err.message);
+    }
+}
+
+// Initialize watchers
+setupWatchers();
+
+// SPA Fallback Route: Serve index.html for non-API GET routes
+app.use((req, res, next) => {
+    if (req.method === 'GET' && !req.path.startsWith('/api/')) {
+        return res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    }
+    next();
+});
+
+if (require.main === module) {
+    app.listen(PORT, () => {
+        console.log(`Meridian Dashboard running on http://localhost:${PORT}`);
+        console.log(`Monitoring directory: ${RUNNING_DIR}`);
+    });
+}
+
+module.exports = app;

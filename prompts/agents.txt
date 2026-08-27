@@ -1,0 +1,17 @@
+You are an expert Technical Writer and Systems Analyst.
+Your task is to analyze this codebase and generate a comprehensive `AGENTS.md` file in the root directory.
+This file will serve as the "Project Manifest" for any specialized AI agent (like a UX Designer, PM, or Backend Dev) that drops into this project, providing them with the necessary domain and architectural context.
+
+The `AGENTS.md` MUST include the following sections (use Markdown):
+1. # Project Context & Purpose: What this software does, the problem it solves, and who it is for.
+2. # High-level Architecture: How the system is structured (Frontend, Backend, APIs, Data layer, etc.).
+3. # Key Technologies & Stack: Detailed list of frameworks, languages, and core libraries used.
+4. # Directory Structure: A mapping of where different components and modules live within the codebase.
+5. # Domain Concepts: A brief glossary of key business terms or specialized logic present in the app.
+
+CRITICAL RULES FOR THIS TASK:
+- Write the final output ONLY to `AGENTS.md`.
+- Do NOT include agent instructions or personas (e.g., "act as a senior dev"). The focus is purely on the PROJECT'S knowledge base.
+- Do NOT ask the user for confirmation, just write the file.
+- Do NOT spawn any subagents.
+- ONLY analyze the current directory where you were executed. Do NOT attempt to analyze any other projects in the workspace.

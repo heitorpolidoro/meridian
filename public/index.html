@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meridian Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="stylesheet" href="styles.css?v=23">
+</head>
+<body>
+    <div id="flash-message-container" style="position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 10000; display: flex; flex-direction: column; gap: 10px;"></div>
+
+    <div class="background-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+    </div>
+    
+    <div class="container">
+        <header>
+            <h1>Meridian <span>Dashboard</span></h1>
+            <p class="subtitle">Live Workspace Monitor</p>
+            <div class="header-actions">
+                <div id="connection-status" class="status-indicator">Connecting...</div>
+                <button id="back-to-dashboard-btn" class="secondary-btn hidden" style="margin-right: 10px;">← Back to Dashboard</button>
+                <button id="global-tickets-btn" class="secondary-btn" style="margin-right: 10px;">🎫 All Tickets</button>
+                <button id="fix-all-btn" class="primary-btn hidden" style="background: #10b981; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4); margin-right: 10px;">Fix All 🪄</button>
+                <button id="open-add-modal-btn" class="primary-btn">+ Register Project</button>
+            </div>
+        </header>
+
+        <div id="error-container"></div>
+        
+        <main id="dashboard-view">
+            <!-- Project Cards Grid -->
+            <div id="projects-container">
+                <!-- Projects will be rendered dynamically here -->
+            </div>
+        </main>
+        
+        <div id="project-view" class="hidden">
+            <div class="project-view-header">
+                <div class="project-header-info">
+                    <h2 id="pv-title">Project Name</h2>
+                    <p id="pv-desc">Project Description</p>
+                    <div id="pv-stack" class="tags-container" style="margin-top: 0.5rem;"></div>
+                </div>
+                <button id="pv-edit-btn" class="primary-btn">Edit Details</button>
+            </div>
+            
+            <div class="status-summary-bar" id="status-summary-bar">
+                <!-- Summary cards will be injected here -->
+            </div>
+            
+            <div class="kanban-header">
+                <div style="display: flex; align-items: center; gap: 1.2rem;">
+                    <h3>Kanban Board</h3>
+                    <label class="toggle-empty-cols-label" style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; user-select: none; background: rgba(255,255,255,0.03); padding: 0.35rem 0.75rem; border-radius: 6px; border: 1px solid var(--border-color); transition: all 0.2s ease;">
+                        <input type="checkbox" id="toggle-empty-cols" style="cursor: pointer; accent-color: var(--accent);">
+                        <span>Hide Empty Columns</span>
+                    </label>
+                </div>
+                <form id="add-task-form" style="display: flex; gap: 0.5rem; align-items: center;">
+                    <input type="text" id="new-task-input" placeholder="Add a new task to Backlog..." required style="min-width: 300px;">
+                    <button type="submit" class="primary-btn">Add Task</button>
+                </form>
+            </div>
+
+            <div id="running-tickets-section" class="running-tickets-section hidden">
+                <div class="running-tickets-header">
+                    <span class="running-pulse-dot"></span>
+                    <span class="running-tickets-title">Running</span>
+                    <span id="running-tickets-count" class="running-tickets-count">0</span>
+                </div>
+                <div id="running-tickets-list" class="running-tickets-list"></div>
+            </div>
+
+            <div class="kanban-board" id="kanban-board">
+                <!-- Kanban columns will be injected here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Project Modal -->
+    <div id="add-project-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-title">Add New Project</h2>
+                <button class="close-modal-btn">&times;</button>
+            </div>
+            <form id="add-project-form">
+                <input type="hidden" id="proj-path-hidden">
+                <div class="form-group">
+                    <label>Select Project Directory</label>
+                    <select id="proj-path-select" class="form-select">
+                        <option value="">Loading directories...</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Project Name</label>
+                    <input type="text" id="proj-name" placeholder="e.g. My Project" required>
+                </div>
+                <div class="form-group">
+                    <label>Project Key <span style="font-size:0.8rem; color: var(--text-secondary); font-weight:400;">(used for task IDs, e.g. <code>PROJ</code>, <code>RH</code>)</span></label>
+                    <input type="text" id="proj-key" placeholder="Auto-derived from name" style="font-family: monospace; text-transform: uppercase;" maxlength="8">
+                </div>
+                <div class="form-group">
+                    <label>Purpose / Description</label>
+                    <textarea id="proj-purpose" placeholder="Briefly describe what this project does..." rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Tech Stack</label>
+                    <div class="stack-input-wrapper">
+                        <input type="text" id="stack-input" placeholder="e.g. React 19, FastAPI, PostgreSQL">
+                        <button type="button" id="add-stack-btn" class="secondary-btn">Add</button>
+                    </div>
+                    <div id="stack-tags-container" class="tags-container" style="margin-top: 0.5rem;"></div>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="secondary-btn close-modal-btn">Cancel</button>
+                    <button type="submit" class="primary-btn">Save Project</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- AI Fix Progress Modal -->
+    <div id="fix-progress-modal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h2 id="fix-modal-title">Fixing Project Setup 🪄</h2>
+                <button class="close-fix-modal-btn">&times;</button>
+            </div>
+            <form id="fix-progress-form">
+                <input type="hidden" id="fix-proj-path" name="projectPath">
+                <input type="hidden" id="fix-proj-name" name="projectName">
+                <p id="fix-modal-desc" style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">
+                    Select the setup items you want the AI agent to generate or fix:
+                </p>
+                <div id="fix-checkboxes-container" style="display: flex; flex-direction: column; gap: 0.8rem; margin-bottom: 1.5rem;">
+                    <!-- Checkboxes injected dynamically -->
+                </div>
+                
+                <div id="fix-status-area" class="hidden" style="margin-bottom: 1.5rem;">
+                    <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 0.5rem;">
+                        <span id="fix-progress-text" style="font-weight: 600; color: var(--accent);">Initializing AI Agent...</span>
+                        <span id="fix-progress-percent">0%</span>
+                    </div>
+                    <div style="width: 100%; height: 8px; background: rgba(255, 255, 255, 0.1); border-radius: 4px; overflow: hidden;">
+                        <div id="fix-progress-bar" style="width: 0%; height: 100%; background: var(--accent); transition: width 0.3s ease;"></div>
+                    </div>
+                    <pre id="fix-terminal-log" class="hidden"></pre>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="secondary-btn close-fix-modal-btn">Cancel</button>
+                    <button type="submit" id="fix-submit-btn" class="primary-btn" style="background: #10b981;">Fix Selected 🪄</button>
+                    <button type="button" id="fix-done-btn" class="primary-btn hidden" style="background: #10b981;">Done</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="app.js?v=35"></script>
+</body>
+</html>

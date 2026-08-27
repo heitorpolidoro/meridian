@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+
+# Syncs the Odin agent definition from the meridian directory to the workspace active agents
+# Usage: ./meridian_sync
+
+# Resolving absolute paths based on script location to allow execution from anywhere
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKSPACE_ROOT="$(dirname "$SCRIPT_DIR")"
+
+SOURCE="$WORKSPACE_ROOT/meridian/agents/Odin.md"
+DEST="$WORKSPACE_ROOT/.agents/orchestrator/AGENT.md"
+
+if [ ! -f "$SOURCE" ]; then
+    echo "Error: Source file $SOURCE not found!"
+    exit 1
+fi
+
+mkdir -p "$(dirname "$DEST")"
+cp "$SOURCE" "$DEST"
+echo "✅ Odin synced successfully to $DEST"

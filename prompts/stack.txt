@@ -1,0 +1,14 @@
+Analyze this codebase and determine the core high-level technologies used.
+Rewrite the 'stack' field in the `.meridian/project-info.json` file with a JSON array of strings containing these technologies.
+
+CRITICAL RULES FOR THE STACK ARRAY:
+- Include ONLY primary programming languages (e.g., "Python", "TypeScript") and major frameworks/libraries (e.g., "React", "Next.js", "Express", "OpenAI Whisper").
+- DO NOT include package managers (e.g., "npm", "yarn", "uv").
+- DO NOT include low-level or internal dependencies (e.g., "PyTorch", "numpy", "dotenv").
+- DO NOT include CLI utilities, linters, or dev-tools (e.g., "Bash", "pre-commit", "detect-secrets", "ffmpeg", "eslint").
+- Keep the list concise (ideally 1 to 4 items).
+
+- DO NOT spawn any subagents.
+- ONLY analyze the current directory where you were executed. Do NOT attempt to analyze any other projects in the workspace.
+
+Do not change any other fields in the JSON. Write the updated JSON back to the file.
