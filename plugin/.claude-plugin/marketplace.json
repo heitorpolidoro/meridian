@@ -1,0 +1,17 @@
+{
+  "name": "meridian",
+  "owner": {
+    "name": "Heitor Polidoro"
+  },
+  "metadata": {
+    "description": "Project-scoped skills and agents that drive the Meridian task pipeline.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "meridian",
+      "source": "./plugins/meridian",
+      "description": "Read, create, and advance Meridian tasks for the project in the current directory."
+    }
+  ]
+}

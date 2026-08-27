@@ -1,0 +1,7 @@
+{
+  "name": "meridian",
+  "description": "Project-scoped skills and agents for the Meridian task pipeline: read board status, create tasks, and drive a task from backlog to done.",
+  "author": {
+    "name": "Heitor Polidoro"
+  }
+}
