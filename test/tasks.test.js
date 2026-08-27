@@ -103,3 +103,43 @@ test('getTasks: backfill does not touch tasks that are not done', () => {
     const dir = tmpProject([{ id: 'A-1', status: 'backlog', updated_at: '2026-08-13T00:00:00.000Z' }]);
     assert.equal('completed_at' in getTasks(dir).tasks[0], false);
 });
+
+const { stampNewTask, stampTaskUpdate } = require('../lib/tasks');
+
+const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
+test('stampNewTask: sets created_at, moved_at and updated_at', () => {
+    const t = stampNewTask({ id: 'A-1', status: 'backlog' });
+    assert.match(t.created_at, ISO);
+    assert.equal(t.moved_at, t.created_at);
+    assert.equal(t.updated_at, t.created_at);
+});
+
+test('stampTaskUpdate: a write without a status change touches only updated_at', () => {
+    const t = stampTaskUpdate({ id: 'A-1', status: 'backlog', moved_at: 'earlier' }, 'backlog');
+    assert.match(t.updated_at, ISO);
+    assert.equal(t.moved_at, 'earlier');
+    assert.equal('completed_at' in t, false);
+});
+
+test('stampTaskUpdate: a status change sets moved_at', () => {
+    const t = stampTaskUpdate({ id: 'A-1', status: 'inprogress', moved_at: 'earlier' }, 'readytodo');
+    assert.match(t.moved_at, ISO);
+    assert.notEqual(t.moved_at, 'earlier');
+});
+
+test('stampTaskUpdate: entering done sets completed_at', () => {
+    const t = stampTaskUpdate({ id: 'A-1', status: 'done' }, 'qareview');
+    assert.match(t.completed_at, ISO);
+    assert.equal(t.completed_at, t.moved_at);
+});
+
+test('stampTaskUpdate: leaving done clears completed_at', () => {
+    const t = stampTaskUpdate({ id: 'A-1', status: 'inprogress', completed_at: '2026-08-01T00:00:00.000Z' }, 'done');
+    assert.equal(t.completed_at, null);
+});
+
+test('stampTaskUpdate: done to done does not restamp completed_at', () => {
+    const t = stampTaskUpdate({ id: 'A-1', status: 'done', completed_at: '2026-08-01T00:00:00.000Z' }, 'done');
+    assert.equal(t.completed_at, '2026-08-01T00:00:00.000Z');
+});
