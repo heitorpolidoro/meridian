@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { deriveKey, nextTaskId, getTasks, saveTasks } = require('../lib/tasks');
+const { deriveKey, nextTaskId, getTasks, saveTasks, MalformedTasksError } = require('../lib/tasks');
 
 test('deriveKey: single word takes the first five letters', () => {
     assert.equal(deriveKey('Meridian'), 'MERID');
@@ -60,10 +60,40 @@ test('getTasks: missing file yields an empty list', () => {
     assert.deepEqual(getTasks(dir).tasks, []);
 });
 
-test('getTasks: malformed JSON yields an empty list instead of throwing', () => {
+test('getTasks: malformed JSON throws instead of reading as an empty list', () => {
     const dir = tmpProject(undefined);
     fs.writeFileSync(path.join(dir, '.meridian', 'tasks.json'), '{not json');
-    assert.deepEqual(getTasks(dir).tasks, []);
+    assert.throws(() => getTasks(dir), MalformedTasksError);
+});
+
+test('getTasks: a truncated file throws rather than losing the backlog', () => {
+    const dir = tmpProject(undefined);
+    const file = path.join(dir, '.meridian', 'tasks.json');
+    const whole = JSON.stringify([{ id: 'A-1' }, { id: 'A-2' }], null, 2);
+    fs.writeFileSync(file, whole.slice(0, whole.length - 20));
+    assert.throws(() => getTasks(dir), MalformedTasksError);
+    // The corrupt bytes must still be on disk, untouched, for hand repair.
+    assert.equal(fs.readFileSync(file, 'utf8'), whole.slice(0, whole.length - 20));
+});
+
+test('getTasks: valid JSON of the wrong shape throws', () => {
+    const dir = tmpProject(42);
+    assert.throws(() => getTasks(dir), MalformedTasksError);
+});
+
+test('getTasks: an empty file throws rather than reading as no tasks', () => {
+    const dir = tmpProject(undefined);
+    fs.writeFileSync(path.join(dir, '.meridian', 'tasks.json'), '');
+    assert.throws(() => getTasks(dir), MalformedTasksError);
+});
+
+test('saveTasks: leaves no temp file behind and lands the file atomically', () => {
+    const dir = tmpProject([{ id: 'A-1' }]);
+    saveTasks(dir, { tasks: [{ id: 'A-1' }, { id: 'A-2' }] });
+    const entries = fs.readdirSync(path.join(dir, '.meridian'));
+    assert.deepEqual(entries.filter(f => f.endsWith('.tmp')), []);
+    assert.deepEqual(entries, ['tasks.json']);
+    assert.equal(getTasks(dir).tasks.length, 2);
 });
 
 test('saveTasks: creates .meridian when absent and round-trips', () => {

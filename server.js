@@ -1,7 +1,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { deriveKey, nextTaskId, getTasks, saveTasks, stampNewTask, stampTaskUpdate } = require('./lib/tasks');
+const { deriveKey, nextTaskId, getTasks, saveTasks, stampNewTask, stampTaskUpdate, MalformedTasksError } = require('./lib/tasks');
 
 const app = express();
 const PORT = process.env.PORT || 3333;
@@ -140,6 +140,17 @@ migrateProjects();
 
 const PRIORITY_ORDER = ['critical', 'high', 'medium', 'low'];
 
+// Turns a malformed tasks.json into a 500 rather than letting the caller
+// read-modify-write an empty list over the user's backlog.
+function handleTaskReadError(err, res) {
+    if (err instanceof MalformedTasksError) {
+        console.error(err.message);
+        res.status(500).json({ error: err.message + ' — refusing to write; fix the file by hand.' });
+        return true;
+    }
+    return false;
+}
+
 function limitPerStatus(tasks, limit) {
     const byStatus = new Map();
     for (const task of tasks) {
@@ -195,7 +206,12 @@ function getStatusData(options = {}) {
                     }
                 }
 
-                const tasksData = getTasks(projPath);
+                let tasksData = { tasks: [] };
+                try {
+                    tasksData = getTasks(projPath);
+                } catch (err) {
+                    data.errors.push({ file: `${info.name} (tasks.json)`, message: err.message });
+                }
                 
                 const agentsMdPath = path.join(projPath, 'AGENTS.md');
                 const hasAgentsMd = fs.existsSync(agentsMdPath);
@@ -446,7 +462,13 @@ app.post('/api/projects/tasks', (req, res) => {
             return res.status(400).json({ error: 'projectPath and title are required' });
         }
 
-        const tasksData = getTasks(projectPath);
+        let tasksData;
+        try {
+            tasksData = getTasks(projectPath);
+        } catch (err) {
+            if (handleTaskReadError(err, res)) return;
+            throw err;
+        }
 
         // Derive key from project-info.json
         const infoPath = path.join(projectPath, '.meridian', 'project-info.json');
@@ -489,7 +511,13 @@ app.put('/api/projects/tasks/:taskId', (req, res) => {
             return res.status(400).json({ error: 'projectPath is required' });
         }
 
-        const tasksData = getTasks(projectPath);
+        let tasksData;
+        try {
+            tasksData = getTasks(projectPath);
+        } catch (err) {
+            if (handleTaskReadError(err, res)) return;
+            throw err;
+        }
         const taskIndex = tasksData.tasks.findIndex(t => t.id === taskId);
 
         if (taskIndex === -1) {
@@ -538,7 +566,13 @@ app.delete('/api/projects/tasks/:taskId', (req, res) => {
             return res.status(400).json({ error: 'projectPath is required' });
         }
         
-        const tasksData = getTasks(projectPath);
+        let tasksData;
+        try {
+            tasksData = getTasks(projectPath);
+        } catch (err) {
+            if (handleTaskReadError(err, res)) return;
+            throw err;
+        }
         const initialLen = tasksData.tasks.length;
         tasksData.tasks = tasksData.tasks.filter(t => t.id !== taskId);
         
