@@ -212,9 +212,11 @@ function getStatusData(options = {}) {
                 return data; // Exit early if we can't parse global projects
             }
             
+            let matchedProject = false;
             for (const projEntry of parsed.projects || []) {
                 const projPath = projEntry.path;
                 if (options.project && path.resolve(projEntry.path) !== path.resolve(options.project)) continue;
+                if (options.project) matchedProject = true;
                 if (!fs.existsSync(projPath)) {
                     data.errors.push({ file: 'System', message: `Project path not found: ${projPath}` });
                     continue;
@@ -336,6 +338,10 @@ function getStatusData(options = {}) {
                     missingStack: stackArray.length === 0,
                     missingDescription: !info.description || info.description.trim() === ''
                 });
+            }
+
+            if (options.project && !matchedProject) {
+                data.errors.push({ file: 'System', message: `Project not registered with Meridian: ${options.project}` });
             }
         } else {
              data.errors.push({ file: '.meridian/projects.json', message: 'File not found. Please create it or let Odin initialize it.' });

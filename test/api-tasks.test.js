@@ -28,12 +28,22 @@ async function withServer(ws, fn) {
     const proc = require('node:child_process').spawn('node', ['server.js'], {
         env: { ...process.env, PORT: String(port), MERIDIAN_RUNNING_DIR: ws },
         cwd: path.join(__dirname, '..'),
-        stdio: 'ignore'
+        stdio: ['ignore', 'ignore', 'pipe']
     });
+    let stderr = '';
+    proc.stderr.on('data', (chunk) => { stderr += chunk; });
     try {
+        const start = Date.now();
+        let ready = false;
         for (let i = 0; i < 50; i++) {
-            try { await fetch(`http://localhost:${port}/api/status`); break; }
+            try { await fetch(`http://localhost:${port}/api/status`); ready = true; break; }
             catch { await new Promise(r => setTimeout(r, 100)); }
+        }
+        if (!ready) {
+            throw new Error(
+                `Server on port ${port} did not respond after ${Date.now() - start}ms.\n` +
+                `stderr:\n${stderr || '(empty)'}`
+            );
         }
         await fn(`http://localhost:${port}`);
     } finally {
@@ -369,5 +379,15 @@ test('GET /api/status reports a malformed tasks.json instead of showing no tasks
         assert.deepEqual(res.projects[0].tasks, []);
         assert.ok(res.errors.some(e => /Malformed tasks.json/.test(e.message)),
             'the corruption must surface as an error, not as an empty board');
+    });
+});
+
+test('GET /api/status?project= reports an error when nothing matches', async () => {
+    const { ws } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        const res = await (await fetch(`${base}/api/status?project=/nope/not/here`)).json();
+        assert.equal(res.projects.length, 0);
+        assert.equal(res.errors.length, 1);
+        assert.match(res.errors[0].message, /not registered|no project/i);
     });
 });
