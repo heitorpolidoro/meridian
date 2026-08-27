@@ -31,20 +31,67 @@ test -d ./.meridian && echo present || echo absent
 is visible in every directory on the machine, including the many that have
 nothing to do with Meridian. Finding a parent's `.meridian/` and acting on it
 would attach the wrong project. If `./.meridian/` is not here, this directory is
-not a Meridian project — go to step 2.
+not a Meridian project yet.
 
 When it is present, the project path is the absolute path of the current
 directory; that is the `projectPath` every API call needs. The task key lives in
-`./.meridian/project-info.json`.
+`./.meridian/project-info.json`. Go to step 2.
 
-## 2. If `.meridian/` is absent — offer to register
+When it is absent, **ask the operator now** whether to register this directory
+with Meridian. Ask; do not assume.
 
-Ask the operator whether to register this directory with Meridian. Ask; do not
-assume.
+- **On no:** stop here. Say nothing further about tasks, and do not create any
+  files. Do not start a server.
+- **On yes:** continue to step 2, then do the registration in step 3.
 
-**On no:** stop. Say nothing further about tasks, and do not create any files.
+Asking before step 2 is deliberate: a "no" must not leave a server running that
+was started only to onboard a directory the operator does not want onboarded.
 
-**On yes:** read the repository first and infer the three descriptive fields, so
+## 2. Ensure the server is running
+
+Probe it:
+
+```bash
+curl -sS -f "$BASE/api/status" >/dev/null && echo up || echo down
+```
+
+**If it answers**, continue.
+
+**If it does not**, start it and wait for it to answer:
+
+```bash
+node <path to the meridian checkout>/cli.js start
+```
+
+Then re-probe until it responds, for a few seconds. Two hazards make `cli.js
+start` the wrong move in some situations:
+
+- It stops any server recorded in its PID file before starting a new one, and it
+  always listens on the port from `PORT` (default `3333`). So it is correct only
+  when `MERIDIAN_URL` points at that default instance. When `MERIDIAN_URL` points
+  elsewhere, do not run it — report that the server at `$BASE` is unreachable and
+  let the operator start it.
+- It picks its registry by walking up from the directory it is launched in,
+  looking for `.meridian/projects.json`, and falls back to the launch directory
+  when it finds none. Launching it from outside a workspace root therefore yields
+  a server backed by a different `projects.json` than the operator expects. Run
+  it from the workspace root.
+
+**If it still cannot start**, say so plainly, then fall back to reading
+`./.meridian/tasks.json` directly for anything read-only. Never *write* task
+state by hand without first telling the operator the server is down — the server
+owns the timestamps, and a hand-edit that skips them puts the board out of sync.
+See `schema.md` for the timestamp rules a hand-edit would have to reproduce.
+
+If the operator said yes to registration in step 1 and the server could not be
+started, **stop**: registration is a write, and there is no hand-edit fallback
+for it — the server is what creates `.meridian/` and derives the task key.
+
+## 3. Register the project — only if step 1 asked for it
+
+If `./.meridian/` was already present, skip this step.
+
+Otherwise, read the repository first and infer the three descriptive fields, so
 the project is registered complete rather than as an empty entry:
 
 - `name` — the project's real name (package manifest, README title, directory
@@ -73,31 +120,3 @@ continue.
 Then **offer** — do not force — to generate an `AGENTS.md` if the repository
 does not have one. If the operator declines, carry on without it.
 
-## 3. Ensure the server is running
-
-Probe it:
-
-```bash
-curl -sS -f "$BASE/api/status" >/dev/null && echo up || echo down
-```
-
-**If it answers**, continue with the skill.
-
-**If it does not**, start it and wait for it to answer:
-
-```bash
-node <path to the meridian checkout>/cli.js start
-```
-
-Then re-probe until it responds, for a few seconds. Note that `cli.js start`
-stops any server recorded in its PID file before starting a new one, and it
-always listens on the port from `PORT` (default `3333`) — so it is the right
-move only when `MERIDIAN_URL` points at that default instance. When
-`MERIDIAN_URL` points elsewhere, do not run `cli.js start`; report that the
-server at `$BASE` is unreachable and let the operator start it.
-
-**If it still cannot start**, say so plainly, then fall back to reading
-`./.meridian/tasks.json` directly for anything read-only. Never *write* task
-state by hand without first telling the operator the server is down — the server
-owns the timestamps, and a hand-edit that skips them puts the board out of sync.
-See `schema.md` for the timestamp rules a hand-edit would have to reproduce.

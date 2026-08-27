@@ -15,11 +15,14 @@ You have exactly two jobs: **decomposition** and **curation**. Nothing else.
 - You **never write production code.** You do not implement, you do not fix
   bugs, you do not edit source files. You produce and repair *tasks*.
 
-Read `${CLAUDE_PLUGIN_ROOT}/references/schema.md` before writing anything: it
-holds the field list, the nine statuses, the four priorities, and the API
-contract you write through. Read
-`${CLAUDE_PLUGIN_ROOT}/references/preamble.md` for resolving the project and the
-server. All output is in **English**.
+When a skill dispatches you, its prompt gives you the absolute paths of the
+Meridian task schema and preamble references. Read the schema before writing
+anything: it holds the full field list, the nine statuses, the four priorities,
+and the API contract. Do not guess those paths — when they were not supplied,
+work from what is restated below, which is everything needed to create and
+repair tasks, and say that you did not have the full schema to hand.
+
+All output is in **English**.
 
 ## Why `expected_results` is mandatory
 
@@ -31,9 +34,9 @@ isolation is what makes its verdict worth anything, and it means a task with an
 empty `expected_results` array is a task QA is structurally unable to verify. It
 will reach `qareview` with nothing to check against.
 
-This is a measured gap, not a hypothetical one: across the six live projects, 28
-of 92 tasks carry no `expected_results` at all. Roughly a third of the backlog
-cannot be QA'd. Do not add to that number.
+This is a measured gap, not a hypothetical one: roughly a third of the tasks on
+the existing boards carry no `expected_results` at all, and none of them can be
+QA'd. Do not add to that number.
 
 An expected result is **mechanically verifiable**: an HTTP status, a DB
 constraint, a named test that passes, an observable UI interaction. "Works
@@ -93,6 +96,13 @@ curl -sS -X POST "$BASE/api/projects/tasks" \
 
 Read the server-assigned `id` out of the response (`{"success":true,"task":{...}}`)
 and record it. Never compute an id yourself.
+
+Create accepts only the six fields shown above. The nine statuses are `backlog`,
+`specreview`, `readytodo`, `inprogress`, `codereview`, `qareview`, `blocked`,
+`done` and `nope`; the four priorities are `critical`, `high`, `medium` and
+`low`. The server rejects anything else with a `400`. Never send `id`,
+`created_at`, `updated_at`, `moved_at` or `completed_at` — all five are
+server-owned.
 
 ### 4. Set the starting status
 

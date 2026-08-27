@@ -39,6 +39,49 @@ the beginning.
 A task found with `running: true` and no live agent behind it was interrupted.
 Say so, and resume it from its status row above.
 
+## Choosing which task
+
+Normally you are given an explicit task id and this question does not arise —
+work that task. The rule below is the fallback for when you are not.
+
+Within a single stage — several tasks sitting in `backlog`, or several in
+`readytodo` — pick in this order:
+
+1. **Priority**, `critical` before `high` before `medium` before `low`. A task
+   with no priority counts as `medium`.
+2. **Oldest `created_at`** first, breaking ties within a priority.
+
+This is the ordering the server itself applies when it ranks tasks within a
+status. Use it; do not invent a different one.
+
+One caveat worth stating out loud when you report your pick: the dashboard's
+kanban columns are ordered by task **id number**, not by priority. So the task
+you choose is not always the top card in the operator's column — a `critical`
+task created late outranks a `low` one created first, while the board shows the
+`low` one higher. When your pick is not the visible top card, say which task you
+picked and why.
+
+Choosing *across* stages — whether to spec a `backlog` item or build a
+`readytodo` one — is not decided here. That is the `next` skill's job. If you
+have no id and tasks are waiting in more than one stage, say which candidates
+you found and ask, rather than guessing.
+
+## Dispatching a specialist
+
+Every dispatch prompt carries what the specialist needs, because a subagent
+inherits nothing from you — no working directory context, no skill base
+directory, no conversation.
+
+In particular, an agent cannot resolve a path to this plugin's own files on its
+own. When you dispatch any of the five specialists, **pass the absolute path of
+`references/schema.md`** in the prompt, the same way you pass a spec path. Build
+it from the base directory the harness gives you when this skill is invoked
+("Base directory for this skill: ..."). Without it, a specialist that needs a
+field definition has nowhere to look.
+
+Beyond that, pass only what each step below says to pass — the isolation rules
+there are deliberate.
+
 ## The `running` flag
 
 `running` marks a task that an agent is actively working right now. Maintain it
@@ -107,12 +150,19 @@ For a task in `readytodo`:
    running system. Never pass it the developer's reasoning, the developer's
    report, or the code reviewer's verdict — its independence is the point. When
    it returns, set `running: false`.
-   - **`APPROVED`** → commit the staged work:
+   - **`APPROVED`** → commit the staged work. The developer already staged its
+     implementation with `git add`, so the index is the change; add only the
+     pipeline's own artifacts on top of it, by explicit path:
 
      ```bash
-     git add -A
+     git add -- "<spec_path>" docs/suggestions-log.md
      git commit -m "<id>: <title>"
      ```
+
+     Never `git add -A` or `git add .` here — those sweep every unrelated change
+     in the working tree into the task's commit. Check `git status` first; if
+     something unexpected is already staged, stop and ask rather than committing
+     it.
 
      Then update the task to `status: "done"` with `running: false` in the same
      request — the server stamps `completed_at` on the transition but does not
@@ -129,12 +179,14 @@ specialists never commit; the developer stages and stops.
 
 ## Iteration cap and stagnation
 
-The cap is **5** rounds per review stage, counted in `spec_iterations`,
+The cap is **5 revision rounds** per review stage, counted in `spec_iterations`,
 `code_review_iterations` and `qa_iterations` independently.
 
-Before **any** redispatch, check both conditions:
+The check runs **before** the increment, so read it against the rounds already
+spent. Before **any** redispatch, check both conditions:
 
-- the relevant iteration count exceeds 5, **or**
+- the relevant iteration counter has **already reached 5** — five rounds are
+  spent and this redispatch would start a sixth, **or**
 - the blocking findings are substantively identical to the previous round —
   the same defect described again, not merely similar wording.
 
@@ -142,9 +194,13 @@ If either holds, do not redispatch. Instead update the task to:
 
 - `status: "blocked"`
 - `justification: "Blocked after N iterations — see last_review_findings. Needs human input."`
-  with `N` the actual count
+  where `N` is the counter's current value, which is the number of rounds
+  actually spent — never a round that did not happen
 - `running: false`
 - `last_review_findings` holding the current round's blocking findings
+
+So a stage runs at most five revision rounds, and a task blocked by the count
+reads `Blocked after 5 iterations`.
 
 Then move on to another task, or stop and report.
 

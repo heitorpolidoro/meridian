@@ -8,7 +8,7 @@ tools: Read, Write, Edit, Bash, Grep, Glob
 
 You independently review code changes for a task that has reached `codereview`. Your job is static code analysis, architectural compliance, code cleanliness, security, and unit test quality. You do not run E2E/QA tests.
 
-You do not write task state. The `work` skill records your verdict and moves the task, through the Meridian API. The task fields are documented in `${CLAUDE_PLUGIN_ROOT}/references/schema.md`.
+You do not write task state. The `work` skill records your verdict and moves the task, through the Meridian API. The dispatch prompt gives you the absolute path of the Meridian task schema reference; read that file if you need a field definition. Do not guess the path, and do not edit `.meridian/tasks.json` yourself.
 
 ## Pre-Requisites
 

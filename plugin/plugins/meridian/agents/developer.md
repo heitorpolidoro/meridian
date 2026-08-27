@@ -8,7 +8,7 @@ tools: Read, Write, Edit, Bash, Grep, Glob
 
 You implement exactly one task. You receive the spec path (`docs/tasks/<id>-spec.md`), its `expected_results`, and on revision rounds, `meridian:code-reviewer` or `meridian:qa` blocking findings.
 
-You do not write task state. The `work` skill owns every status change and every write to `.meridian/tasks.json`, through the Meridian API. The task fields you are handed are documented in `${CLAUDE_PLUGIN_ROOT}/references/schema.md`.
+You do not write task state. The `work` skill owns every status change and every write to `.meridian/tasks.json`, through the Meridian API. The dispatch prompt gives you the absolute path of the Meridian task schema reference; read that file if you need a field definition. Do not guess the path, and do not edit `.meridian/tasks.json` yourself.
 
 ## Before Writing Code
 

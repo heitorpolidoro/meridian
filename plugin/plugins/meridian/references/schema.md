@@ -96,14 +96,27 @@ next number, and never send an `id` in a create request — the server derives t
 key from `project-info.json` and assigns `N` itself. Read the assigned id back
 out of the create response.
 
+The key has two fallbacks, which matter when onboarding a project:
+
+- No `project-info.json`, or one that cannot be parsed → the key is the literal
+  `TASK`, so the first id comes back as `TASK-1`.
+- A `project-info.json` with no `key` field → the key is derived from `name`
+  (initials for a multi-word name, the first five letters uppercased for a
+  single word).
+
+If ids come back as `TASK-N`, the project was not registered properly. Say so
+rather than working around it.
+
 ## All writes go through the API
 
 Every task write goes through the Meridian server. The server owns the
-timestamps, so it is the only write path that keeps them consistent. Resolve the
-base URL from `MERIDIAN_URL` (default `http://localhost:3333`) — see
-`preamble.md`.
+timestamps, so it is the only write path that keeps them consistent.
 
-**Create** — `POST {MERIDIAN_URL}/api/projects/tasks`
+`$BASE` below is the server's base URL, resolved once in the preamble as
+`BASE="${MERIDIAN_URL:-http://localhost:3333}"`. Use `$BASE` everywhere; never
+hardcode the address. See `preamble.md`.
+
+**Create** — `POST $BASE/api/projects/tasks`
 
 ```json
 {
@@ -117,13 +130,20 @@ base URL from `MERIDIAN_URL` (default `http://localhost:3333`) — see
 ```
 
 `projectPath` and `title` are required. Create accepts only these fields. The
-new task is always created with `status: "backlog"` and `running: false`; a
-`status` sent to create is ignored. To land a new task in any other status — for
-example `blocked` with `justification: "Blocked on MERID-3"` — create it first,
-then immediately update it. The response is
-`{ "success": true, "task": { ... } }`; take the server-assigned `id` from there.
+new task is always created with `status: "backlog"` and `running: false`.
 
-**Update** — `PUT {MERIDIAN_URL}/api/projects/tasks/<task id>`
+A `status` sent to create is **validated but not stored**: the whole request body
+is checked first, so an invalid status (or an invalid priority) is rejected with
+HTTP 400, while a *valid* one is silently ignored and the task still lands in
+`backlog`. So sending `status` on create never helps and can only hurt — leave it
+out. To land a new task in any other status — for example `blocked` with
+`justification: "Blocked on MERID-3"` — create it first, then immediately update
+it.
+
+The response is `{ "success": true, "task": { ... } }`; take the server-assigned
+`id` from there.
+
+**Update** — `PUT $BASE/api/projects/tasks/<task id>`
 
 ```json
 {
@@ -142,7 +162,7 @@ only the fields you are changing; omitted fields are left alone. Update accepts
 absent from a freshly created task until the first update sets them; treat an
 absent counter as `0` and an absent `last_review_findings` as `[]`.
 
-**Read** — `GET {MERIDIAN_URL}/api/status?project=<absolute project path>`
+**Read** — `GET $BASE/api/status?project=<absolute project path>`
 
 Reading `tasks.json` directly is fine when you only need to look.
 
