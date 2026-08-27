@@ -1,7 +1,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { deriveKey, nextTaskId } = require('./lib/tasks');
+const { deriveKey, nextTaskId, getTasks, saveTasks } = require('./lib/tasks');
 
 const app = express();
 const PORT = process.env.PORT || 3333;
@@ -409,32 +409,6 @@ app.put('/api/projects', (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
-
-// Helper to read and write tasks for a project
-function getTasks(projPath) {
-    const tasksPath = path.join(projPath, '.meridian', 'tasks.json');
-    if (fs.existsSync(tasksPath)) {
-        try {
-            const parsed = JSON.parse(fs.readFileSync(tasksPath, 'utf8'));
-            if (Array.isArray(parsed)) {
-                return { lastUpdated: null, tasks: parsed };
-            }
-            return parsed;
-        } catch (e) {
-            return { lastUpdated: null, tasks: [] };
-        }
-    }
-    return { lastUpdated: null, tasks: [] };
-}
-
-function saveTasks(projPath, tasksData) {
-    const localMeridianDir = path.join(projPath, '.meridian');
-    if (!fs.existsSync(localMeridianDir)) {
-        fs.mkdirSync(localMeridianDir, { recursive: true });
-    }
-    tasksData.lastUpdated = new Date().toISOString();
-    fs.writeFileSync(path.join(localMeridianDir, 'tasks.json'), JSON.stringify(tasksData, null, 2), 'utf8');
-}
 
 // REST API to add a task
 app.post('/api/projects/tasks', (req, res) => {
