@@ -531,7 +531,10 @@ app.post('/api/projects/tasks', (req, res) => {
     }
 });
 
-// REST API to update a task (status, justification)
+// REST API to update a task. Accepts the full task schema: status, title,
+// justification, priority, spec_path, spec_iterations, code_review_iterations,
+// qa_iterations, blockedBy, expected_results, last_review_findings, running.
+// Timestamps (updated_at, moved_at, completed_at) are server-owned.
 app.put('/api/projects/tasks/:taskId', (req, res) => {
     try {
         const { projectPath } = req.body;
