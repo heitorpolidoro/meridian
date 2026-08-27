@@ -138,8 +138,32 @@ function migrateProjects() {
 // Run migration on startup
 migrateProjects();
 
+const PRIORITY_ORDER = ['critical', 'high', 'medium', 'low'];
+
+function limitPerStatus(tasks, limit) {
+    const byStatus = new Map();
+    for (const task of tasks) {
+        if (!byStatus.has(task.status)) byStatus.set(task.status, []);
+        byStatus.get(task.status).push(task);
+    }
+    const out = [];
+    for (const [status, list] of byStatus) {
+        list.sort((a, b) => {
+            if (status === 'done') {
+                return String(b.completed_at || '').localeCompare(String(a.completed_at || ''));
+            }
+            const pa = PRIORITY_ORDER.indexOf(a.priority || 'medium');
+            const pb = PRIORITY_ORDER.indexOf(b.priority || 'medium');
+            if (pa !== pb) return pa - pb;
+            return String(a.created_at || '').localeCompare(String(b.created_at || ''));
+        });
+        out.push(...list.slice(0, limit));
+    }
+    return out;
+}
+
 // Helper to fetch aggregated data from decentralized storage
-function getStatusData() {
+function getStatusData(options = {}) {
     let data = { projects: [], errors: [] };
     try {
         if (fs.existsSync(PROJECTS_JSON_PATH)) {
@@ -154,6 +178,7 @@ function getStatusData() {
             
             for (const projEntry of parsed.projects || []) {
                 const projPath = projEntry.path;
+                if (options.project && path.resolve(projEntry.path) !== path.resolve(options.project)) continue;
                 if (!fs.existsSync(projPath)) {
                     data.errors.push({ file: 'System', message: `Project path not found: ${projPath}` });
                     continue;
@@ -259,7 +284,7 @@ function getStatusData() {
                     relativePath: relPath,
                     stack: stackArray,
                     description: info.description,
-                    tasks: tasksData.tasks || [],
+                    tasks: options.limit ? limitPerStatus(tasksData.tasks || [], options.limit) : (tasksData.tasks || []),
                     lastUpdated: tasksData.lastUpdated,
                     missingAgentsMd: !hasAgentsMd,
                     missingMeridianRules: missingMeridianRules,
@@ -284,7 +309,11 @@ function getStatusData() {
 
 // REST API for initial load
 app.get('/api/status', (req, res) => {
-    res.json(getStatusData());
+    const limit = req.query.limit ? parseInt(req.query.limit, 10) : undefined;
+    res.json(getStatusData({
+        project: req.query.project,
+        limit: Number.isInteger(limit) && limit > 0 ? limit : undefined
+    }));
 });
 
 // REST API to list subdirectories in RUNNING_DIR

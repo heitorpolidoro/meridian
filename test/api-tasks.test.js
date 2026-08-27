@@ -150,3 +150,34 @@ test('PUT without a status change leaves moved_at alone', async () => {
         assert.equal(task.moved_at, seeded.moved_at);
     });
 });
+
+test('GET /api/status?project= narrows to one project', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        const all = await (await fetch(`${base}/api/status`)).json();
+        assert.equal(all.projects.length, 1);
+        const one = await (await fetch(`${base}/api/status?project=${encodeURIComponent(dir)}`)).json();
+        assert.equal(one.projects.length, 1);
+        assert.equal(one.projects[0].path, dir);
+
+        const none = await (await fetch(`${base}/api/status?project=${encodeURIComponent('/nope')}`)).json();
+        assert.equal(none.projects.length, 0);
+    });
+});
+
+test('GET /api/status?limit= caps tasks per status', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        for (let i = 0; i < 3; i++) await seed(base, dir);
+        const res = await (await fetch(`${base}/api/status?limit=2`)).json();
+        for (const proj of res.projects) {
+            const perStatus = {};
+            for (const t of proj.tasks) {
+                perStatus[t.status] = (perStatus[t.status] || 0) + 1;
+            }
+            for (const [status, count] of Object.entries(perStatus)) {
+                assert.ok(count <= 2, `${proj.name} has ${count} tasks in ${status}, expected at most 2`);
+            }
+        }
+    });
+});
