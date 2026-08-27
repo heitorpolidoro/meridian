@@ -1,7 +1,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { deriveKey } = require('./lib/tasks');
+const { deriveKey, nextTaskId } = require('./lib/tasks');
 
 const app = express();
 const PORT = process.env.PORT || 3333;
@@ -22,18 +22,6 @@ const PROJECTS_JSON_PATH = path.join(WORKSPACE_DIR, '.meridian', 'projects.json'
 
 function getBoilerplate() {
     return fs.readFileSync(path.join(__dirname, 'prompts', 'boilerplate.txt'), 'utf8');
-}
-
-function nextTaskId(tasks, key) {
-    const prefix = key + '-';
-    let max = 0;
-    for (const t of tasks) {
-        if (typeof t.id === 'string' && t.id.startsWith(prefix)) {
-            const n = parseInt(t.id.slice(prefix.length), 10);
-            if (!isNaN(n) && n > max) max = n;
-        }
-    }
-    return `${key}-${max + 1}`;
 }
 
 function getAgentTemplates() {
