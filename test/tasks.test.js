@@ -71,3 +71,35 @@ test('saveTasks: creates .meridian when absent and round-trips', () => {
     saveTasks(dir, { tasks: [{ id: 'A-1', title: 'x' }] });
     assert.deepEqual(getTasks(dir).tasks, [{ id: 'A-1', title: 'x' }]);
 });
+
+test('saveTasks: writes a bare array with no lastUpdated wrapper', () => {
+    const dir = tmpProject({ lastUpdated: 'old', tasks: [{ id: 'A-1' }] });
+    saveTasks(dir, { tasks: [{ id: 'A-1' }] });
+    const raw = JSON.parse(fs.readFileSync(path.join(dir, '.meridian', 'tasks.json'), 'utf8'));
+    assert.ok(Array.isArray(raw), 'file should be a bare array');
+    assert.deepEqual(raw, [{ id: 'A-1' }]);
+});
+
+test('getTasks: backfills completed_at from updated_at for done tasks', () => {
+    const dir = tmpProject([
+        { id: 'A-1', status: 'done', updated_at: '2026-08-13T00:00:00.000Z' }
+    ]);
+    assert.equal(getTasks(dir).tasks[0].completed_at, '2026-08-13T00:00:00.000Z');
+});
+
+test('getTasks: backfill leaves completed_at null when updated_at is absent', () => {
+    const dir = tmpProject([{ id: 'A-1', status: 'done' }]);
+    assert.equal(getTasks(dir).tasks[0].completed_at, null);
+});
+
+test('getTasks: backfill never overwrites an existing completed_at', () => {
+    const dir = tmpProject([
+        { id: 'A-1', status: 'done', updated_at: '2026-08-20T00:00:00.000Z', completed_at: '2026-08-01T00:00:00.000Z' }
+    ]);
+    assert.equal(getTasks(dir).tasks[0].completed_at, '2026-08-01T00:00:00.000Z');
+});
+
+test('getTasks: backfill does not touch tasks that are not done', () => {
+    const dir = tmpProject([{ id: 'A-1', status: 'backlog', updated_at: '2026-08-13T00:00:00.000Z' }]);
+    assert.equal('completed_at' in getTasks(dir).tasks[0], false);
+});
