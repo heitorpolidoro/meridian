@@ -152,17 +152,28 @@ For a task in `readytodo`:
    it returns, set `running: false`.
    - **`APPROVED`** → commit the staged work. The developer already staged its
      implementation with `git add`, so the index is the change; add only the
-     pipeline's own artifacts on top of it, by explicit path:
+     pipeline's own artifacts on top of it, by explicit path, and **guard each
+     path with an existence test**:
 
      ```bash
-     git add -- "<spec_path>" docs/suggestions-log.md
+     if [ -n "<spec_path>" ] && [ -f "<spec_path>" ]; then git add -- "<spec_path>"; fi
+     if [ -f docs/suggestions-log.md ]; then git add -- docs/suggestions-log.md; fi
      git commit -m "<id>: <title>"
      ```
 
-     Never `git add -A` or `git add .` here — those sweep every unrelated change
-     in the working tree into the task's commit. Check `git status` first; if
-     something unexpected is already staged, stop and ask rather than committing
-     it.
+     Both artifacts are optional and routinely absent: `docs/suggestions-log.md`
+     does not exist until Fluxo A step 5 first writes it, and a task created
+     straight into `readytodo` by hand has no `spec_path` at all. The guards
+     matter because `git add` fails **closed** on a missing pathspec — one
+     absent file aborts the whole command and stages *nothing*, not even the
+     paths that do exist. Unguarded, that would block the commit on exactly the
+     early-project cases the scoping is meant to make safe. Never collapse these
+     back into a single multi-path `git add`.
+
+     Never `git add -A` or `git add .` here either — those sweep every unrelated
+     change in the working tree into the task's commit. Check `git status`
+     first; if something unexpected is already staged, stop and ask rather than
+     committing it.
 
      Then update the task to `status: "done"` with `running: false` in the same
      request — the server stamps `completed_at` on the transition but does not
