@@ -44,8 +44,11 @@ Take the first status in that sequence that has any task in it. That status is
 the stage; everything after it is irrelevant this invocation.
 
 `blocked`, `done` and `nope` are **skipped entirely**. They are not candidates
-at any priority. A `blocked` task is waiting on something, and `done` and `nope`
-are finished — `meridian:work` refuses all three anyway.
+at any priority. A `blocked` task is waiting on something it cannot clear by
+being picked, and `done` and `nope` are finished. Handing any of the three to
+`meridian:work` produces no work: it refuses `done` and `nope` outright, and it
+reports a `blocked` task's `justification` and `blockedBy` rather than starting
+it. Selecting one would just spend an invocation to be told that.
 
 Why right-to-left: a task in `qareview` is one verdict away from being
 committed and shipped. A task in `backlog` has not been specified yet. Starting

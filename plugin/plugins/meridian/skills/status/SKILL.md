@@ -42,9 +42,13 @@ curl -sS -G "$BASE/api/status" --data-urlencode "project=$PROJECT"
 
 Two calls, because the two jobs need different things:
 
-- **With `limit=5`** the server ranks each status — priority `critical` before
-  `high` before `medium` before `low`, then oldest `created_at` first, with an
-  absent priority read as `medium` — and returns only the top five of each.
+- **With `limit=5`** the server ranks each status and returns only the top five
+  of each. It ranks the eight unfinished statuses by priority — `critical`
+  before `high` before `medium` before `low`, with an absent priority read as
+  `medium` — and then by oldest `created_at` first. **`done` is ranked
+  differently**: by `completed_at` **descending**, so the five you get back are
+  the five most recently finished, which is the useful five. Priority and
+  `created_at` do not enter into it.
   That ranking and that default are exactly what the table should show, so take
   the table from this response. While the server is answering, do not re-sort it
   and do not build the table from `tasks.json` instead: the ordering and the
@@ -139,13 +143,12 @@ On a yes, hand the chosen id to `meridian:work`, which owns every transition
 from here. `work` re-enters the task at the stage its status indicates and is
 the only thing that writes task state.
 
-When the chosen task's status is `inprogress`, say that `work` must carry a
-**resumption briefing** into its `meridian:developer` dispatch — the stage the
-task stopped at, the open round's `last_review_findings`, and an instruction to
-establish the actual state of the working tree with `git status` and `git diff`
-**before writing anything**, because an interrupted `inprogress` task may have
-left partial work in the tree. `meridian:work` holds the full briefing rules;
-this is the fact you are handing it, not a second copy of them.
+When the chosen task's status is `inprogress`, say so explicitly in the
+hand-off: an interrupted `inprogress` task may have left partial work in the
+working tree, so `work` owes its `meridian:developer` dispatch the **resumption
+briefing** defined in `meridian:work`. Do not restate the briefing's contents
+here — `work` assembles dispatch payloads and holds those rules; the status is
+the fact you are handing over.
 
 A task interrupted in any other status needs no briefing. Those stages produce
 a spec or a verdict, not a working tree.

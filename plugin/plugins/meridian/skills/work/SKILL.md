@@ -48,6 +48,20 @@ curl -sS -G "$BASE/api/status" --data-urlencode "project=<absolute path of the c
 Do not pass `limit` here — you need the whole board, both to find a task of any
 rank and to run the unblocking sweep later.
 
+**Check the response before you read anything into it.** An empty `tasks` array
+is not proof of an empty board, and this skill is the one that acts on that
+belief:
+
+- If `errors` is non-empty, **stop and show it**. A malformed `tasks.json` does
+  not fail this request — the server records the parse error in `errors` and
+  hands back `tasks: []`. Treating that as "no tasks" would send
+  `meridian:pm` to decompose a plan onto a board whose backlog is merely
+  unreadable, on top of tasks nobody can currently see. Fix the file first.
+- If `projects` is empty, this directory is not in the workspace registry. Say
+  so and stop; do not fall through to the bullets below.
+
+Only once both checks pass does an empty `tasks` array mean an empty board.
+
 - **No id was given.** Follow **Choosing which task** in
   `references/pipeline.md`: it picks within a stage and tells you to ask rather
   than guess across stages. If you want the across-stage choice made for you,
