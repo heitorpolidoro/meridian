@@ -138,7 +138,32 @@ function migrateProjects() {
 // Run migration on startup
 migrateProjects();
 
+const VALID_STATUSES = [
+    'backlog', 'specreview', 'readytodo', 'inprogress', 'codereview',
+    'qareview', 'blocked', 'done', 'nope'
+];
 const PRIORITY_ORDER = ['critical', 'high', 'medium', 'low'];
+const DEFAULT_PRIORITY = 'medium';
+
+// An unknown priority must not out-rank `critical`, which is what a raw
+// indexOf() miss (-1) would do. Anything unrecognised reads as the default.
+function priorityRank(priority) {
+    const idx = PRIORITY_ORDER.indexOf(priority);
+    return idx === -1 ? PRIORITY_ORDER.indexOf(DEFAULT_PRIORITY) : idx;
+}
+
+// Rejects a write whose status/priority is outside the canonical set. Returns
+// an error message, or null when the value is acceptable (absent counts as
+// acceptable — the caller decides whether the field is required).
+function validateTaskFields(body) {
+    if (body.status !== undefined && !VALID_STATUSES.includes(body.status)) {
+        return `Invalid status '${body.status}'. Allowed: ${VALID_STATUSES.join(', ')}`;
+    }
+    if (body.priority !== undefined && !PRIORITY_ORDER.includes(body.priority)) {
+        return `Invalid priority '${body.priority}'. Allowed: ${PRIORITY_ORDER.join(', ')}`;
+    }
+    return null;
+}
 
 // Turns a malformed tasks.json into a 500 rather than letting the caller
 // read-modify-write an empty list over the user's backlog.
@@ -163,8 +188,8 @@ function limitPerStatus(tasks, limit) {
             if (status === 'done') {
                 return String(b.completed_at || '').localeCompare(String(a.completed_at || ''));
             }
-            const pa = PRIORITY_ORDER.indexOf(a.priority || 'medium');
-            const pb = PRIORITY_ORDER.indexOf(b.priority || 'medium');
+            const pa = priorityRank(a.priority || DEFAULT_PRIORITY);
+            const pb = priorityRank(b.priority || DEFAULT_PRIORITY);
             if (pa !== pb) return pa - pb;
             return String(a.created_at || '').localeCompare(String(b.created_at || ''));
         });
@@ -462,6 +487,11 @@ app.post('/api/projects/tasks', (req, res) => {
             return res.status(400).json({ error: 'projectPath and title are required' });
         }
 
+        const invalid = validateTaskFields(req.body);
+        if (invalid) {
+            return res.status(400).json({ error: invalid });
+        }
+
         let tasksData;
         try {
             tasksData = getTasks(projectPath);
@@ -485,7 +515,7 @@ app.post('/api/projects/tasks', (req, res) => {
             title,
             status: 'backlog',
             justification: justification || '',
-            priority: priority || 'medium',
+            priority: priority || DEFAULT_PRIORITY,
             expected_results: Array.isArray(expected_results) ? expected_results : [],
             running: false,
             blockedBy: Array.isArray(blockedBy) ? blockedBy : []
@@ -509,6 +539,11 @@ app.put('/api/projects/tasks/:taskId', (req, res) => {
 
         if (!projectPath) {
             return res.status(400).json({ error: 'projectPath is required' });
+        }
+
+        const invalid = validateTaskFields(req.body);
+        if (invalid) {
+            return res.status(400).json({ error: invalid });
         }
 
         let tasksData;

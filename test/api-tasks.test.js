@@ -151,6 +151,80 @@ test('PUT without a status change leaves moved_at alone', async () => {
     });
 });
 
+test('POST rejects a status outside the canonical nine', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        const res = await fetch(`${base}/api/projects/tasks`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectPath: dir, title: 'bad', status: 'in progress' })
+        });
+        assert.equal(res.status, 400);
+        const { error } = await res.json();
+        assert.match(error, /Invalid status 'in progress'/);
+        assert.match(error, /inprogress/);
+    });
+});
+
+test('POST rejects a priority outside the canonical four', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        const res = await fetch(`${base}/api/projects/tasks`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectPath: dir, title: 'bad', priority: 'urgent' })
+        });
+        assert.equal(res.status, 400);
+        const { error } = await res.json();
+        assert.match(error, /Invalid priority 'urgent'/);
+        assert.match(error, /critical, high, medium, low/);
+    });
+});
+
+test('PUT rejects the non-canonical statuses the board used to send', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        await seed(base, dir);
+        for (const bad of ['in progress', 'qa/review', 'ready to do', 'PENDING']) {
+            const res = await fetch(`${base}/api/projects/tasks/TST-1`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ projectPath: dir, status: bad })
+            });
+            assert.equal(res.status, 400, `status '${bad}' should be rejected`);
+        }
+        // The task is untouched by the rejected writes.
+        const one = await (await fetch(`${base}/api/status?project=${encodeURIComponent(dir)}`)).json();
+        assert.equal(one.projects[0].tasks[0].status, 'backlog');
+    });
+});
+
+test('PUT accepts every one of the nine canonical statuses', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        await seed(base, dir);
+        const all = ['backlog', 'specreview', 'readytodo', 'inprogress', 'codereview',
+                     'qareview', 'blocked', 'done', 'nope'];
+        for (const status of all) {
+            const task = await put(base, dir, 'TST-1', { status });
+            assert.equal(task.status, status);
+        }
+    });
+});
+
+test('PUT rejects an unknown priority', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        await seed(base, dir);
+        const res = await fetch(`${base}/api/projects/tasks/TST-1`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectPath: dir, priority: 'urgent' })
+        });
+        assert.equal(res.status, 400);
+    });
+});
+
 test('GET /api/status?project= narrows to one project', async () => {
     const { ws, dir } = workspaceWith('Test Project');
     await withServer(ws, async (base) => {
