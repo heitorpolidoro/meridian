@@ -1,6 +1,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const { deriveKey } = require('./lib/tasks');
 
 const app = express();
 const PORT = process.env.PORT || 3333;
@@ -21,14 +22,6 @@ const PROJECTS_JSON_PATH = path.join(WORKSPACE_DIR, '.meridian', 'projects.json'
 
 function getBoilerplate() {
     return fs.readFileSync(path.join(__dirname, 'prompts', 'boilerplate.txt'), 'utf8');
-}
-
-function deriveKey(name) {
-    const words = name.trim().split(/[\s_\-]+/).filter(Boolean);
-    if (words.length === 1) {
-        return words[0].substring(0, 5).toUpperCase();
-    }
-    return words.map(w => w[0]).toUpperCase().join('');
 }
 
 function nextTaskId(tasks, key) {
