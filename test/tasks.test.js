@@ -47,12 +47,12 @@ function tmpProject(contents) {
 
 test('getTasks: reads the wrapped object shape', () => {
     const dir = tmpProject({ lastUpdated: '2026-01-01T00:00:00.000Z', tasks: [{ id: 'A-1' }] });
-    assert.deepEqual(getTasks(dir).tasks, [{ id: 'A-1' }]);
+    assert.deepEqual(getTasks(dir).tasks, [{ id: 'A-1', priority: 'medium' }]);
 });
 
 test('getTasks: reads the bare array shape', () => {
     const dir = tmpProject([{ id: 'A-1' }]);
-    assert.deepEqual(getTasks(dir).tasks, [{ id: 'A-1' }]);
+    assert.deepEqual(getTasks(dir).tasks, [{ id: 'A-1', priority: 'medium' }]);
 });
 
 test('getTasks: missing file yields an empty list', () => {
@@ -99,7 +99,7 @@ test('saveTasks: leaves no temp file behind and lands the file atomically', () =
 test('saveTasks: creates .meridian when absent and round-trips', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'meridian-test-'));
     saveTasks(dir, { tasks: [{ id: 'A-1', title: 'x' }] });
-    assert.deepEqual(getTasks(dir).tasks, [{ id: 'A-1', title: 'x' }]);
+    assert.deepEqual(getTasks(dir).tasks, [{ id: 'A-1', title: 'x', priority: 'medium' }]);
 });
 
 test('saveTasks: writes a bare array with no lastUpdated wrapper', () => {
@@ -132,6 +132,35 @@ test('getTasks: backfill never overwrites an existing completed_at', () => {
 test('getTasks: backfill does not touch tasks that are not done', () => {
     const dir = tmpProject([{ id: 'A-1', status: 'backlog', updated_at: '2026-08-13T00:00:00.000Z' }]);
     assert.equal('completed_at' in getTasks(dir).tasks[0], false);
+});
+
+test('getTasks: backfills a missing priority to medium', () => {
+    const dir = tmpProject([{ id: 'A-1', status: 'backlog' }]);
+    assert.equal(getTasks(dir).tasks[0].priority, 'medium');
+});
+
+test('getTasks: backfill never overwrites an existing priority', () => {
+    const dir = tmpProject([{ id: 'A-1', status: 'backlog', priority: 'critical' }]);
+    assert.equal(getTasks(dir).tasks[0].priority, 'critical');
+});
+
+test('getTasks: backfills moved_at from updated_at when it is missing', () => {
+    const dir = tmpProject([
+        { id: 'A-1', status: 'backlog', updated_at: '2026-08-13T00:00:00.000Z' }
+    ]);
+    assert.equal(getTasks(dir).tasks[0].moved_at, '2026-08-13T00:00:00.000Z');
+});
+
+test('getTasks: moved_at stays absent when there is no updated_at to borrow', () => {
+    const dir = tmpProject([{ id: 'A-1', status: 'backlog' }]);
+    assert.equal('moved_at' in getTasks(dir).tasks[0], false);
+});
+
+test('getTasks: backfill never overwrites an existing moved_at', () => {
+    const dir = tmpProject([
+        { id: 'A-1', status: 'backlog', updated_at: '2026-08-20T00:00:00.000Z', moved_at: '2026-08-01T00:00:00.000Z' }
+    ]);
+    assert.equal(getTasks(dir).tasks[0].moved_at, '2026-08-01T00:00:00.000Z');
 });
 
 const { stampNewTask, stampTaskUpdate } = require('../lib/tasks');
