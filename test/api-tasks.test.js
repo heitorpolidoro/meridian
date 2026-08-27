@@ -3,7 +3,6 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { execFileSync } = require('node:child_process');
 
 // Builds an isolated fixture workspace: a registry at <ws>/.meridian/projects.json
 // pointing at one project. The server is pointed here with MERIDIAN_RUNNING_DIR so
@@ -239,6 +238,89 @@ test('GET /api/status?project= narrows to one project', async () => {
     });
 });
 
+test('GET /api/status?limit= caps each status independently, not the total', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        // Three tasks in backlog, three moved to inprogress.
+        for (let i = 0; i < 6; i++) await seed(base, dir);
+        for (const id of ['TST-4', 'TST-5', 'TST-6']) {
+            await put(base, dir, id, { status: 'inprogress' });
+        }
+        const res = await (await fetch(`${base}/api/status?limit=2`)).json();
+        const tasks = res.projects[0].tasks;
+        const perStatus = {};
+        for (const t of tasks) perStatus[t.status] = (perStatus[t.status] || 0) + 1;
+        assert.deepEqual(perStatus, { backlog: 2, inprogress: 2 },
+            'each status is capped at 2, so a two-status project returns 4 tasks');
+    });
+});
+
+test('GET /api/status?limit= orders a non-done status by priority then age', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        // Seeded in this order, so created_at is ascending by id.
+        await seed(base, dir, { title: 'low one', priority: 'low' });        // TST-1
+        await seed(base, dir, { title: 'critical', priority: 'critical' });  // TST-2
+        await seed(base, dir, { title: 'medium old', priority: 'medium' });  // TST-3
+        await seed(base, dir, { title: 'high', priority: 'high' });          // TST-4
+        await seed(base, dir, { title: 'medium new', priority: 'medium' });  // TST-5
+
+        const res = await (await fetch(`${base}/api/status?limit=5`)).json();
+        const backlog = res.projects[0].tasks.filter(t => t.status === 'backlog');
+        assert.deepEqual(backlog.map(t => t.id), ['TST-2', 'TST-4', 'TST-3', 'TST-5', 'TST-1'],
+            'critical > high > medium > low, and the older medium comes first');
+
+        const top = await (await fetch(`${base}/api/status?limit=1`)).json();
+        assert.deepEqual(top.projects[0].tasks.map(t => t.id), ['TST-2']);
+    });
+});
+
+test('GET /api/status?limit= orders done by completed_at, most recent first', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        for (let i = 0; i < 3; i++) await seed(base, dir);
+        // Completed oldest-first, so TST-3 has the most recent completed_at.
+        for (const id of ['TST-1', 'TST-2', 'TST-3']) {
+            await put(base, dir, id, { status: 'done' });
+            await new Promise(r => setTimeout(r, 5));
+        }
+        const res = await (await fetch(`${base}/api/status?limit=2`)).json();
+        const done = res.projects[0].tasks.filter(t => t.status === 'done');
+        assert.deepEqual(done.map(t => t.id), ['TST-3', 'TST-2'],
+            'done is sorted by completed_at descending, and capped at the limit');
+        // Priority must not leak into the done ordering.
+        assert.ok(done.every(t => t.completed_at));
+    });
+});
+
+test('GET /api/status?limit= never lets an unknown priority out-rank critical', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        await seed(base, dir, { title: 'critical', priority: 'critical' });
+        await seed(base, dir, { title: 'unknown priority' });
+        // The API refuses an unknown priority, so plant one the way a hand-edit would.
+        const file = path.join(dir, '.meridian', 'tasks.json');
+        const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+        raw.find(t => t.id === 'TST-2').priority = 'urgent';
+        fs.writeFileSync(file, JSON.stringify(raw, null, 2));
+
+        const res = await (await fetch(`${base}/api/status?limit=1`)).json();
+        assert.deepEqual(res.projects[0].tasks.map(t => t.id), ['TST-1'],
+            "'urgent' must sort as medium, behind critical");
+    });
+});
+
+test('GET /api/status with no query parameters returns every task unsorted', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        for (let i = 0; i < 3; i++) await seed(base, dir, { priority: 'low' });
+        await put(base, dir, 'TST-1', { status: 'done' });
+        const res = await (await fetch(`${base}/api/status`)).json();
+        assert.deepEqual(res.projects[0].tasks.map(t => t.id), ['TST-1', 'TST-2', 'TST-3'],
+            'file order is preserved when no limit is given');
+    });
+});
+
 test('POST refuses to write over a malformed tasks.json', async () => {
     const { ws, dir } = workspaceWith('Test Project');
     await withServer(ws, async (base) => {
@@ -287,22 +369,5 @@ test('GET /api/status reports a malformed tasks.json instead of showing no tasks
         assert.deepEqual(res.projects[0].tasks, []);
         assert.ok(res.errors.some(e => /Malformed tasks.json/.test(e.message)),
             'the corruption must surface as an error, not as an empty board');
-    });
-});
-
-test('GET /api/status?limit= caps tasks per status', async () => {
-    const { ws, dir } = workspaceWith('Test Project');
-    await withServer(ws, async (base) => {
-        for (let i = 0; i < 3; i++) await seed(base, dir);
-        const res = await (await fetch(`${base}/api/status?limit=2`)).json();
-        for (const proj of res.projects) {
-            const perStatus = {};
-            for (const t of proj.tasks) {
-                perStatus[t.status] = (perStatus[t.status] || 0) + 1;
-            }
-            for (const [status, count] of Object.entries(perStatus)) {
-                assert.ok(count <= 2, `${proj.name} has ${count} tasks in ${status}, expected at most 2`);
-            }
-        }
     });
 });
