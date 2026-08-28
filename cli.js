@@ -2,6 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
+const { ensureMeridianIgnored } = require('./lib/gitignore');
 
 const args = process.argv.slice(2);
 const RUNNING_DIR = process.env.MERIDIAN_RUNNING_DIR || process.cwd();
@@ -111,15 +112,8 @@ if (cmd === 'start') {
     console.log(`✅ Added project '${projName}' (${absolutePath})`);
 
     // Add .meridian to .gitignore
-    const gitignorePath = path.join(absolutePath, '.gitignore');
     try {
-        let giContent = '';
-        if (fs.existsSync(gitignorePath)) {
-            giContent = fs.readFileSync(gitignorePath, 'utf8');
-        }
-        if (!giContent.includes('.meridian')) {
-            const nl = giContent.length > 0 && !giContent.endsWith('\n') ? '\n' : '';
-            fs.appendFileSync(gitignorePath, nl + '.meridian/\n', 'utf8');
+        if (ensureMeridianIgnored(absolutePath)) {
             console.log(`🔒 Added .meridian/ to .gitignore`);
         }
     } catch(e) {

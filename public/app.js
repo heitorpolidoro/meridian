@@ -29,6 +29,22 @@ let currentProjectsData = [];
 let currentProjectViewPath = null;
 let isInitialRouteHandled = false;
 let hideEmptyColumns = localStorage.getItem('meridian_hide_empty_columns') === 'true';
+let doneWindowDays = (() => {
+    const v = localStorage.getItem('meridian_done_window');
+    return v === '' ? null : (v === null ? 7 : Number(v));
+})();
+
+// Mirrors lib/board.js#isRecentlyCompleted. The frontend has no module
+// system and no build step, so it cannot import that file — lib/board.js
+// is the source of truth. Keep both in sync when changing this rule.
+function isRecentlyCompleted(task, windowDays, now = new Date()) {
+    if (windowDays === null || windowDays === undefined) return true;
+    const raw = task && task.completed_at;
+    if (!raw) return false;
+    const completed = new Date(raw);
+    if (Number.isNaN(completed.getTime())) return false;
+    return (now.getTime() - completed.getTime()) <= windowDays * 24 * 60 * 60 * 1000;
+}
 
 const dashboardView = document.getElementById('dashboard-view');
 const projectView = document.getElementById('project-view');
@@ -839,6 +855,32 @@ function renderRunningTickets(tasks) {
     }).join('');
 }
 
+function renderTaskCardHtml(task) {
+    const taskIdDisplay = task.id ? `[${task.id}] ` : '';
+    const projPathAttr = task.projectPath ? task.projectPath.replace(/\\/g, '\\\\').replace(/'/g, "\\'") : '';
+    const projectBadge = task.projectName ? `<span class="project-tag-badge" title="${task.projectName}">${task.projectName}</span>` : '';
+    const uid = `j-${task.id}`.replace(/[^a-zA-Z0-9\-]/g, '_');
+    const runningClass = task.running ? ' task-card--running' : '';
+    const runningBadge = task.running ? '<span class="running-inline-dot" title="Agent is working on this task"></span>' : '';
+    return `
+        <div class="task-card${runningClass}">
+            <div class="task-title">${runningBadge}${projectBadge}<span class="task-id-code">${taskIdDisplay}</span>${task.title}</div>
+            ${task.justification ? `
+            <div class="task-justification-toggle" onclick="toggleJustification('${uid}', this)" title="Show/hide details">
+                <span class="toggle-arrow">▶</span> <em>details</em>
+            </div>
+            <div class="task-justification" id="${uid}">${task.justification}</div>
+            ` : ''}
+            <div class="task-actions">
+                <select class="task-status-select" onchange="changeTaskStatus('${task.id}', this.value, '${task.status}', '${projPathAttr}')">
+                    ${KANBAN_STATUSES.map(s => `<option value="${s.id}" ${task.status.toLowerCase().replace(/_/g, '').replace(/ /g, '') === s.id ? 'selected' : ''}>${s.label}</option>`).join('')}
+                </select>
+                <button class="task-delete-btn" onclick="deleteTask('${task.id}', '${projPathAttr}')" title="Delete Task">🗑️</button>
+            </div>
+        </div>
+    `;
+}
+
 function renderKanbanBoard(tasks) {
     const board = document.getElementById('kanban-board');
     const summaryBar = document.getElementById('status-summary-bar');
@@ -850,6 +892,16 @@ function renderKanbanBoard(tasks) {
         toggleEmptyColsInput.onchange = (e) => {
             hideEmptyColumns = e.target.checked;
             localStorage.setItem('meridian_hide_empty_columns', e.target.checked);
+            refreshProjectView();
+        };
+    }
+
+    const doneWindowSelect = document.getElementById('done-window');
+    if (doneWindowSelect) {
+        doneWindowSelect.value = doneWindowDays === null ? '' : String(doneWindowDays);
+        doneWindowSelect.onchange = (e) => {
+            localStorage.setItem('meridian_done_window', e.target.value);
+            doneWindowDays = e.target.value === '' ? null : Number(e.target.value);
             refreshProjectView();
         };
     }
@@ -887,42 +939,33 @@ function renderKanbanBoard(tasks) {
             return; // Skip rendering empty column
         }
 
+        let visibleTasks = colTasks;
+        let hiddenTasks = [];
+        if (statusCol.id === 'done') {
+            visibleTasks = colTasks.filter(t => isRecentlyCompleted(t, doneWindowDays));
+            hiddenTasks = colTasks.filter(t => !isRecentlyCompleted(t, doneWindowDays));
+        }
+
+        const hiddenChipHtml = hiddenTasks.length > 0 ? `
+            <div class="done-hidden-chip" onclick="this.nextElementSibling.classList.remove('hidden'); this.remove();">+${hiddenTasks.length} concluídas</div>
+            <div class="done-hidden-tasks hidden">
+                ${hiddenTasks.map(task => renderTaskCardHtml(task)).join('')}
+            </div>
+        ` : '';
+
         const colHtml = `
             <div class="kanban-column" data-status-id="${statusCol.id}">
                 <div class="kanban-column-header">
                     <span>${statusCol.label}</span>
-                    <span class="kanban-column-count">${colTasks.length}</span>
+                    <span class="kanban-column-count">${visibleTasks.length}</span>
                 </div>
                 <div class="kanban-tasks">
-                    ${colTasks.map(task => {
-                        const taskIdDisplay = task.id ? `[${task.id}] ` : '';
-                        const projPathAttr = task.projectPath ? task.projectPath.replace(/\\/g, '\\\\').replace(/'/g, "\\'") : '';
-                        const projectBadge = task.projectName ? `<span class="project-tag-badge" title="${task.projectName}">${task.projectName}</span>` : '';
-                        const uid = `j-${task.id}`.replace(/[^a-zA-Z0-9\-]/g, '_');
-                        const runningClass = task.running ? ' task-card--running' : '';
-                        const runningBadge = task.running ? '<span class="running-inline-dot" title="Agent is working on this task"></span>' : '';
-                        return `
-                            <div class="task-card${runningClass}">
-                                <div class="task-title">${runningBadge}${projectBadge}<span class="task-id-code">${taskIdDisplay}</span>${task.title}</div>
-                                ${task.justification ? `
-                                <div class="task-justification-toggle" onclick="toggleJustification('${uid}', this)" title="Show/hide details">
-                                    <span class="toggle-arrow">▶</span> <em>details</em>
-                                </div>
-                                <div class="task-justification" id="${uid}">${task.justification}</div>
-                                ` : ''}
-                                <div class="task-actions">
-                                    <select class="task-status-select" onchange="changeTaskStatus('${task.id}', this.value, '${task.status}', '${projPathAttr}')">
-                                        ${KANBAN_STATUSES.map(s => `<option value="${s.id}" ${task.status.toLowerCase().replace(/_/g, '').replace(/ /g, '') === s.id ? 'selected' : ''}>${s.label}</option>`).join('')}
-                                    </select>
-                                    <button class="task-delete-btn" onclick="deleteTask('${task.id}', '${projPathAttr}')" title="Delete Task">🗑️</button>
-                                </div>
-                            </div>
-                        `;
-                    }).join('')}
+                    ${visibleTasks.map(task => renderTaskCardHtml(task)).join('')}
+                    ${hiddenChipHtml}
                 </div>
             </div>
         `;
-        
+
         board.insertAdjacentHTML('beforeend', colHtml);
     });
 

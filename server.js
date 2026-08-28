@@ -2,6 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const { deriveKey, nextTaskId, getTasks, saveTasks, stampNewTask, stampTaskUpdate, MalformedTasksError } = require('./lib/tasks');
+const { ensureMeridianIgnored } = require('./lib/gitignore');
 
 const app = express();
 const PORT = process.env.PORT || 3333;
@@ -212,9 +213,11 @@ function getStatusData(options = {}) {
                 return data; // Exit early if we can't parse global projects
             }
             
+            let matchedProject = false;
             for (const projEntry of parsed.projects || []) {
                 const projPath = projEntry.path;
                 if (options.project && path.resolve(projEntry.path) !== path.resolve(options.project)) continue;
+                if (options.project) matchedProject = true;
                 if (!fs.existsSync(projPath)) {
                     data.errors.push({ file: 'System', message: `Project path not found: ${projPath}` });
                     continue;
@@ -337,6 +340,10 @@ function getStatusData(options = {}) {
                     missingDescription: !info.description || info.description.trim() === ''
                 });
             }
+
+            if (options.project && !matchedProject) {
+                data.errors.push({ file: 'System', message: `Project not registered with Meridian: ${options.project}` });
+            }
         } else {
              data.errors.push({ file: '.meridian/projects.json', message: 'File not found. Please create it or let Odin initialize it.' });
         }
@@ -427,6 +434,15 @@ app.post('/api/projects', (req, res) => {
             description: description || ''
         };
         fs.writeFileSync(infoPath, JSON.stringify(infoData, null, 2), 'utf8');
+
+        // Same as `cli.js add`: the board we just created must not be committed.
+        try {
+            ensureMeridianIgnored(projPath);
+        } catch (e) {
+            // A project may legitimately have no writable .gitignore. The
+            // registration itself succeeded, so do not fail it over this.
+            console.error('Could not update .gitignore:', e.message);
+        }
 
         res.status(201).json({ success: true });
     } catch (err) {
