@@ -55,6 +55,18 @@ of these four in a request body has no effect — the server overwrites them.
 `blockedBy` is the primary reason a task is `blocked`; that dependency is
 sufficient justification on its own (e.g. `justification: "Blocked on MERID-3"`).
 
+**`blockedBy` gates implementation, not specification.** A task with open
+dependencies still runs Fluxo A and reaches `readytodo` — writing its spec needs
+the *specs* of what it depends on, not their finished code. It becomes `blocked`
+only when it would enter Fluxo B with a dependency not yet `done`, and the
+unblocking sweep returns it to `readytodo`, spec intact. See
+`references/pipeline.md`.
+
+Every task is created in `backlog`; the create endpoint ignores any `status` in
+the body. Nothing should be authored directly into a later status — a task that
+skips a stage skips whatever that stage was supposed to produce, which is why
+each stage verifies its own preconditions rather than trusting the status.
+
 Never delete a task. Move it to `nope` instead.
 
 ## The nine statuses

@@ -108,24 +108,23 @@ server-owned.
 ### 4. Set the starting status
 
 Create always lands a task in `backlog` — the create endpoint ignores a `status`
-field. So:
+field — and that is where every task you create stays. **Do not move any of them
+to `blocked`.**
 
-- A task with **no unmet dependency** is already correct. Leave it in `backlog`.
-- A task whose dependencies are **not all `done`** needs a follow-up update:
+`blockedBy` gates implementation, not specification. A task whose dependencies
+are still open can and should have its spec written: Fluxo A feeds the generator
+the `spec_path` of every `blockedBy` task, so what it needs from a dependency is
+that dependency's *spec*, not its finished code. Starting dependents in `blocked`
+would stall spec work behind implementation work and serialise the whole
+pipeline.
 
-```bash
-BASE="${MERIDIAN_URL:-http://localhost:3333}"
-curl -sS -X PUT "$BASE/api/projects/tasks/MERID-7" \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "projectPath": "<absolute project path>",
-    "status": "blocked",
-    "justification": "Blocked on MERID-3"
-  }'
-```
+The dependency bites later, and `meridian:work` applies it: a task that reaches
+`readytodo` with any `blockedBy` id not `done` moves to `blocked` there, and the
+unblocking sweep returns it to `readytodo` — with its spec intact — once they
+are.
 
-The `blockedBy` dependency is sufficient justification on its own — name the
-blocking ids and nothing more. When several ids block a task, list them all.
+So your job here is only to wire `blockedBy` correctly on create. Set it on
+every dependent task, list every blocking id, and leave the status alone.
 
 ### 5. Report
 

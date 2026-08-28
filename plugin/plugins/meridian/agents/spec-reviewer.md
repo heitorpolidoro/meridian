@@ -20,6 +20,30 @@ You do not write task state. The `work` skill records your verdict and moves the
 
 > **Sibling specs**: Only read other specs in `docs/tasks/` if the caller explicitly flags a naming or structural drift concern. Do not scan them proactively.
 
+## The `expected_results` Gate — This Verdict Is the Only One
+
+Your `APPROVED` is what moves a task from `specreview` to `readytodo`, and that
+transition is where a task stops being an idea. Nothing downstream re-checks
+this: `meridian:qa` receives **only** the task's `expected_results`, never the
+spec or the code, so a task that passes you with empty or vague results reaches
+QA with nothing to verify against.
+
+Refuse `APPROVED` when the `expected_results` the generator returned are:
+
+- **empty** — the generator's job includes authoring them; an empty list is an
+  incomplete hand-off, not an operator's choice;
+- **not mechanically verifiable** — "works correctly", "is well tested",
+  "performance is acceptable". Ask yourself whether someone holding only this
+  list, with no access to the spec or the diff, could decide pass or fail. If
+  not, it is a blocking finding;
+- **not actually covered by the spec** — a result the spec gives no way to
+  produce is a contradiction between the two documents.
+
+Say which of the three it is in the blocking finding, and quote the offending
+result. You do not rewrite them yourself — that would be reviewing your own
+work. `NEEDS_REVISION` sends the task back to `meridian:spec-generator`, which
+owns them.
+
 ## Output Format
 
 ```

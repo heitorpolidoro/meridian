@@ -52,19 +52,21 @@ a create is a write, and hand-editing `tasks.json` cannot assign an id.
 Take the title from the invocation argument. If it is missing, ask the
 operator for one. Keep it short and imperative, per `schema.md`.
 
-## 3. Require `expected_results`
+## 3. Accept `expected_results` if offered — never require them
 
-`expected_results` is not optional for this skill, even though the API itself
-would accept an empty array. If the operator did not supply any, ask for
-concrete, mechanically verifiable outcomes — an HTTP status, a passing named
-test, an observable UI interaction. State why when you ask: `meridian:qa`
-receives **only** a task's `expected_results`, never the spec or the code — so
-a task without them produces a weak spec and leaves QA with nothing to check
-against.
+Capturing an idea is this skill's whole job, and demanding acceptance criteria
+at capture time is friction at the worst possible moment. A title is enough.
 
-Do not proceed to creation with an empty `expected_results` array. If the
-operator has none to give right now, say that the task cannot be created
-without at least one, and stop.
+If the operator volunteers concrete outcomes, pass them through. If they do
+not, create the task with an empty `expected_results` and say nothing about it.
+Do **not** prompt for them, and never refuse to create a task for lack of them.
+
+They are not optional forever, only later: `meridian:spec-generator` writes
+them while producing the spec, and `meridian:spec-reviewer` refuses to approve
+a spec whose `expected_results` are empty or not mechanically verifiable. That
+gate sits on the `specreview → readytodo` transition, which is where a task
+stops being an idea. `meridian:qa` receives **only** a task's
+`expected_results`, so nothing reaches QA without passing that gate first.
 
 ## 4. Resolve `priority`
 

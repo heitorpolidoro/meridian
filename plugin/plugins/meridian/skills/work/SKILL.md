@@ -104,6 +104,13 @@ Only once both checks pass does an empty `tasks` array mean an empty board.
 
 The task's `status` is the entry point. Nothing restarts from the beginning.
 
+**But never trust the status alone.** A status can be set by hand — through the
+API, or by editing `tasks.json` — so a task can sit at a stage whose
+prerequisites were never produced. `references/pipeline.md`'s entry table gives
+the check each stage must run first and where to send the task when it fails.
+Run that check before dispatching anything. A failed check reroutes the task to
+the stage that should have produced the missing artefact; it does not refuse.
+
 | Status | Action |
 |---|---|
 | `backlog` | Fluxo A step 1 — dispatch `meridian:spec-generator` |
