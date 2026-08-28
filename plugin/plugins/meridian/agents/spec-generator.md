@@ -64,6 +64,20 @@ Concrete implementation approach — modules, schemas, functions, endpoints, or 
 
 For top-level plans: task breakdown with `blockedBy` dependency links, scope summaries, and draft `expected_results`.
 
-## Hand-off
+## Your Report Goes to a File
 
-Return only: the written file path + one-sentence summary.
+The dispatch prompt names a **report path**. Write your full report there —
+everything you would otherwise have said at length: what you did, what you
+observed, the evidence behind each conclusion.
+
+Then return **only** this, and nothing more:
+
+- the spec path you wrote
+- the `EXPECTED_RESULTS:` block
+- the report path you wrote
+
+The `work` skill that dispatched you keeps its context for coordinating the
+whole task across several specialists and rounds. A full report returned inline
+stays in that context for the rest of the run, whether or not it is still
+needed. Writing it down is what lets it be read once, on purpose, by someone
+with a specific question.

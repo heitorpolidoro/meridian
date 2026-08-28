@@ -111,6 +111,12 @@ test -f "<resolved absolute path>" && echo ok || echo BAD
 
 On `BAD`, do not dispatch — an agent handed a broken path cannot recover.
 
+**Every dispatch also names a report path.** Build it as
+`.meridian/reports/<task id>-<stage>-<round>.md`, create the directory if
+needed, and tell the specialist to write its full report there and return only
+its short contract. See **Specialist reports stay out of your context** below
+for why, and for what each contract contains.
+
 Beyond that, pass only what each step below says to pass — the isolation rules
 there are deliberate.
 
@@ -312,17 +318,40 @@ Whenever a task reaches `done`, sweep the board:
 
 Report what the sweep unblocked.
 
-## Context discipline
+## Specialist reports stay out of your context
 
-Specialists return full reports. You do not keep them.
+A specialist's full report — its reasoning, its file walkthrough, the outputs it
+observed — is worth keeping and not worth reading. Once it is in your context it
+is there for the rest of the run, and a task that goes through five stages with
+revision rounds accumulates every one of them.
 
-From each specialist, retain exactly two things:
+So the report goes to a file, and only a short contract comes back.
 
-- the **verdict** (`APPROVED` or `NEEDS_REVISION`), and
-- the **blocking findings**, which go into `last_review_findings`.
+**Every dispatch prompt names a report path.** Build it as
+`.meridian/reports/<task id>-<stage>-<round>.md` — for example
+`.meridian/reports/MERID-7-codereview-2.md`. `.meridian/` is gitignored, so
+these are runtime state, not repository content. Create the directory if it is
+not there.
 
-Discard the rest of the report once you have acted on it — the reasoning, the
-file walkthrough, the observed outputs. `last_review_findings` holds only the
-**current** round's blocking findings, and is cleared on a pass. Do not
-accumulate findings across rounds, do not forward one specialist's report to
-another, and do not carry a report into the next task.
+**What the specialist returns to you** is at most:
+
+- its **verdict**, where it has one (`APPROVED` / `NEEDS_REVISION`);
+- its **blocking findings**, verbatim — these go into `last_review_findings`;
+- one line of evidence that it actually ran (a test count, a file count);
+- the **report path** it wrote.
+
+Nothing else. A specialist that returns its whole report anyway has ignored its
+instructions — take the verdict and findings from it, and say so in your final
+report to the operator rather than treating it as normal.
+
+**What you retain** is narrower still: the verdict and the blocking findings.
+`last_review_findings` holds only the **current** round's findings and is cleared
+on a pass. Do not accumulate findings across rounds, do not forward one
+specialist's report to another, and do not carry anything into the next task.
+
+**When you need the detail**, read the report file — deliberately, for a specific
+question, at the moment you have it. That is the whole point of writing it down
+instead of holding it.
+
+Trim `.meridian/reports/` to its 50 most recent files after each write, so it
+cannot grow without bound.

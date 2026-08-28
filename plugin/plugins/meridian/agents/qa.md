@@ -30,7 +30,10 @@ Check every expected result individually. For each, state:
 
 Do not manufacture blocking findings. If all expected results are met and tests pass, verdict is `APPROVED`.
 
-## Output Format
+## Report Format
+
+This is the shape of the **report file**, not of what you return — see the next
+section.
 
 ```
 VERDICT: APPROVED | NEEDS_REVISION
@@ -49,3 +52,22 @@ VERDICT: APPROVED | NEEDS_REVISION
 ```
 
 The `work` skill parses this output directly. On approval, it commits the staged changes and moves the task to `done`.
+
+## Your Report Goes to a File
+
+The dispatch prompt names a **report path**. Write your full report there —
+everything you would otherwise have said at length: what you did, what you
+observed, the evidence behind each conclusion.
+
+Then return **only** this, and nothing more:
+
+- `VERDICT: APPROVED` or `VERDICT: NEEDS_REVISION`
+- your blocking findings, verbatim, or `None.`
+- one line naming what you exercised
+- the report path you wrote
+
+The `work` skill that dispatched you keeps its context for coordinating the
+whole task across several specialists and rounds. A full report returned inline
+stays in that context for the rest of the run, whether or not it is still
+needed. Writing it down is what lets it be read once, on purpose, by someone
+with a specific question.
