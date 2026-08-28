@@ -114,6 +114,7 @@ field. So:
 - A task whose dependencies are **not all `done`** needs a follow-up update:
 
 ```bash
+BASE="${MERIDIAN_URL:-http://localhost:3333}"
 curl -sS -X PUT "$BASE/api/projects/tasks/MERID-7" \
   -H 'Content-Type: application/json' \
   -d '{
@@ -139,9 +140,11 @@ and which are waiting. Do not start any of them.
 Sweep an existing board and report what is malformed. **Report first; fix only
 what the operator approves.** Never silently rewrite someone's backlog.
 
-Read the board with `GET $BASE/api/status?project=<absolute project path>`
-(`BASE="${MERIDIAN_URL:-http://localhost:3333}"`, as above), or straight from
-`./.meridian/tasks.json`.
+Read the board with `GET $BASE/api/status?project=<absolute project path>`, or
+straight from `./.meridian/tasks.json`. As in every block above, set
+`BASE="${MERIDIAN_URL:-http://localhost:3333}"` on that block's own first line:
+shell state does not carry between Bash tool calls, so a `$BASE` you set earlier
+is empty by the time the next block runs.
 
 Check for these three defects:
 

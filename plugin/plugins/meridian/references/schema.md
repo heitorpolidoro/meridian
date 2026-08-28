@@ -112,9 +112,16 @@ rather than working around it.
 Every task write goes through the Meridian server. The server owns the
 timestamps, so it is the only write path that keeps them consistent.
 
-`$BASE` below is the server's base URL, resolved once in the preamble as
-`BASE="${MERIDIAN_URL:-http://localhost:3333}"`. Use `$BASE` everywhere; never
-hardcode the address. See `preamble.md`.
+`$BASE` below is the server's base URL. Use `$BASE` in every request and never
+hardcode the literal address — but note it is **not** resolved once and reused:
+shell state does not survive between Bash tool invocations, so every block that
+uses `$BASE` must set it on its own first line:
+
+```bash
+BASE="${MERIDIAN_URL:-http://localhost:3333}"
+```
+
+See `preamble.md`.
 
 **Create** — `POST $BASE/api/projects/tasks`
 
