@@ -46,6 +46,20 @@ function isRecentlyCompleted(task, windowDays, now = new Date()) {
     return (now.getTime() - completed.getTime()) <= windowDays * 24 * 60 * 60 * 1000;
 }
 
+// Mirrors lib/board.js#manualTransition. The only status changes the board
+// offers a human; every other transition belongs to the pipeline, driven
+// through the API by meridian:work. lib/board.js is the source of truth.
+const WORKING_STATUSES = [
+    'backlog', 'specreview', 'readytodo', 'inprogress',
+    'codereview', 'qareview', 'blocked'
+];
+
+function manualTransition(status) {
+    if (status === 'nope') return { to: 'backlog', label: 'Reopen' };
+    if (WORKING_STATUSES.includes(status)) return { to: 'nope', label: 'Nope' };
+    return null;
+}
+
 const dashboardView = document.getElementById('dashboard-view');
 const projectView = document.getElementById('project-view');
 const btnBack = document.getElementById('back-to-dashboard-btn');
@@ -871,12 +885,14 @@ function renderTaskCardHtml(task) {
             </div>
             <div class="task-justification" id="${uid}">${task.justification}</div>
             ` : ''}
+            ${(() => {
+                const move = manualTransition(task.status);
+                if (!move) return '';
+                return `
             <div class="task-actions">
-                <select class="task-status-select" onchange="changeTaskStatus('${task.id}', this.value, '${task.status}', '${projPathAttr}')">
-                    ${KANBAN_STATUSES.map(s => `<option value="${s.id}" ${task.status.toLowerCase().replace(/_/g, '').replace(/ /g, '') === s.id ? 'selected' : ''}>${s.label}</option>`).join('')}
-                </select>
-                <button class="task-delete-btn" onclick="deleteTask('${task.id}', '${projPathAttr}')" title="Delete Task">🗑️</button>
-            </div>
+                <button class="task-move-btn task-move-${move.to}" onclick="changeTaskStatus('${task.id}', '${move.to}', '${task.status}', '${projPathAttr}')" title="Move this task to ${move.to}">${move.label}</button>
+            </div>`;
+            })()}
         </div>
     `;
 }
@@ -1072,25 +1088,6 @@ window.changeTaskStatus = async function(taskId, newStatusId, oldStatus, targetP
     }
 };
 
-window.deleteTask = async function(taskId, targetProjPath) {
-    const projPath = targetProjPath || currentProjectViewPath;
-    if (!projPath || projPath === '__GLOBAL__') return;
-    if (!confirm('Are you sure you want to delete this task?')) return;
-    
-    try {
-        const res = await fetch(`/api/projects/tasks/${taskId}`, {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ projectPath: projPath })
-        });
-        
-        if (!res.ok) {
-            showFlashMessage('Failed to delete task', 'error');
-        }
-    } catch (err) {
-        showFlashMessage('Network error deleting task', 'error');
-    }
-};
 
 /* =========================================
    Fix All Logic

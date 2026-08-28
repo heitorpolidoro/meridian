@@ -31,3 +31,26 @@ test('an unparseable completed_at counts as old rather than throwing', () => {
 test('a null window means show everything', () => {
     assert.equal(isRecentlyCompleted({ completed_at: '2020-01-01T00:00:00.000Z' }, null, NOW), true);
 });
+
+// --- manual transitions offered by the board ---
+
+const { manualTransition } = require('../lib/board');
+
+test('a task in any working status may be noped', () => {
+    for (const s of ['backlog','specreview','readytodo','inprogress','codereview','qareview','blocked']) {
+        assert.deepEqual(manualTransition(s), { to: 'nope', label: 'Nope' }, `failed for ${s}`);
+    }
+});
+
+test('a noped task may be reopened into backlog', () => {
+    assert.deepEqual(manualTransition('nope'), { to: 'backlog', label: 'Reopen' });
+});
+
+test('a done task offers no manual transition', () => {
+    assert.equal(manualTransition('done'), null);
+});
+
+test('an unknown status offers no manual transition', () => {
+    assert.equal(manualTransition('in progress'), null);
+    assert.equal(manualTransition(undefined), null);
+});
