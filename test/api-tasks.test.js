@@ -391,3 +391,46 @@ test('GET /api/status?project= reports an error when nothing matches', async () 
         assert.match(res.errors[0].message, /not registered|no project/i);
     });
 });
+
+test('POST /api/projects gitignores .meridian/ like cli.js add does', async () => {
+    const { ws } = workspaceWith('Test Project');
+    const fresh = path.join(ws, 'fresh-project');
+    fs.mkdirSync(fresh, { recursive: true });
+    await withServer(ws, async (base) => {
+        const res = await fetch(`${base}/api/projects`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: 'Fresh Project',
+                path: fresh,
+                stack: ['node'],
+                description: 'x'
+            })
+        });
+        assert.equal(res.status, 201);
+        // The registration just wrote a task board into <project>/.meridian, and
+        // schema.md tells agents that directory is gitignored. It has to be true.
+        const gitignore = path.join(fresh, '.gitignore');
+        assert.ok(fs.existsSync(gitignore), '.gitignore must be created when absent');
+        assert.match(fs.readFileSync(gitignore, 'utf8'), /^\.meridian\/$/m);
+    });
+});
+
+test('POST /api/projects appends to an existing .gitignore without eating a line', async () => {
+    const { ws } = workspaceWith('Test Project');
+    const fresh = path.join(ws, 'has-gitignore');
+    fs.mkdirSync(fresh, { recursive: true });
+    const gitignore = path.join(fresh, '.gitignore');
+    fs.writeFileSync(gitignore, 'node_modules');  // no trailing newline
+    await withServer(ws, async (base) => {
+        const res = await fetch(`${base}/api/projects`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: 'Has Gitignore', path: fresh })
+        });
+        assert.equal(res.status, 201);
+        const lines = fs.readFileSync(gitignore, 'utf8').split('\n');
+        assert.ok(lines.includes('node_modules'), 'existing entries survive intact');
+        assert.ok(lines.includes('.meridian/'), '.meridian/ is appended on its own line');
+    });
+});

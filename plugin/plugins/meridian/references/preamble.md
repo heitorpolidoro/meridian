@@ -240,7 +240,8 @@ curl -sS -X POST "$BASE/api/projects" \
 
 The server does the rest: it records the path in the workspace's
 `projects.json`, creates `./.meridian/` if it is not already there, writes
-`project-info.json`, and derives the task `key` from `name`. Filling `name`, `stack` and `description` at
+`project-info.json`, adds `.meridian/` to the project's `.gitignore` (creating
+that file if it has none), and derives the task `key` from `name`. Filling `name`, `stack` and `description` at
 creation time is what keeps the project's dashboard card from appearing
 immediately with three "missing" badges.
 

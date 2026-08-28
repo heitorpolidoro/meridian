@@ -2,6 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const { deriveKey, nextTaskId, getTasks, saveTasks, stampNewTask, stampTaskUpdate, MalformedTasksError } = require('./lib/tasks');
+const { ensureMeridianIgnored } = require('./lib/gitignore');
 
 const app = express();
 const PORT = process.env.PORT || 3333;
@@ -433,6 +434,15 @@ app.post('/api/projects', (req, res) => {
             description: description || ''
         };
         fs.writeFileSync(infoPath, JSON.stringify(infoData, null, 2), 'utf8');
+
+        // Same as `cli.js add`: the board we just created must not be committed.
+        try {
+            ensureMeridianIgnored(projPath);
+        } catch (e) {
+            // A project may legitimately have no writable .gitignore. The
+            // registration itself succeeded, so do not fail it over this.
+            console.error('Could not update .gitignore:', e.message);
+        }
 
         res.status(201).json({ success: true });
     } catch (err) {
