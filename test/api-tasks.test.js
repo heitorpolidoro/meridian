@@ -434,3 +434,48 @@ test('POST /api/projects appends to an existing .gitignore without eating a line
         assert.ok(lines.includes('.meridian/'), '.meridian/ is appended on its own line');
     });
 });
+
+test('POST honors a valid status instead of forcing backlog', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        const task = await seed(base, dir, { status: 'codereview' });
+        assert.equal(task.status, 'codereview');
+        assert.ok(task.created_at && task.moved_at, 'still stamped on create');
+    });
+});
+
+test('POST still defaults to backlog when no status is given', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        const task = await seed(base, dir);
+        assert.equal(task.status, 'backlog');
+    });
+});
+
+test('POST stamps completed_at for a task created straight into done', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        const task = await seed(base, dir, { status: 'done' });
+        assert.equal(task.status, 'done');
+        assert.equal(task.completed_at, task.moved_at);
+    });
+});
+
+test('POST leaves completed_at absent for any status other than done', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        const task = await seed(base, dir, { status: 'readytodo' });
+        assert.equal(task.completed_at, undefined);
+    });
+});
+
+test('POST still rejects a status outside the nine', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        const res = await fetch(`${base}/api/projects/tasks`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectPath: dir, title: 'x', status: 'todo' })
+        });
+        assert.equal(res.status, 400);
+    });
+});

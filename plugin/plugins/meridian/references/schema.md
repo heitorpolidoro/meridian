@@ -56,16 +56,19 @@ of these four in a request body has no effect — the server overwrites them.
 sufficient justification on its own (e.g. `justification: "Blocked on MERID-3"`).
 
 **`blockedBy` gates implementation, not specification.** A task with open
-dependencies still runs Fluxo A and reaches `readytodo` — writing its spec needs
+dependencies is still specced and reaches `readytodo` — writing its spec needs
 the *specs* of what it depends on, not their finished code. It becomes `blocked`
-only when it would enter Fluxo B with a dependency not yet `done`, and the
+only when the developer would be dispatched with a dependency not yet `done`, and the
 unblocking sweep returns it to `readytodo`, spec intact. See
 `references/pipeline.md`.
 
-Every task is created in `backlog`; the create endpoint ignores any `status` in
-the body. Nothing should be authored directly into a later status — a task that
-skips a stage skips whatever that stage was supposed to produce, which is why
-each stage verifies its own preconditions rather than trusting the status.
+A task may be created in **any** of the nine statuses, and the create endpoint
+honours it — work that was already finished is recorded as `done`, not walked
+through the pipeline to get there. `backlog` is only the default. What a later
+status does *not* do is conjure the artefacts that status implies: a task created
+at `codereview` still has no spec and no `expected_results`, and the stage checks
+in `pipeline.md` are what notice. Create where reality is; let the pipeline fill
+the gaps.
 
 Never delete a task. Move it to `nope` instead.
 
@@ -148,16 +151,13 @@ See `preamble.md`.
 }
 ```
 
-`projectPath` and `title` are required. Create accepts only these fields. The
-new task is always created with `status: "backlog"` and `running: false`.
+`projectPath` and `title` are required. Create accepts only these fields, plus
+an optional `status`. `running` is always `false` on a new task.
 
-A `status` sent to create is **validated but not stored**: the whole request body
-is checked first, so an invalid status (or an invalid priority) is rejected with
-HTTP 400, while a *valid* one is silently ignored and the task still lands in
-`backlog`. So sending `status` on create never helps and can only hurt — leave it
-out. To land a new task in any other status — for example `blocked` with
-`justification: "Blocked on MERID-3"` — create it first, then immediately update
-it.
+`status` defaults to `backlog` when omitted, and is honoured when given — it must
+be one of the nine, or the request is rejected with HTTP 400, as an invalid
+`priority` is. Creating straight into `done` stamps `completed_at` alongside the
+other timestamps, exactly as moving a task into `done` later would.
 
 The response is `{ "success": true, "task": { ... } }`; take the server-assigned
 `id` from there.

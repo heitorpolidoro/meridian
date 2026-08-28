@@ -8,15 +8,12 @@ You drive the pipeline yourself: you set every status, you dispatch the
 specialist subagents, you read their verdicts, and you make every task write
 through the API. The specialists never write task state.
 
-Two flows, run in order:
+A task's status names the agent it needs. You read the status, verify what the
+previous stage was supposed to leave behind, dispatch that one agent, and act on
+its verdict. There is nothing else to track.
 
-- **Fluxo A — spec.** Turn a `backlog` task into an approved spec, ending at
-  `readytodo`.
-- **Fluxo B — build.** Turn a `readytodo` task into committed, reviewed,
-  QA-verified work, ending at `done`.
-
-**One task at a time.** Never run Fluxo A or Fluxo B on more than one task
-concurrently. Finish or block the current task before picking up another.
+**One task at a time.** Never drive more than one task concurrently. Finish or
+block the current one before picking up another.
 
 All specs, commits and agent communications are in **English**.
 
@@ -25,14 +22,14 @@ All specs, commits and agent communications are in **English**.
 A task's current status tells you where to resume. Nothing needs to restart from
 the beginning.
 
-| Status | Enter at | Verify before entering | If the check fails |
+| Status | Dispatch | Verify before dispatching | If the check fails |
 |---|---|---|---|
-| `backlog` | Fluxo A, step 1 | title is non-empty | ask the operator for one |
-| `specreview` | Fluxo A, step 2 | `spec_path` is set **and the file exists** | the spec was never written — go to Fluxo A, step 1 |
-| `readytodo` | Fluxo B, step 1 | spec file exists; `expected_results` non-empty; every `blockedBy` id is `done` | missing spec or results → Fluxo A, step 1. Unmet dependency → move to `blocked` |
-| `inprogress` | Fluxo B, step 1 (re-dispatch the developer) | same as `readytodo` | same as `readytodo`, plus the resumption briefing |
-| `codereview` | Fluxo B, step 2 | there is something to review (`git diff --stat` against the task's base is non-empty) | the developer never ran — go to Fluxo B, step 1 |
-| `qareview` | Fluxo B, step 3 | `expected_results` non-empty | QA receives only these; go to Fluxo A, step 1 |
+| `backlog` | `meridian:spec-generator` | title is non-empty | ask the operator for one |
+| `specreview` | `meridian:spec-reviewer` | `spec_path` is set **and the file exists** | the spec was never written — go back to `backlog` |
+| `readytodo` | `meridian:developer` | spec file exists; `expected_results` non-empty; every `blockedBy` id is `done` | missing spec or results → back to `backlog`. Unmet dependency → move to `blocked` |
+| `inprogress` | `meridian:developer` (re-dispatch) | same as `readytodo` | same as `readytodo`, plus the resumption briefing |
+| `codereview` | `meridian:code-reviewer` | there is something to review (`git diff --stat` against the task's base is non-empty) | the developer never ran — go back to `readytodo` |
+| `qareview` | `meridian:qa` | `expected_results` non-empty | QA receives only these; go back to `backlog` |
 | `blocked` | Not runnable. See **Unblocking**. | the `blockedBy` ids are genuinely still open | all `done` → unblock it instead of reporting |
 | `done`, `nope` | Nothing to do. | — | refuse |
 
@@ -45,8 +42,8 @@ supposed to leave behind. Verify, do not assume.
 should have produced the missing artefact and continue from there. That is what
 repairs a task someone moved too far ahead.
 
-**A reroute consumes an iteration.** If Fluxo A has just run and the spec is
-still not on disk, that is a failure, not a detour — otherwise two stages push
+**A reroute consumes an iteration.** If the `backlog` stage has just run and
+the spec is still not on disk, that is a failure, not a detour — otherwise two stages push
 the task back and forth forever. The cap of five below covers reroutes too.
 
 A task found with `running: true` and no live agent behind it was interrupted.
@@ -130,9 +127,14 @@ Do not leave a task `running: true` across a stop, a block, or the end of a
 session. A stale `true` is what makes the board look like work is in flight when
 nothing is.
 
-## Fluxo A — spec
+## The stages
 
-For a task in `backlog`:
+There is no separate "spec phase" and "build phase" to keep track of. A task
+sits at a status, that status names one agent, and you dispatch it. What follows
+is that list, in the order a task normally passes through it — but the order is
+descriptive, not a script: you enter wherever the task already is.
+
+### `backlog` — write the spec
 
 1. **Generate the spec.** Set `running: true`. Dispatch `meridian:spec-generator`
    with the task title, its `expected_results`, the `spec_path` of every task in
@@ -152,24 +154,22 @@ For a task in `backlog`:
    returns, set `running: false`.
 
 3. **On `APPROVED`:** move the task to `readytodo` and clear
-   `last_review_findings` to `[]` in the same update. The task is now ready for
-   Fluxo B. (No unblocking sweep here — dependents wait for `done`, not for an
-   approved spec.)
+   `last_review_findings` to `[]` in the same update. The task is now ready to build.
+   (No unblocking sweep here — dependents wait for `done`, not for an approved
+   spec.)
 
 4. **On `NEEDS_REVISION`:** run the **stagnation check** below. If it clears,
    increment `spec_iterations`, store the reviewer's blocking findings in
    `last_review_findings`, set `running: true`, and redispatch
    `meridian:spec-generator` with **the findings only** — not the whole review,
-   not the previous conversation. When it returns, set `running: false` and go
-   back to step 2.
+   not the previous conversation. When it returns, set `running: false` and
+   review the spec again.
 
 5. **Suggestions.** Append the reviewer's non-blocking suggestions to
    `docs/suggestions-log.md` under a heading `## [<id>] <title> — <date>`, then
    trim that file to its last 30 entries so it cannot grow without bound.
 
-## Fluxo B — build
-
-For a task in `readytodo`:
+### `readytodo` — implement
 
 1. **Implement.** Move the task to `inprogress`. Set `running: true`. Dispatch
    `meridian:developer` with the `spec_path` and the task's `expected_results`.
@@ -203,8 +203,8 @@ For a task in `readytodo`:
      ```
 
      Both artifacts are optional and routinely absent: `docs/suggestions-log.md`
-     does not exist until Fluxo A step 5 first writes it, and a task created
-     straight into `readytodo` by hand has no `spec_path` at all. The guards
+     does not exist until the `specreview` stage first writes it, and a task
+     created straight into a later status has no `spec_path` at all. The guards
      matter because `git add` fails **closed** on a missing pathspec — one
      absent file aborts the whole command and stages *nothing*, not even the
      paths that do exist. Unguarded, that would block the commit on exactly the
@@ -282,14 +282,14 @@ for genuine disagreement on something the agents never disagreed about.
 ## Unblocking
 
 `blockedBy` gates **implementation, not specification.** A task whose
-dependencies are still open may run Fluxo A and reach `readytodo` — writing its
+dependencies are still open may be specced and reach `readytodo` — writing its
 spec needs the *specs* of the tasks it depends on, not their finished code,
-which is exactly why Fluxo A step 1 passes the `spec_path` of every `blockedBy`
-task to the generator. Only entering Fluxo B requires those dependencies to be
-`done`. This lets several specs be ready while one thing is being built,
+which is exactly why the `backlog` stage passes the `spec_path` of every
+`blockedBy` task to the generator. Only dispatching the developer requires those
+dependencies to be `done`. This lets several specs be ready while one thing is being built,
 instead of serialising the whole pipeline.
 
-The one thing Fluxo A does need is that each `blockedBy` task already has a
+The one thing specifying does need is that each `blockedBy` task already has a
 `spec_path`. If one does not, this task waits — but it waits for a spec, which
 is a far shorter wait than waiting for `done`.
 
@@ -300,7 +300,7 @@ Whenever a task reaches `done`, sweep the board:
    that task to `readytodo` when it already has an approved spec (`spec_path`
    set and the file present), and to `backlog` when it does not. Clear the
    dependency justification either way. Never send a task with an approved spec
-   back to `backlog` — that discards the spec work and re-runs Fluxo A on it.
+   back to `backlog` — that discards the spec work and specs it a second time.
 3. A `blocked` task whose `blockedBy` is empty is not waiting on anything the
    board knows about — it was blocked by an iteration cap or a failure. Leave it
    blocked and surface it to the operator; only a human clears those.

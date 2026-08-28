@@ -56,7 +56,7 @@ everything this file does not spell out.
 
 It is the procedure: the two flows and their steps, the `running` flag rules,
 the 5-round iteration cap and the stagnation check, the specialist-failure rule,
-the commit at the end of Fluxo B, the unblocking sweep, and the context
+the commit after QA approves, the unblocking sweep, and the context
 discipline that says what to keep from a specialist's report. This file
 tells you which task to enter and where; that file tells you what happens next.
 Where the two seem to differ, `pipeline.md` wins.
@@ -113,12 +113,12 @@ the stage that should have produced the missing artefact; it does not refuse.
 
 | Status | Action |
 |---|---|
-| `backlog` | Fluxo A step 1 — dispatch `meridian:spec-generator` |
-| `specreview` | Fluxo A step 2 — dispatch `meridian:spec-reviewer` |
-| `readytodo` | Fluxo B step 1 — dispatch `meridian:developer` |
-| `inprogress` | Fluxo B step 1 — dispatch `meridian:developer` **with the resumption briefing** (section 6) |
-| `codereview` | Fluxo B step 2 — dispatch `meridian:code-reviewer` |
-| `qareview` | Fluxo B step 3 — dispatch `meridian:qa` |
+| `backlog` | dispatch `meridian:spec-generator` |
+| `specreview` | dispatch `meridian:spec-reviewer` |
+| `readytodo` | dispatch `meridian:developer` |
+| `inprogress` | dispatch `meridian:developer` **with the resumption briefing** (section 6) |
+| `codereview` | dispatch `meridian:code-reviewer` |
+| `qareview` | dispatch `meridian:qa` |
 | `blocked` | **Do not start.** Report `justification` and `blockedBy`, and stop. |
 | `done`, `nope` | **Refuse.** See section 7. |
 
@@ -129,7 +129,7 @@ carrying it was interrupted. Say so, then enter at its `status` row above.
 
 A task flows through **consecutive stages in a single invocation**. It does not
 stop at a stage boundary waiting to be invoked again. A `backlog` task runs all
-of Fluxo A and continues straight into Fluxo B without a second call to this
+the spec stages and continues straight into the build stages without a second call to this
 skill; a `readytodo` task runs implementation, code review and QA, is committed,
 and lands in `done`.
 

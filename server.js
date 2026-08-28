@@ -498,7 +498,7 @@ app.put('/api/projects', (req, res) => {
 // REST API to add a task
 app.post('/api/projects/tasks', (req, res) => {
     try {
-        const { projectPath, title, blockedBy, expected_results, priority, justification } = req.body;
+        const { projectPath, title, status, blockedBy, expected_results, priority, justification } = req.body;
         if (!projectPath || !title) {
             return res.status(400).json({ error: 'projectPath and title are required' });
         }
@@ -529,7 +529,7 @@ app.post('/api/projects/tasks', (req, res) => {
         const newTask = stampNewTask({
             id: nextTaskId(tasksData.tasks, key),
             title,
-            status: 'backlog',
+            status: status || 'backlog',
             justification: justification || '',
             priority: priority || DEFAULT_PRIORITY,
             expected_results: Array.isArray(expected_results) ? expected_results : [],

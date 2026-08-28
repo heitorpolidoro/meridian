@@ -107,12 +107,13 @@ server-owned.
 
 ### 4. Set the starting status
 
-Create always lands a task in `backlog` — the create endpoint ignores a `status`
-field — and that is where every task you create stays. **Do not move any of them
-to `blocked`.**
+Every task you create stays in `backlog`. **Do not move any of them to
+`blocked`, and do not create any of them in a later status** — the create
+endpoint would honour one, but planned work has not started, and `backlog` is
+what that means.
 
 `blockedBy` gates implementation, not specification. A task whose dependencies
-are still open can and should have its spec written: Fluxo A feeds the generator
+are still open can and should have its spec written: the `backlog` stage feeds the generator
 the `spec_path` of every `blockedBy` task, so what it needs from a dependency is
 that dependency's *spec*, not its finished code. Starting dependents in `blocked`
 would stall spec work behind implementation work and serialise the whole

@@ -1,11 +1,11 @@
 ---
 name: new
-description: Use when the operator wants to add a task to the current project's Meridian backlog - creates it through the API with expected results.
+description: Use when the operator wants to record a task in the current project's Meridian board - captures an idea from a title alone, or logs work already underway or finished.
 ---
 
 # Meridian New
 
-Creates one task in the current project's backlog. Invoked as
+Creates one task on the current project's board. Invoked as
 `meridian:new "<title>"`. Field rules, statuses and priorities below follow
 `schema.md`; if anything here disagrees with it, that file wins.
 
@@ -76,7 +76,35 @@ validate it yourself before calling the API — it must be exactly one of
 the operator the four valid values and ask them to pick one; do not send an
 invalid value and rely on the server's 400.
 
-## 5. Create the task
+## 5. Resolve `status` — and report the gap, do not close it
+
+Optional; default `backlog`. A task normally starts as an idea, and `backlog` is
+where an idea belongs.
+
+But work does not always arrive in that order. If the operator says the work is
+already underway or already finished — "I built this, it should have been a
+task" — take the status they name. It must be one of the nine; if it is not, list
+them and ask. Creating where reality is beats creating a lie and fixing it later.
+
+**Report what that status is missing; never go and produce it.** A task created
+at `codereview` has no spec and no `expected_results`, and satisfying a stage's
+prerequisites is `meridian:work`'s job — it owns the stage checks, the reroute
+rule and the iteration cap. Duplicating that walk here would give the two skills
+different answers to the same question. So say, plainly, something like:
+
+> Created `PROJ-42` at `codereview`. It has no spec and no expected results, so
+> `meridian:work` will send it back to be specced before reviewing anything.
+
+Two cases worth naming when they come up:
+
+- **`done`** — the honest target for work that is genuinely finished. It is a
+  record, not a pipeline run, and the server stamps `completed_at` on create.
+- **`codereview` or later, for work in progress** — `meridian:work` will route it
+  back to be specced, writing a spec for code that already exists. That is
+  reasonable, but tell the operator to expect it rather than letting it surprise
+  them.
+
+## 6. Create the task
 
 ```bash
 BASE="${MERIDIAN_URL:-http://localhost:3333}"
@@ -86,19 +114,23 @@ curl -sS -X POST "$BASE/api/projects/tasks" \
     "projectPath": "<absolute path of the current directory>",
     "title": "<title>",
     "expected_results": ["<expected result>", "..."],
-    "priority": "<priority>"
+    "priority": "<priority>",
+    "status": "<status>"
   }'
 ```
 
+Omit `status` entirely for the ordinary case; send it only when the operator
+placed the task somewhere other than `backlog`.
+
 The response is `{ "success": true, "task": { ... } }`. Take the
 server-assigned `id` from there — never compute it, and never send an `id`,
-`status`, `created_at`, `moved_at` or `updated_at` in the request. Every new
-task lands in `backlog` regardless of what is sent; do not send `status`.
+`created_at`, `moved_at`, `updated_at` or `completed_at`. Those five are the
+server's, and it overwrites whatever you send.
 
 If the request fails, show the operator the server's error body rather than
 guessing at the cause.
 
-## 6. Report
+## 7. Report
 
 Tell the operator the created task's `id`, `title` and `status` (always
 `backlog`), and the `expected_results` and `priority` it was created with.
