@@ -107,8 +107,8 @@ if [ -n "$CHECKOUT" ] && [ -f "$CHECKOUT/cli.js" ]; then echo "$CHECKOUT"; else 
 
 `<resolved plugin root>` is the directory that *contains* `references/` — take
 the path you resolved in the skill's **Resolve the shared references** section
-and drop the trailing `/references/<file>.md` from it. On a checkout that is
-`<checkout>/plugin/plugins/meridian`, so `../../..` is `<checkout>`.
+and drop the trailing `/references/<file>.md` from it. In a checkout the plugin
+root is `<checkout>/plugin/plugins/meridian`, so `../../..` is `<checkout>`.
 
 If that prints `NONE`, the plugin was installed from a copy that does not carry
 the checkout. **Ask the operator for the path to their Meridian checkout**, and
@@ -241,9 +241,9 @@ curl -sS -X POST "$BASE/api/projects" \
 The server does the rest: it records the path in the workspace's
 `projects.json`, creates `./.meridian/` if it is not already there, writes
 `project-info.json`, adds `.meridian/` to the project's `.gitignore` (creating
-that file if it has none), and derives the task `key` from `name`. Filling `name`, `stack` and `description` at
-creation time is what keeps the project's dashboard card from appearing
-immediately with three "missing" badges.
+that file if it has none), and derives the task `key` from `name`. Filling
+`name`, `stack` and `description` at creation time is what keeps the project's
+dashboard card from appearing immediately with three "missing" badges.
 
 A `409` means the path is already registered — treat that as success and
 continue.
