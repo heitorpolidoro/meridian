@@ -134,7 +134,9 @@ sits at a status, that status names one agent, and you dispatch it. What follows
 is that list, in the order a task normally passes through it — but the order is
 descriptive, not a script: you enter wherever the task already is.
 
-### `backlog` — write the spec
+### `backlog` and `specreview` — specifying
+
+Enter at step 1 from `backlog`, at step 2 from `specreview`.
 
 1. **Generate the spec.** Set `running: true`. Dispatch `meridian:spec-generator`
    with the task title, its `expected_results`, the `spec_path` of every task in
@@ -169,7 +171,10 @@ descriptive, not a script: you enter wherever the task already is.
    `docs/suggestions-log.md` under a heading `## [<id>] <title> — <date>`, then
    trim that file to its last 30 entries so it cannot grow without bound.
 
-### `readytodo` — implement
+### `readytodo`, `inprogress`, `codereview` and `qareview` — building
+
+Enter at step 1 from `readytodo` or `inprogress`, at step 2 from `codereview`,
+at step 3 from `qareview`.
 
 1. **Implement.** Move the task to `inprogress`. Set `running: true`. Dispatch
    `meridian:developer` with the `spec_path` and the task's `expected_results`.
