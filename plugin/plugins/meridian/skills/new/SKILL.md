@@ -38,6 +38,11 @@ resolves `$BASE`, resolves the project to the current working directory (never
 a parent), and gets the server running. Do not repeat or shortcut any of its
 steps here.
 
+`$BASE` does not survive between bash calls: shell state is not shared across
+Bash tool invocations, only the working directory is. Every block below sets
+`BASE` again on its own first line, and so must every block you write. A block
+that inherits nothing runs with `BASE` empty and requests a relative URL.
+
 If the preamble stops — the operator declined registration, or the server
 could not be reached — stop too. There is no fallback path for creating a task:
 a create is a write, and hand-editing `tasks.json` cannot assign an id.
@@ -72,6 +77,7 @@ invalid value and rely on the server's 400.
 ## 5. Create the task
 
 ```bash
+BASE="${MERIDIAN_URL:-http://localhost:3333}"
 curl -sS -X POST "$BASE/api/projects/tasks" \
   -H 'Content-Type: application/json' \
   -d '{

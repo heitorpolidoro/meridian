@@ -43,6 +43,11 @@ resolves `$BASE`, resolves the project to the current working directory (never a
 parent), and gets the server running. Do not repeat or shortcut any of its
 steps here.
 
+`$BASE` does not survive between bash calls: shell state is not shared across
+Bash tool invocations, only the working directory is. Every block below sets
+`BASE` again on its own first line, and so must every block you write. A block
+that inherits nothing runs with `BASE` empty and requests a relative URL.
+
 If the operator declines registration, stop — there is no board to report.
 
 If the server cannot be started, the preamble's read-only fallback applies:
@@ -53,6 +58,7 @@ you are reporting from the file because the server is down.
 ## 2. Fetch the board — twice, for two different jobs
 
 ```bash
+BASE="${MERIDIAN_URL:-http://localhost:3333}"
 PROJECT="<absolute path of the current directory>"
 
 # a) the display table: server-ordered, capped at five per status
