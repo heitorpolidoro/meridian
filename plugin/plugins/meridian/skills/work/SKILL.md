@@ -12,9 +12,31 @@ This skill is the orchestrator. It sets every status, it dispatches the
 specialists, it reads their verdicts, and it makes every task write through the
 API. The specialists never write task state.
 
+## 0. Resolve the shared references
+
+`preamble.md`, `pipeline.md` and `schema.md` are shared by all four Meridian
+skills and live in the plugin's own `references/` directory — **not** inside
+this skill's own folder. Wherever this file names one of them, resolve it by
+trying these two paths in order and using the first that exists:
+
+1. `${CLAUDE_PLUGIN_ROOT}/references/<file>.md`
+2. `../../references/<file>.md`, relative to the `Base directory for this
+   skill: <absolute path>` line the harness states at invocation — use this
+   when the first path does not exist, or when `${CLAUDE_PLUGIN_ROOT}` arrives
+   unexpanded, as that literal text.
+
+Both are given because only one of them is directly observed: the base
+directory line appears on every invocation, while the expansion of
+`${CLAUDE_PLUGIN_ROOT}` inside skill prose is unverified either way. Test which
+one exists — `test -f <candidate>` — before reading it, and use that resolved
+absolute path everywhere this file asks for one.
+
+Never read a bare `references/<file>.md`. Relative to this skill's own folder
+that path does not exist, and the read fails.
+
 ## 1. Perform the shared preamble
 
-Follow `references/preamble.md` in order, and stop where it says stop. It
+Follow `preamble.md` in order, and stop where it says stop. It
 resolves `$BASE`, resolves the project to the current working directory (never a
 parent), and gets the server running. Do not repeat or shortcut any of its
 steps here.
@@ -24,7 +46,7 @@ there is no hand-edit fallback for it — the server owns the timestamps.
 
 ## 2. Load the pipeline
 
-Read `references/pipeline.md` now, before doing anything else, and follow it for
+Read `pipeline.md` now, before doing anything else, and follow it for
 everything this file does not spell out.
 
 It is the procedure: the two flows and their steps, the `running` flag rules,
@@ -32,9 +54,9 @@ the 5-round iteration cap and the stagnation check, the specialist-failure rule,
 the commit at the end of Fluxo B, the unblocking sweep, and the context
 discipline that says what to keep from a specialist's report. This file
 tells you which task to enter and where; that file tells you what happens next.
-Where the two seem to differ, `references/pipeline.md` wins.
+Where the two seem to differ, `pipeline.md` wins.
 
-`references/schema.md` is the field, status, priority and API contract. Read it
+`schema.md` is the field, status, priority and API contract. Read it
 when you need a field definition.
 
 ## 3. Resolve the task
@@ -63,7 +85,7 @@ belief:
 Only once both checks pass does an empty `tasks` array mean an empty board.
 
 - **No id was given.** Follow **Choosing which task** in
-  `references/pipeline.md`: it picks within a stage and tells you to ask rather
+  `pipeline.md`: it picks within a stage and tells you to ask rather
   than guess across stages. If you want the across-stage choice made for you,
   that is `meridian:next`.
 - **The id is not on the board.** Say so and stop. Do not create it.
@@ -98,7 +120,7 @@ of Fluxo A and continues straight into Fluxo B without a second call to this
 skill; a `readytodo` task runs implementation, code review and QA, is committed,
 and lands in `done`.
 
-Stop only where `references/pipeline.md` says to stop: the task reaches `done`,
+Stop only where `pipeline.md` says to stop: the task reaches `done`,
 or it lands in `blocked` — by the iteration cap, by the stagnation check, or by
 a specialist failure. Report where it ended and why.
 
@@ -143,7 +165,7 @@ the table in section 4.
 `blocked` is a report, not a refusal. Print the task's `justification` and its
 `blockedBy` ids with each one's current status, so the operator can see what it
 is waiting on, and stop. Only the unblocking sweep in
-`references/pipeline.md` — which runs when some *other* task reaches `done` —
+`pipeline.md` — which runs when some *other* task reaches `done` —
 moves a dependency-blocked task back to `backlog`, and nothing but a human
 clears a task blocked by an iteration cap or a specialist failure.
 
@@ -172,17 +194,30 @@ status or priority, and guessing past it corrupts the board.
 
 ## 9. Dispatching a specialist
 
-Follow **Dispatching a specialist** in `references/pipeline.md`, and pass each
+Follow **Dispatching a specialist** in `pipeline.md`, and pass each
 step exactly what that step says to pass — the isolation rules there are the
 reason the verdicts are worth anything.
 
 One mechanical point that is easy to get wrong: a subagent inherits nothing
-from you, **including this skill's base directory**. When this skill is
-invoked the harness gives you a line reading `Base directory for this skill:
-<absolute path>`. Build the absolute path of `references/schema.md` from that
-line and put it in every dispatch prompt. A relative path, or the literal text
-`${CLAUDE_PLUGIN_ROOT}`, is unresolvable inside an agent — it will simply fail
-to find the file and carry on guessing at field names.
+from you, **including this skill's base directory**. No base directory line is
+injected into an agent, so an agent cannot recover from a bad path — it will
+simply fail to find the file and carry on guessing at field names. A relative
+path, or the literal text `${CLAUDE_PLUGIN_ROOT}`, is likewise unresolvable
+inside an agent.
+
+So resolve `schema.md` yourself, with the two-path procedure of section 0, and
+put the **resolved absolute path** in every dispatch prompt — `meridian:pm`
+included. The base directory the harness names is this skill's own folder, two
+levels below the plugin's `references/`, so a path built from it directly lands
+on `skills/work/references/schema.md`, which does not exist. Confirm the path
+you are about to hand over first:
+
+```bash
+test -f "<resolved absolute path>" && echo ok || echo BAD
+```
+
+If it prints `BAD`, do not dispatch. Resolve the other candidate from section 0
+and test again; if neither exists, say so and stop.
 
 ## 10. Report
 

@@ -7,11 +7,33 @@ description: Use when the operator wants to add a task to the current project's 
 
 Creates one task in the current project's backlog. Invoked as
 `meridian:new "<title>"`. Field rules, statuses and priorities below follow
-`references/schema.md`; if anything here disagrees with it, that file wins.
+`schema.md`; if anything here disagrees with it, that file wins.
+
+## 0. Resolve the shared references
+
+`preamble.md`, `pipeline.md` and `schema.md` are shared by all four Meridian
+skills and live in the plugin's own `references/` directory — **not** inside
+this skill's own folder. Wherever this file names one of them, resolve it by
+trying these two paths in order and using the first that exists:
+
+1. `${CLAUDE_PLUGIN_ROOT}/references/<file>.md`
+2. `../../references/<file>.md`, relative to the `Base directory for this
+   skill: <absolute path>` line the harness states at invocation — use this
+   when the first path does not exist, or when `${CLAUDE_PLUGIN_ROOT}` arrives
+   unexpanded, as that literal text.
+
+Both are given because only one of them is directly observed: the base
+directory line appears on every invocation, while the expansion of
+`${CLAUDE_PLUGIN_ROOT}` inside skill prose is unverified either way. Test which
+one exists — `test -f <candidate>` — before reading it, and use that resolved
+absolute path everywhere this file asks for one.
+
+Never read a bare `references/<file>.md`. Relative to this skill's own folder
+that path does not exist, and the read fails.
 
 ## 1. Perform the shared preamble
 
-Follow `references/preamble.md` in order, and stop where it says stop. It
+Follow `preamble.md` in order, and stop where it says stop. It
 resolves `$BASE`, resolves the project to the current working directory (never
 a parent), and gets the server running. Do not repeat or shortcut any of its
 steps here.
@@ -23,7 +45,7 @@ a create is a write, and hand-editing `tasks.json` cannot assign an id.
 ## 2. Get the title
 
 Take the title from the invocation argument. If it is missing, ask the
-operator for one. Keep it short and imperative, per `references/schema.md`.
+operator for one. Keep it short and imperative, per `schema.md`.
 
 ## 3. Require `expected_results`
 

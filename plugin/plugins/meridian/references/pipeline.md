@@ -73,11 +73,27 @@ inherits nothing from you — no working directory context, no skill base
 directory, no conversation.
 
 In particular, an agent cannot resolve a path to this plugin's own files on its
-own. When you dispatch any of the five specialists, **pass the absolute path of
-`references/schema.md`** in the prompt, the same way you pass a spec path. Build
-it from the base directory the harness gives you when this skill is invoked
-("Base directory for this skill: ..."). Without it, a specialist that needs a
-field definition has nowhere to look.
+own, and no base directory is injected into it, so it cannot recover from a bad
+one. When you dispatch **any** agent — the five specialists and `meridian:pm`
+alike — **pass the absolute path of `schema.md`** in the prompt, the same way
+you pass a spec path. Without it, an agent that needs a field definition has
+nowhere to look.
+
+Resolve that path the way the invoking skill's **Resolve the shared references**
+section says: try `${CLAUDE_PLUGIN_ROOT}/references/schema.md` first, then
+`../../references/schema.md` relative to the "Base directory for this skill"
+line, and use whichever exists. Do **not** build it from the base directory
+alone — that directory is the skill's own folder, two levels below the plugin's
+`references/`, so the result would be `skills/<skill>/references/schema.md`,
+which does not exist.
+
+Verify the resolved path exists before it goes into a prompt:
+
+```bash
+test -f "<resolved absolute path>" && echo ok || echo BAD
+```
+
+On `BAD`, do not dispatch — an agent handed a broken path cannot recover.
 
 Beyond that, pass only what each step below says to pass — the isolation rules
 there are deliberate.

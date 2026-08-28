@@ -11,12 +11,34 @@ session ended. Invoked as `meridian:status`.
 
 This skill is **read-only**. It issues `GET` requests and nothing else. It never
 creates, updates or deletes a task, and it never edits `.meridian/` by hand.
-Field names, statuses and priorities follow `references/schema.md`; if anything
+Field names, statuses and priorities follow `schema.md`; if anything
 here disagrees with that file, that file wins.
+
+## 0. Resolve the shared references
+
+`preamble.md`, `pipeline.md` and `schema.md` are shared by all four Meridian
+skills and live in the plugin's own `references/` directory — **not** inside
+this skill's own folder. Wherever this file names one of them, resolve it by
+trying these two paths in order and using the first that exists:
+
+1. `${CLAUDE_PLUGIN_ROOT}/references/<file>.md`
+2. `../../references/<file>.md`, relative to the `Base directory for this
+   skill: <absolute path>` line the harness states at invocation — use this
+   when the first path does not exist, or when `${CLAUDE_PLUGIN_ROOT}` arrives
+   unexpanded, as that literal text.
+
+Both are given because only one of them is directly observed: the base
+directory line appears on every invocation, while the expansion of
+`${CLAUDE_PLUGIN_ROOT}` inside skill prose is unverified either way. Test which
+one exists — `test -f <candidate>` — before reading it, and use that resolved
+absolute path everywhere this file asks for one.
+
+Never read a bare `references/<file>.md`. Relative to this skill's own folder
+that path does not exist, and the read fails.
 
 ## 1. Perform the shared preamble
 
-Follow `references/preamble.md` in order, and stop where it says stop. It
+Follow `preamble.md` in order, and stop where it says stop. It
 resolves `$BASE`, resolves the project to the current working directory (never a
 parent), and gets the server running. Do not repeat or shortcut any of its
 steps here.
@@ -103,7 +125,7 @@ State the consistency line plainly either way. When nothing is stale, say
 checked".
 
 Do not unblock anything. Moving those tasks back to `backlog` is the unblocking
-sweep in `references/pipeline.md`, which runs inside `work`; this skill only
+sweep in `pipeline.md`, which runs inside `work`; this skill only
 reports.
 
 ## 5. Interrupted tasks
