@@ -39,6 +39,12 @@ the beginning.
 A task found with `running: true` and no live agent behind it was interrupted.
 Say so, and resume it from its status row above.
 
+The `inprogress` row carries one thing this file does not define: an interrupted
+`inprogress` task may have left partial work in the working tree, so its
+`meridian:developer` dispatch also needs the **resumption briefing** — see
+"Resumption briefing" in the `work` skill, which owns dispatch payloads and
+holds that rule. No other status gets one.
+
 ## Choosing which task
 
 Normally you are given an explicit task id and this question does not arise —
