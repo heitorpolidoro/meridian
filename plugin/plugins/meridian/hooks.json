@@ -1,0 +1,35 @@
+{
+  "meridian-running-flag": {
+    "PreToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/workspace/meridian/plugin/plugins/meridian/scripts/running-flag.sh pre",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/workspace/meridian/plugin/plugins/meridian/scripts/running-flag.sh post",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "~/workspace/meridian/plugin/plugins/meridian/scripts/running-flag.sh stop",
+        "timeout": 10
+      }
+    ]
+  }
+}

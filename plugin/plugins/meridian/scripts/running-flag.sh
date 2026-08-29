@@ -28,8 +28,14 @@ INPUT="$(cat)"
 BASE="${MERIDIAN_URL:-http://localhost:3333}"
 
 # Session-scoped ledger of ids this session set running. One "<id>\t<cwd>" per line.
+# Field names differ by harness: Claude Code sends session_id, Antigravity sends
+# conversationId. Same for the project path below. Try Claude's first, then
+# Antigravity's — the marker grep that gates everything is field-agnostic.
 session_id() {
-  printf '%s' "$INPUT" | grep -o '"session_id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/'
+  local sid
+  sid=$(printf '%s' "$INPUT" | grep -o '"session_id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
+  [ -n "$sid" ] || sid=$(printf '%s' "$INPUT" | grep -o '"conversationId"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
+  printf '%s' "$sid"
 }
 LEDGER="${TMPDIR:-/tmp}/meridian-running-$(session_id)"
 
@@ -38,7 +44,11 @@ LEDGER="${TMPDIR:-/tmp}/meridian-running-$(session_id)"
 # containing a literal double quote will not match — acceptable, since such a
 # path breaks half the shell tooling on the machine anyway.
 cwd_json() {
-  printf '%s' "$INPUT" | grep -o '"cwd"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/^"cwd"[[:space:]]*:[[:space:]]*//'
+  local c
+  c=$(printf '%s' "$INPUT" | grep -o '"cwd"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/^"cwd"[[:space:]]*:[[:space:]]*//')
+  # Antigravity: workspacePaths is an array; its first element is the project.
+  [ -n "$c" ] || c=$(printf '%s' "$INPUT" | grep -o '"workspacePaths"[[:space:]]*:[[:space:]]*\[[[:space:]]*"[^"]*"' | head -1 | grep -o '"[^"]*"$')
+  printf '%s' "$c"
 }
 
 put_running() { # $1 = task id, $2 = cwd as JSON string, $3 = true|false
