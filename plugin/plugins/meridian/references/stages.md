@@ -83,8 +83,18 @@ at step 3 from `qareview`.
      ```bash
      if [ -n "<spec_path>" ] && [ -f "<spec_path>" ]; then git add -- "<spec_path>"; fi
      if [ -f docs/suggestions-log.md ]; then git add -- docs/suggestions-log.md; fi
-     git commit -m "<id>: <title>"
+     git commit -m "<type>(<id>): <summary>"
      ```
+
+     The message is a **Conventional Commit with the task id as the scope** —
+     for example `feat(PROJ-34): add the asset registry`. Pick the
+     type from what the change *is*, not from the pipeline stage that produced
+     it: `feat` for new capability, `fix` for a corrected defect, `refactor`,
+     `test`, `docs`, `chore` for the rest — lowercase, exactly one. The summary
+     is imperative and short enough to keep the whole first line under ~72
+     characters; derive it from the task title rather than pasting a long title
+     verbatim. The id in the scope is what ties the commit to the board —
+     `git log --grep '<id>'` must find it.
 
      Both artifacts are optional and routinely absent: `docs/suggestions-log.md`
      does not exist until the `specreview` stage first writes it, and a task
