@@ -1,6 +1,6 @@
 ---
-name: next
-description: Use when the operator does not know which Meridian task to pick up next - selects the task closest to done and hands it to work.
+name: meridian:next
+description: Use when the operator does not know which Meridian task to pick up next - selects the task closest to done and hands it to work. Invoked as `/meridian:next` or `meridian:next`.
 ---
 
 # Meridian Next

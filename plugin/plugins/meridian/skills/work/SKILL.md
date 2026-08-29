@@ -1,6 +1,6 @@
 ---
-name: work
-description: Use when the operator wants to start or resume work on a specific Meridian task - drives it through the pipeline until done or blocked.
+name: meridian:work
+description: Use when the operator wants to start or resume work on a specific Meridian task - drives it through the pipeline until done or blocked. Invoked as `/meridian:work` or `meridian:work`.
 ---
 
 # Meridian Work

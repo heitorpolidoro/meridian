@@ -1,6 +1,6 @@
 ---
-name: new
-description: Use when the operator wants to record a task in the current project's Meridian board - captures an idea from a title alone, or logs work already underway or finished.
+name: meridian:new
+description: Use when the operator wants to record a task in the current project's Meridian board - captures an idea from a title alone, or logs work already underway or finished. Invoked as `/meridian:new` or `meridian:new`.
 ---
 
 # Meridian New

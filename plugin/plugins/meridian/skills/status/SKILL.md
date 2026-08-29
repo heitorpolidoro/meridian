@@ -1,6 +1,6 @@
 ---
-name: status
-description: Use when the operator asks for the Meridian board state of the current project - lists the top tasks per status and surfaces interrupted work.
+name: meridian:status
+description: Use when the operator asks for the Meridian board state of the current project - lists the top tasks per status and surfaces interrupted work. Invoked as `/meridian:status` or `meridian:status`.
 ---
 
 # Meridian Status
@@ -52,8 +52,10 @@ If the operator declines registration, stop — there is no board to report.
 
 If the server cannot be started, the preamble's read-only fallback applies:
 read `./.meridian/tasks.json` directly. It is a bare JSON array in file order,
-so you must apply the ordering of section 2 yourself in that case, and say that
-you are reporting from the file because the server is down.
+so you must apply the ordering of section 2 yourself in that case (specifically:
+sort by `priority` then oldest `created_at`, or for `done` sort by `completed_at` descending,
+and take **AT MOST 5 tasks** per status), and say that you are reporting from the file
+because the server is down.
 
 ## 2. Fetch the board — once
 
@@ -161,7 +163,8 @@ open round's `last_review_findings` if it has any.
 
 ## 6. Offer to resume
 
-If section 5 found nothing, say so and stop.
+If section 5 found nothing, stop — silently, per section 3. An empty
+interrupted set is health, not a finding.
 
 If it found anything, **ask the operator** whether to resume one, and which.
 Ask; do not pick one and start it. If they decline, stop — leave the task

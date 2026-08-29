@@ -889,7 +889,7 @@ function renderTaskCardHtml(task) {
                 if (!move) return '';
                 return `
             <div class="task-actions">
-                <button class="task-move-btn task-move-${move.to}" onclick="changeTaskStatus('${task.id}', '${move.to}', '${task.status}', '${projPathAttr}')" title="Move this task to ${move.to}">${move.label}</button>
+                <button class="task-move-btn task-move-${move.to}" onclick="changeTaskStatus('${task.id}', '${move.to}', '${projPathAttr}')" title="Move this task to ${move.to}">${move.label}</button>
             </div>`;
             })()}
         </div>
@@ -1046,12 +1046,14 @@ addTaskForm.addEventListener('submit', async (e) => {
     }
 });
 
-window.changeTaskStatus = async function(taskId, newStatusId, oldStatus, targetProjPath) {
+window.changeTaskStatus = async function(taskId, newStatusId, targetProjPath) {
     const projPath = targetProjPath || currentProjectViewPath;
     if (!projPath || projPath === '__GLOBAL__') return;
-    
+
+    // The board offers exactly two moves (manualTransition): nope, and reopen.
+    // Only dismissal asks for a why — it is shown on the card afterwards.
     let justification = '';
-    if (newStatusId === 'blocked' || newStatusId === 'nope') {
+    if (newStatusId === 'nope') {
         justification = prompt(`Please provide a justification for moving this task to ${newStatusId.toUpperCase()}:`);
         if (justification === null) {
             refreshProjectView(); // Revert UI
