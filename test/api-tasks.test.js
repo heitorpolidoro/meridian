@@ -479,3 +479,40 @@ test('POST still rejects a status outside the nine', async () => {
         assert.equal(res.status, 400);
     });
 });
+
+test('GET with limit returns a summary computed over the whole board', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        for (let i = 0; i < 10; i++) await seed(base, dir);          // TST-1..10 in backlog
+        const done = await seed(base, dir, { status: 'done' });       // TST-11
+        await put(base, dir, 'TST-1', { status: 'inprogress' });
+        await put(base, dir, 'TST-2', { running: true });
+        await put(base, dir, 'TST-3', { status: 'blocked', blockedBy: [done.id] });
+        await put(base, dir, 'TST-4', { status: 'blocked', blockedBy: ['TST-5'] });
+
+        const res = await (await fetch(
+            `${base}/api/status?project=${encodeURIComponent(dir)}&limit=5`)).json();
+        const p = res.projects[0];
+
+        const backlogPage = p.tasks.filter(t => t.status === 'backlog');
+        assert.equal(backlogPage.length, 5, 'the page is still capped at five per status');
+        assert.equal(p.summary.counts.backlog, 7, 'counts cover the whole board, not the page');
+        assert.equal(p.summary.counts.done, 1);
+
+        const interrupted = p.summary.interrupted.map(t => t.id).sort();
+        assert.deepEqual(interrupted, ['TST-1', 'TST-2'], 'inprogress or running, both');
+
+        assert.deepEqual(p.summary.unblockable.map(t => t.id), ['TST-3'],
+            'blocked with every dependency done');
+    });
+});
+
+test('GET without limit carries no summary', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        await seed(base, dir);
+        const res = await (await fetch(
+            `${base}/api/status?project=${encodeURIComponent(dir)}`)).json();
+        assert.equal(res.projects[0].summary, undefined);
+    });
+});

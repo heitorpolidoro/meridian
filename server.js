@@ -178,6 +178,37 @@ function handleTaskReadError(err, res) {
     return false;
 }
 
+
+// The scoped caller (a meridian:* skill) needs three things the capped task
+// list cannot show: totals, tasks nobody is actually working, and dependencies
+// that have since been satisfied. Each is an answer over the WHOLE board, and
+// fetching the whole board to compute them client-side is how a 63-task project
+// turns a status check into a 100 KB payload. The server already holds the
+// list; it computes them here instead.
+function summarizeBoard(tasks) {
+    const counts = {};
+    const byId = new Map();
+    for (const t of tasks) {
+        counts[t.status] = (counts[t.status] || 0) + 1;
+        byId.set(t.id, t);
+    }
+
+    const interrupted = tasks
+        .filter(t => t.status === 'inprogress' || t.running === true)
+        .map(t => ({ id: t.id, title: t.title, status: t.status, running: t.running === true }));
+
+    // A blocked task whose dependencies are all done is waiting on nothing.
+    // An empty blockedBy is a different case — blocked by an iteration cap or a
+    // failure — and only a human clears those, so it is not listed here.
+    const unblockable = tasks
+        .filter(t => t.status === 'blocked'
+            && Array.isArray(t.blockedBy) && t.blockedBy.length > 0
+            && t.blockedBy.every(id => byId.get(id) && byId.get(id).status === 'done'))
+        .map(t => ({ id: t.id, title: t.title, blockedBy: t.blockedBy }));
+
+    return { counts, interrupted, unblockable };
+}
+
 function limitPerStatus(tasks, limit) {
     const byStatus = new Map();
     for (const task of tasks) {
@@ -328,6 +359,7 @@ function getStatusData(options = {}) {
                     stack: stackArray,
                     description: info.description,
                     tasks: options.limit ? limitPerStatus(tasksData.tasks || [], options.limit) : (tasksData.tasks || []),
+                    ...(options.limit ? { summary: summarizeBoard(tasksData.tasks || []) } : {}),
                     missingAgentsMd: !hasAgentsMd,
                     missingMeridianRules: missingMeridianRules,
                     outdatedMeridianRules: outdatedMeridianRules,
