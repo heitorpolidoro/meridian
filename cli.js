@@ -2,7 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
-const { ensureMeridianIgnored } = require('./lib/gitignore');
+const { registerProject } = require('./lib/projects');
 
 const args = process.argv.slice(2);
 const RUNNING_DIR = process.env.MERIDIAN_RUNNING_DIR || process.cwd();
@@ -117,49 +117,32 @@ if (cmd === 'start' || cmd === 'restart') {
         console.error("Usage: meridian add <path>");
         process.exit(1);
     }
-    
+
     // Resolve relative to where the command was run
     const absolutePath = path.resolve(RUNNING_DIR, projPath);
     const projName = path.basename(absolutePath);
 
-    const fsDir = path.dirname(PROJECTS_JSON_PATH);
-    if (!fs.existsSync(fsDir)) {
-        fs.mkdirSync(fsDir, { recursive: true });
+    let result;
+    try {
+        result = registerProject({
+            registryPath: PROJECTS_JSON_PATH,
+            projPath: absolutePath,
+            name: projName
+        });
+    } catch (e) {
+        console.error("Could not register project:", e.message);
+        process.exit(1);
     }
 
-    let projectsList = { projects: [] };
-    if (fs.existsSync(PROJECTS_JSON_PATH)) {
-        try {
-            projectsList = JSON.parse(fs.readFileSync(PROJECTS_JSON_PATH, 'utf8'));
-        } catch(e) {
-            console.error("Error reading projects.json:", e.message);
-            process.exit(1);
-        }
-    }
-
-    if (projectsList.projects.find(p => p.path === absolutePath)) {
+    if (!result.registered) {
         console.error(`Project at ${absolutePath} is already added.`);
         process.exit(1);
     }
 
-    projectsList.projects.push({
-        name: projName,
-        path: absolutePath,
-        stack: "",
-        purpose: ""
-    });
-
-    fs.writeFileSync(PROJECTS_JSON_PATH, JSON.stringify(projectsList, null, 2), 'utf8');
     console.log(`✅ Added project '${projName}' (${absolutePath})`);
-
-    // Add .meridian to .gitignore
-    try {
-        if (ensureMeridianIgnored(absolutePath)) {
-            console.log(`🔒 Added .meridian/ to .gitignore`);
-        }
-    } catch(e) {
-        console.error("Could not update .gitignore:", e.message);
-    }
+    console.log(`🔑 Task ids will be ${result.key}-1, ${result.key}-2, …`);
+    if (result.ignored) console.log(`🔒 Added .meridian/ to .gitignore`);
+    console.log(`   Edit its stack and description on the dashboard, or with the API.`);
 
     process.exit(0);
 } else {

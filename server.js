@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { deriveKey, nextTaskId, getTasks, saveTasks, stampNewTask, stampTaskUpdate, MalformedTasksError } = require('./lib/tasks');
 const { ensureMeridianIgnored } = require('./lib/gitignore');
+const { registerProject } = require('./lib/projects');
 
 const app = express();
 const PORT = process.env.PORT || 3333;
@@ -259,8 +260,6 @@ function getStatusData(options = {}) {
                             missingMeridianRules = true;
                         } else {
                             const block = content.substring(startIndex, endIndex + endTag.length);
-                            console.log(`[DEBUG] Project: ${info.name}`);
-                            console.log(`[DEBUG] block.trim() === getBoilerplate().trim(): ${block.trim() === getBoilerplate().trim()}`);
                             // Compare exact trimmed content without the leading \n\n
                             if (block.trim() !== getBoilerplate().trim()) {
                                 outdatedMeridianRules = true;
@@ -400,48 +399,11 @@ app.post('/api/projects', (req, res) => {
 
         const projPath = path.resolve(RUNNING_DIR, rawPath);
 
-        // Ensure global directory exists
-        const fsDir = path.dirname(PROJECTS_JSON_PATH);
-        if (!fs.existsSync(fsDir)) {
-            fs.mkdirSync(fsDir, { recursive: true });
-        }
-
-        let projectsList = { projects: [] };
-        if (fs.existsSync(PROJECTS_JSON_PATH)) {
-            projectsList = JSON.parse(fs.readFileSync(PROJECTS_JSON_PATH, 'utf8'));
-        }
-
-        // Avoid duplicates by path
-        if (projectsList.projects.find(p => p.path === projPath)) {
+        const { registered } = registerProject({
+            registryPath: PROJECTS_JSON_PATH, projPath, name, stack, description
+        });
+        if (!registered) {
             return res.status(409).json({ error: 'Project already exists' });
-        }
-
-        // Save path to global projects.json
-        projectsList.projects.push({ path: projPath });
-        fs.writeFileSync(PROJECTS_JSON_PATH, JSON.stringify(projectsList, null, 2), 'utf8');
-
-        // Create local .meridian directory and project-info.json
-        const localMeridianDir = path.join(projPath, '.meridian');
-        if (!fs.existsSync(localMeridianDir)) {
-            fs.mkdirSync(localMeridianDir, { recursive: true });
-        }
-        const infoPath = path.join(localMeridianDir, 'project-info.json');
-        const key = deriveKey(name);
-        const infoData = {
-            name,
-            key,
-            stack: stack || [],
-            description: description || ''
-        };
-        fs.writeFileSync(infoPath, JSON.stringify(infoData, null, 2), 'utf8');
-
-        // Same as `cli.js add`: the board we just created must not be committed.
-        try {
-            ensureMeridianIgnored(projPath);
-        } catch (e) {
-            // A project may legitimately have no writable .gitignore. The
-            // registration itself succeeded, so do not fail it over this.
-            console.error('Could not update .gitignore:', e.message);
         }
 
         res.status(201).json({ success: true });

@@ -88,3 +88,28 @@ test('restart replaces a running server with a new one', async () => {
         }
     }
 });
+
+test('add registers a project the same way the API does', async () => {
+    const ws = fixture();
+    const proj = path.join(ws, 'Audio Transcriber');
+    fs.mkdirSync(proj, { recursive: true });
+
+    const out = runCli(['add', proj], ws, 3999, pidFile());
+    assert.match(out, /Added project/);
+
+    const registry = JSON.parse(fs.readFileSync(path.join(ws, '.meridian', 'projects.json'), 'utf8'));
+    assert.deepEqual(registry.projects, [{ path: proj }], 'registry holds the path and nothing else');
+
+    const info = JSON.parse(fs.readFileSync(path.join(proj, '.meridian', 'project-info.json'), 'utf8'));
+    assert.equal(info.key, 'AT', 'a key was derived, so ids are not TASK-N');
+    assert.equal(info.name, 'Audio Transcriber');
+    assert.deepEqual(info.stack, []);
+});
+
+test('add refuses a project that is already registered', async () => {
+    const ws = fixture();
+    const proj = path.join(ws, 'dup');
+    fs.mkdirSync(proj, { recursive: true });
+    runCli(['add', proj], ws, 3999, pidFile());
+    assert.throws(() => runCli(['add', proj], ws, 3999, pidFile()), /already added|Command failed/);
+});

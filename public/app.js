@@ -84,16 +84,6 @@ function showFlashMessage(msg, type = 'info') {
     }, 4000);
 }
 
-function formatStatus(status) {
-    const map = {
-        'todo': 'To Do',
-        'in_progress': 'In Progress',
-        'blocked': 'Blocked',
-        'done': 'Done'
-    };
-    return map[status] || status;
-}
-
 function renderErrors(errors) {
     if (!errors || errors.length === 0) {
         errorContainer.innerHTML = '';
