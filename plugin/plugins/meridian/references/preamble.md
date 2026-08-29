@@ -74,29 +74,39 @@ curl -sS -f "$BASE/api/status" >/dev/null && echo up || echo down
 
 **If it answers**, continue to step 3.
 
-**If it does not**, do not reach for `cli.js start` yet. That command is
-destructive in ways a failed probe does not distinguish:
+**If it does not**, you may start it — `meridian start` is safe to call. It
+probes the port first, reports and exits when something already answers, and
+never kills a running process. Killing is `meridian restart`, which you should
+not run: replacing a server the operator is using is their decision, not yours.
 
-- It **SIGTERMs whatever pid is recorded in `meridian-server.pid`** before
-  starting anything. That PID file sits in the Meridian checkout — one file
-  shared by every project on the machine — so the process it kills is whichever
-  Meridian server the operator currently has running, very likely the live board
-  on port `3333`, which has nothing to do with the directory you are in. This is
-  the largest hazard of the three, and the reason for the guard below.
-- It always listens on the port from `PORT` (default `3333`), so it can only
-  ever produce the default instance. When `$BASE` is anything else, starting it
-  cannot fix the probe — it would kill a server and still leave `$BASE`
-  unreachable.
-- It picks its registry by walking up from the directory it is launched in,
-  looking for `.meridian/projects.json`, and falls back to the launch directory
-  when it finds none. With no registry above it, it would create a new, empty
-  one rather than use the operator's.
+Two conditions still make starting the wrong move, and both are worth checking
+before you run anything:
 
-### 2a. Locate the checkout
+- **`$BASE` is not the default instance.** `cli.js` can only ever listen on
+  `PORT` (default `3333`), so starting it cannot make a different address
+  answer. If `MERIDIAN_URL` points elsewhere, say the address is unreachable
+  and hand back to the operator.
+- **`cli.js` would pick the wrong registry.** It walks up from the directory it
+  is launched in looking for `.meridian/projects.json`, and creates a new empty
+  one if it finds none. Launch it from the project directory — the current one,
+  no `cd` — and it finds the workspace registry above the project on its own.
+  Confirm that first:
 
-`cli.js` lives in the Meridian checkout. That is neither this directory nor the
-plugin's skill folder, and no step so far has named it. Derive a candidate from
-the plugin root and **verify it**; never run a guessed path:
+```bash
+D="$PWD"; while [ "$D" != "/" ]; do
+  [ -f "$D/.meridian/projects.json" ] && { echo "$D"; break; }
+  D="$(dirname "$D")"
+done; [ "$D" = "/" ] && echo "NO REGISTRY"
+```
+
+  On `NO REGISTRY`, do not start — say so, since the server would come up backed
+  by an empty registry that is not the operator's.
+
+### Locate the checkout
+
+`cli.js` lives in the Meridian checkout, which is neither this directory nor the
+plugin's skill folder. Derive it from the plugin root and **verify it**; never
+run a guessed path:
 
 ```bash
 # The plugin ships inside the checkout at plugin/plugins/meridian,
@@ -107,83 +117,25 @@ if [ -n "$CHECKOUT" ] && [ -f "$CHECKOUT/cli.js" ]; then echo "$CHECKOUT"; else 
 
 `<resolved plugin root>` is the directory that *contains* `references/` — take
 the path you resolved in the skill's **Resolve the shared references** section
-and drop the trailing `/references/<file>.md` from it. In a checkout the plugin
-root is `<checkout>/plugin/plugins/meridian`, so `../../..` is `<checkout>`.
+and drop the trailing `/references/<file>.md`.
 
-If that prints `NONE`, the plugin was installed from a copy that does not carry
-the checkout. **Ask the operator for the path to their Meridian checkout**, and
-verify `cli.js` is in it before going on. If they do not give one, skip to *If
-it still cannot start* below.
+On `NONE`, the plugin was installed from a copy that does not carry the
+checkout. Ask the operator for the path and verify `cli.js` is in it before
+going on.
 
-### 2b. Check which registry `cli.js` would pick
-
-No `cd` — the current directory stays the project, as step 1 says. `cli.js`
-walks up from wherever it is launched, so launching it here finds the workspace
-registry above this project on its own. Confirm that it will:
-
-```bash
-D="$PWD"
-while [ "$D" != "/" ]; do
-  [ -f "$D/.meridian/projects.json" ] && break
-  D="$(dirname "$D")"
-done
-if [ "$D" = "/" ]; then echo "NO REGISTRY above $PWD"; else echo "registry: $D/.meridian/projects.json"; fi
-```
-
-On `NO REGISTRY`, do not start it: it would fall back to this directory and
-create a second, empty `projects.json`. Report that and let the operator start
-the server themselves.
-
-### 2c. The guard — run this before `cli.js start`, every time
+Then start it, from the project directory, and wait for it to answer:
 
 ```bash
 BASE="${MERIDIAN_URL:-http://localhost:3333}"
-CHECKOUT="<the verified checkout path from 2a>"
-PIDFILE="$CHECKOUT/meridian-server.pid"
-if [ "$BASE" != "http://localhost:3333" ]; then
-  echo "REFUSE: \$BASE is '$BASE' - cli.js start only ever produces the default instance"
-elif curl -sS -f "$BASE/api/status" >/dev/null 2>&1; then
-  echo "REFUSE: $BASE already answers - there is nothing to start"
-elif [ ! -f "$CHECKOUT/cli.js" ]; then
-  echo "REFUSE: no cli.js at '$CHECKOUT'"
-elif [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null; then
-  echo "REFUSE: $PIDFILE names a live process - starting would SIGTERM it"
-else
-  echo "SAFE TO START"
-fi
-```
-
-Run `cli.js start` **only** when that block prints `SAFE TO START`. On any
-`REFUSE`, do not start anything: report that the server at `$BASE` is
-unreachable, say which line refused and why, and let the operator start or stop
-their own server.
-
-The first condition is also what makes an unset `$BASE` harmless. `BASE` can
-only be empty in a block that forgot the `BASE=...` line — and an empty `$BASE`
-is not `http://localhost:3333`, so it refuses on the first branch instead of
-falling through into a command that would kill the operator's board. The guard
-re-probes in the same block for the same reason: the decision to start is never
-inherited from an earlier block's result.
-
-```bash
-BASE="${MERIDIAN_URL:-http://localhost:3333}"
-CHECKOUT="<the verified checkout path from 2a>"
 node "$CHECKOUT/cli.js" start
+for i in $(seq 1 20); do curl -sS -f "$BASE/api/status" >/dev/null && break; sleep 0.5; done
+curl -sS -f "$BASE/api/status" >/dev/null && echo up || echo "still down"
 ```
 
-Then re-probe until it responds, for a few seconds, with the `BASE=` line in
-each probing block.
-
-**If it still cannot start**, say so plainly, then fall back to reading
-`./.meridian/tasks.json` directly for anything read-only. Never *write* task
-state by hand without first telling the operator the server is down — the server
-owns the timestamps, and a hand-edit that skips them puts the board out of sync.
-See `schema.md` for the timestamp rules a hand-edit would have to reproduce.
-
-If registration is needed — the operator said yes in step 1, or step 3 case B
-finds this directory unregistered — and the server could not be started,
-**stop**: registration is a write, and there is no hand-edit fallback for it —
-the server is what creates `.meridian/` and derives the task key.
+**If it still cannot start**, say so and fall back to reading
+`./.meridian/tasks.json` directly for anything read-only. Never *write* by hand
+without telling the operator the server is down — the server owns the
+timestamps, and a hand-written task loses them.
 
 ## 3. Register the project
 
