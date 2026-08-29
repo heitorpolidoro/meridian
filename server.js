@@ -185,6 +185,27 @@ function handleTaskReadError(err, res) {
 // fetching the whole board to compute them client-side is how a 63-task project
 // turns a status check into a 100 KB payload. The server already holds the
 // list; it computes them here instead.
+
+// The selection order meridian:next applies, computed where the data already
+// is. Stage first — a task in qareview is one verdict from shipping, a backlog
+// task has not been specced — then priority within a stage, then oldest first.
+// Priority deliberately never crosses stages: a critical idea does not outrank
+// a low task that is nearly done. done, nope and blocked are not candidates at
+// any priority, so they are not returned at all.
+const WORKABLE_ORDER = ['qareview', 'codereview', 'inprogress', 'readytodo', 'specreview', 'backlog'];
+
+function workableTasks(tasks) {
+    return tasks
+        .filter(t => WORKABLE_ORDER.includes(t.status))
+        .sort((a, b) => {
+            const sa = WORKABLE_ORDER.indexOf(a.status), sb = WORKABLE_ORDER.indexOf(b.status);
+            if (sa !== sb) return sa - sb;
+            const pa = priorityRank(a.priority), pb = priorityRank(b.priority);
+            if (pa !== pb) return pa - pb;
+            return String(a.created_at || '').localeCompare(String(b.created_at || ''));
+        });
+}
+
 function summarizeBoard(tasks) {
     const counts = {};
     const byId = new Map();
@@ -358,7 +379,9 @@ function getStatusData(options = {}) {
                     relativePath: relPath,
                     stack: stackArray,
                     description: info.description,
-                    tasks: options.limit ? limitPerStatus(tasksData.tasks || [], options.limit) : (tasksData.tasks || []),
+                    tasks: options.workable ? workableTasks(tasksData.tasks || [])
+                        : options.limit ? limitPerStatus(tasksData.tasks || [], options.limit)
+                        : (tasksData.tasks || []),
                     ...(options.limit ? { summary: summarizeBoard(tasksData.tasks || []) } : {}),
                     missingAgentsMd: !hasAgentsMd,
                     missingMeridianRules: missingMeridianRules,
@@ -390,6 +413,7 @@ app.get('/api/status', (req, res) => {
     const limit = req.query.limit ? parseInt(req.query.limit, 10) : undefined;
     res.json(getStatusData({
         project: req.query.project,
+        workable: req.query.workable === '1' || undefined,
         limit: Number.isInteger(limit) && limit > 0 ? limit : undefined
     }));
 });

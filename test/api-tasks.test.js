@@ -516,3 +516,29 @@ test('GET without limit carries no summary', async () => {
         assert.equal(res.projects[0].summary, undefined);
     });
 });
+
+test('GET with workable=1 returns only workable tasks, in selection order', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        await seed(base, dir, { priority: 'critical' });              // TST-1 backlog critical
+        await seed(base, dir, { status: 'qareview', priority: 'low' }); // TST-2
+        await seed(base, dir, { status: 'done' });                    // TST-3
+        await seed(base, dir, { status: 'nope' });                    // TST-4
+        await put(base, dir, 'TST-3', {});                            // no-op, keeps ids stable
+        await seed(base, dir, { status: 'readytodo', priority: 'high' }); // TST-5
+        await seed(base, dir, { status: 'readytodo', priority: 'critical' }); // TST-6
+        const blocked = await seed(base, dir);                        // TST-7
+        await put(base, dir, blocked.id, { status: 'blocked', blockedBy: ['TST-1'] });
+
+        const res = await (await fetch(
+            `${base}/api/status?project=${encodeURIComponent(dir)}&workable=1`)).json();
+        const ids = res.projects[0].tasks.map(t => t.id);
+
+        assert.ok(!ids.includes('TST-3'), 'done excluded');
+        assert.ok(!ids.includes('TST-4'), 'nope excluded');
+        assert.ok(!ids.includes('TST-7'), 'blocked excluded');
+        assert.equal(ids[0], 'TST-2', 'stage beats priority: low qareview before critical backlog');
+        assert.deepEqual(ids, ['TST-2', 'TST-6', 'TST-5', 'TST-1'],
+            'stage first, then priority, then age');
+    });
+});

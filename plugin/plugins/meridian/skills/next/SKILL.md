@@ -49,13 +49,18 @@ that inherits nothing runs with `BASE` empty and requests a relative URL.
 
 ```bash
 BASE="${MERIDIAN_URL:-http://localhost:3333}"
-curl -sS -G "$BASE/api/status" --data-urlencode "project=<absolute path of the current directory>"
+curl -sS -G "$BASE/api/status" \
+  --data-urlencode "project=<absolute path of the current directory>" -d 'workable=1'
 ```
 
-No `limit`. The selection has to see every candidate: with `limit=5` the server
-returns only the top five of each status, and the one task sitting in `qareview`
-could be the sixth in a status you never looked past. The unlimited response
-comes back in **file order, unranked** — the ordering below is yours to apply.
+With `workable=1` the server returns **only the candidates, already in selection
+order**. `done`, `nope` and `blocked` never come back — they are not candidates
+at any priority — and what does come back is sorted by the rule below, so the
+first task in the list is the pick. Do not fetch the board unlimited to select
+from it (on a mature board most tasks are finished noise), and do not re-sort
+what comes back: the ordering is the server's, and reimplementing it here is how
+the two drift apart. The rule is still spelled out below because you must be
+able to *explain* the pick, not because you apply it.
 
 If `errors` is non-empty, show it before selecting. A malformed `tasks.json`
 means the board you are choosing from is not the whole board.
