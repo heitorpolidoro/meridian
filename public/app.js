@@ -37,13 +37,22 @@ let doneWindowDays = (() => {
 // Mirrors lib/board.js#isRecentlyCompleted. The frontend has no module
 // system and no build step, so it cannot import that file — lib/board.js
 // is the source of truth. Keep both in sync when changing this rule.
-function isRecentlyCompleted(task, windowDays, now = new Date()) {
+function withinWindow(raw, windowDays, now) {
     if (windowDays === null || windowDays === undefined) return true;
-    const raw = task && task.completed_at;
     if (!raw) return false;
-    const completed = new Date(raw);
-    if (Number.isNaN(completed.getTime())) return false;
-    return (now.getTime() - completed.getTime()) <= windowDays * 24 * 60 * 60 * 1000;
+    const when = new Date(raw);
+    if (Number.isNaN(when.getTime())) return false;
+    return (now.getTime() - when.getTime()) <= windowDays * 24 * 60 * 60 * 1000;
+}
+
+function isRecentlyCompleted(task, windowDays, now = new Date()) {
+    return withinWindow(task && task.completed_at, windowDays, now);
+}
+
+// nope shares the done window, keyed on moved_at — completed_at is stamped
+// only on entering `done`, so a dismissed task never has one.
+function isRecentlyDismissed(task, windowDays, now = new Date()) {
+    return withinWindow(task && task.moved_at, windowDays, now);
 }
 
 // Mirrors lib/board.js#manualTransition. The only status changes the board
@@ -950,10 +959,13 @@ function renderKanbanBoard(tasks) {
         if (statusCol.id === 'done') {
             visibleTasks = colTasks.filter(t => isRecentlyCompleted(t, doneWindowDays));
             hiddenTasks = colTasks.filter(t => !isRecentlyCompleted(t, doneWindowDays));
+        } else if (statusCol.id === 'nope') {
+            visibleTasks = colTasks.filter(t => isRecentlyDismissed(t, doneWindowDays));
+            hiddenTasks = colTasks.filter(t => !isRecentlyDismissed(t, doneWindowDays));
         }
 
         const hiddenChipHtml = hiddenTasks.length > 0 ? `
-            <div class="done-hidden-chip" onclick="this.nextElementSibling.classList.remove('hidden'); this.remove();">+${hiddenTasks.length} concluídas</div>
+            <div class="done-hidden-chip" onclick="this.nextElementSibling.classList.remove('hidden'); this.remove();">+${hiddenTasks.length} ${statusCol.id === 'nope' ? 'descartadas' : 'concluídas'}</div>
             <div class="done-hidden-tasks hidden">
                 ${hiddenTasks.map(task => renderTaskCardHtml(task)).join('')}
             </div>

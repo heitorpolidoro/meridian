@@ -54,3 +54,27 @@ test('an unknown status offers no manual transition', () => {
     assert.equal(manualTransition('in progress'), null);
     assert.equal(manualTransition(undefined), null);
 });
+
+// --- the nope column shares the done column's window, keyed on moved_at ---
+
+const { isRecentlyDismissed } = require('../lib/board');
+
+test('a task noped today is recent', () => {
+    assert.equal(isRecentlyDismissed({ moved_at: '2026-08-27T09:00:00.000Z' }, 7, NOW), true);
+});
+
+test('a task noped outside the window is not', () => {
+    assert.equal(isRecentlyDismissed({ moved_at: '2026-08-01T12:00:00.000Z' }, 7, NOW), false);
+});
+
+test('a missing moved_at counts as old', () => {
+    assert.equal(isRecentlyDismissed({}, 7, NOW), false);
+});
+
+test('an unparseable moved_at counts as old rather than throwing', () => {
+    assert.equal(isRecentlyDismissed({ moved_at: 'not a date' }, 7, NOW), false);
+});
+
+test('a null window shows every noped task', () => {
+    assert.equal(isRecentlyDismissed({ moved_at: '2020-01-01T00:00:00.000Z' }, null, NOW), true);
+});
