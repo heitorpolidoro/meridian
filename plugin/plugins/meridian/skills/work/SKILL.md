@@ -14,8 +14,8 @@ API. The specialists never write task state.
 
 ## 0. Resolve the shared references
 
-`preamble.md`, `pipeline.md` and `schema.md` are shared by all four Meridian
-skills and live in the plugin's own `references/` directory — **not** inside
+`preamble.md`, `pipeline.md`, `stages.md` and `schema.md` are shared by all four
+Meridian skills and live in the plugin's own `references/` directory — **not** inside
 this skill's own folder. Wherever this file names one of them, resolve it by
 trying these two paths in order and using the first that exists:
 
@@ -60,6 +60,11 @@ the commit after QA approves, the unblocking sweep, and the context
 discipline that says what to keep from a specialist's report. This file
 tells you which task to enter and where; that file tells you what happens next.
 Where the two seem to differ, `pipeline.md` wins.
+
+`stages.md` is the per-stage procedure — which agent each status dispatches and
+what happens on each verdict. Read it when you are about to run a stage, not
+before: `pipeline.md` alone tells you where to enter and what to verify, and a
+task you refuse or reroute never needs the stage detail at all.
 
 `schema.md` is the field, status, priority and API contract. Read it
 when you need a field definition.

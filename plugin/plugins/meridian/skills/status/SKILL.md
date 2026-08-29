@@ -16,8 +16,8 @@ here disagrees with that file, that file wins.
 
 ## 0. Resolve the shared references
 
-`preamble.md`, `pipeline.md` and `schema.md` are shared by all four Meridian
-skills and live in the plugin's own `references/` directory — **not** inside
+`preamble.md`, `pipeline.md`, `stages.md` and `schema.md` are shared by all four
+Meridian skills and live in the plugin's own `references/` directory — **not** inside
 this skill's own folder. Wherever this file names one of them, resolve it by
 trying these two paths in order and using the first that exists:
 
