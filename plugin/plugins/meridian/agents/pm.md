@@ -33,7 +33,7 @@ Every task you create gets `expected_results`. This is not a nicety.
 never the developer's reasoning, never the code reviewer's verdict. That
 isolation is what makes its verdict worth anything, and it means a task with an
 empty `expected_results` array is a task QA is structurally unable to verify. It
-will reach `qareview` with nothing to check against.
+will reach `qa_review` with nothing to check against.
 
 This is a measured gap, not a hypothetical one: roughly a third of the tasks on
 the existing boards carry no `expected_results` at all, and none of them can be
@@ -99,7 +99,7 @@ Read the server-assigned `id` out of the response (`{"success":true,"task":{...}
 and record it. Never compute an id yourself.
 
 Create accepts only the six fields shown above. The nine statuses are `backlog`,
-`specreview`, `readytodo`, `inprogress`, `codereview`, `qareview`, `blocked`,
+`spec_review`, `ready_todo`, `in_progress`, `code_review`, `qa_review`, `blocked`,
 `done` and `nope`; the four priorities are `critical`, `high`, `medium` and
 `low`. The server rejects anything else with a `400`. Never send `id`,
 `created_at`, `updated_at`, `moved_at` or `completed_at` — all five are
@@ -120,8 +120,8 @@ would stall spec work behind implementation work and serialise the whole
 pipeline.
 
 The dependency bites later, and `meridian:work` applies it: a task that reaches
-`readytodo` with any `blockedBy` id not `done` moves to `blocked` there, and the
-unblocking sweep returns it to `readytodo` — with its spec intact — once they
+`ready_todo` with any `blockedBy` id not `done` moves to `blocked` there, and the
+unblocking sweep returns it to `ready_todo` — with its spec intact — once they
 are.
 
 So your job here is only to wire `blockedBy` correctly on create. Set it on

@@ -56,17 +56,17 @@ of these four in a request body has no effect — the server overwrites them.
 sufficient justification on its own (e.g. `justification: "Blocked on MERID-3"`).
 
 **`blockedBy` gates implementation, not specification.** A task with open
-dependencies is still specced and reaches `readytodo` — writing its spec needs
+dependencies is still specced and reaches `ready_todo` — writing its spec needs
 the *specs* of what it depends on, not their finished code. It becomes `blocked`
 only when the developer would be dispatched with a dependency not yet `done`, and the
-unblocking sweep returns it to `readytodo`, spec intact. See
+unblocking sweep returns it to `ready_todo`, spec intact. See
 `references/pipeline.md`.
 
 A task may be created in **any** of the nine statuses, and the create endpoint
 honours it — work that was already finished is recorded as `done`, not walked
 through the pipeline to get there. `backlog` is only the default. What a later
 status does *not* do is conjure the artefacts that status implies: a task created
-at `codereview` still has no spec and no `expected_results`, and the stage checks
+at `code_review` still has no spec and no `expected_results`, and the stage checks
 in `pipeline.md` are what notice. Create where reality is; let the pipeline fill
 the gaps.
 
@@ -79,11 +79,11 @@ spaces and no slashes. Do not invent new statuses or use synonyms like
 `pending`, `todo`, `completed`, `in progress` or `qa/review`.
 
 - `backlog`: Task is planned but not ready to be worked on yet.
-- `specreview`: Task needs specification or design review.
-- `readytodo`: Task is fully specified and ready to be picked up.
-- `inprogress`: Task is currently being worked on by developer.
-- `codereview`: Task code is being reviewed for architecture, security, and test quality.
-- `qareview`: Task is being verified independently by QA against expected results.
+- `spec_review`: Task needs specification or design review.
+- `ready_todo`: Task is fully specified and ready to be picked up.
+- `in_progress`: Task is currently being worked on by developer.
+- `code_review`: Task code is being reviewed for architecture, security, and test quality.
+- `qa_review`: Task is being verified independently by QA against expected results.
 - `blocked`: Task cannot proceed due to external dependencies.
 - `done`: Task is fully completed.
 - `nope`: Task was cancelled or won't be done.
@@ -167,7 +167,7 @@ The response is `{ "success": true, "task": { ... } }`; take the server-assigned
 ```json
 {
   "projectPath": "/absolute/path/to/project",
-  "status": "inprogress",
+  "status": "in_progress",
   "running": true
 }
 ```

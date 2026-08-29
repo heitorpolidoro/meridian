@@ -87,7 +87,7 @@ file is the section 1 fallback for a server that will not start, and only then.)
 
 - `summary.counts` — how many tasks each status really holds. Use it for the
   totals in section 3; a status showing five rows may hold thirty.
-- `summary.interrupted` — every task with status `inprogress` **or**
+- `summary.interrupted` — every task with status `in_progress` **or**
   `running: true`, with both flags on each entry. This is section 5's input.
 - `summary.unblockable` — every `blocked` task whose `blockedBy` ids have all
   reached `done`. This is section 4's input. A `blocked` task with an empty
@@ -110,7 +110,7 @@ padded with healthy checks buries the one line that matters.
 
 Print one compact table grouped by status, in pipeline order:
 
-`backlog`, `specreview`, `readytodo`, `inprogress`, `codereview`, `qareview`,
+`backlog`, `spec_review`, `ready_todo`, `in_progress`, `code_review`, `qa_review`,
 `blocked`, `done`, `nope`.
 
 One row per task: `id`, `title`, `priority`, and `running` when it is `true`.
@@ -145,10 +145,10 @@ reports.
 ## 5. Interrupted tasks
 
 Report `summary.interrupted`. The server computes it as the union of two
-conditions checked independently — `status == "inprogress"`, and
+conditions checked independently — `status == "in_progress"`, and
 `running == true` — because they are not the same set: `running: true` is set
 around every specialist dispatch, so during a live run it legitimately appears
-on tasks in `backlog`, `specreview`, `codereview` and `qareview` as well.
+on tasks in `backlog`, `spec_review`, `code_review` and `qa_review` as well.
 Each entry carries both flags so you can say which condition caught it.
 
 Why both flags mean abandoned work: this skill runs in a **fresh session**. No
@@ -175,8 +175,8 @@ On a yes, hand the chosen id to `meridian:work`, which owns every transition
 from here. `work` re-enters the task at the stage its status indicates and is
 the only thing that writes task state.
 
-When the chosen task's status is `inprogress`, say so explicitly in the
-hand-off: an interrupted `inprogress` task may have left partial work in the
+When the chosen task's status is `in_progress`, say so explicitly in the
+hand-off: an interrupted `in_progress` task may have left partial work in the
 working tree, so `work` owes its `meridian:developer` dispatch the **resumption
 briefing** defined in `meridian:work`. Do not restate the briefing's contents
 here — `work` assembles dispatch payloads and holds those rules; the status is

@@ -22,7 +22,7 @@ You do not write task state. The `work` skill records your verdict and moves the
 
 ## The `expected_results` Gate — This Verdict Is the Only One
 
-Your `APPROVED` is what moves a task from `specreview` to `readytodo`, and that
+Your `APPROVED` is what moves a task from `spec_review` to `ready_todo`, and that
 transition is where a task stops being an idea. Nothing downstream re-checks
 this: `meridian:qa` receives **only** the task's `expected_results`, never the
 spec or the code, so a task that passes you with empty or vague results reaches

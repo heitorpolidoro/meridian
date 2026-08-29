@@ -107,11 +107,11 @@ Data owned by *tracked* projects (not part of this repo, but read/written by it 
 > **Dependencies (`blockedBy`)**: optional array of task IDs that must reach `done` before this task can proceed. A task with a non-empty `blockedBy` whose dependencies aren't all `done` yet should have status `blocked` — that dependency is sufficient justification on its own (e.g. `justification: "Blocked on <task-id>"`). When every task in `blockedBy` reaches `done`, move this task back to `backlog`.
 > **Allowed Statuses**: When assigning a status to a task, you MUST use EXACTLY one of the following lowercase strings. They carry no spaces and no slashes. DO NOT invent new statuses or use synonyms like 'pending', 'todo', 'completed', 'in progress' or 'qa/review'.
   - `backlog`: Task is planned but not ready to be worked on yet.
-  - `specreview`: Task needs specification or design review.
-  - `readytodo`: Task is fully specified and ready to be picked up.
-  - `inprogress`: Task is currently being worked on by developer.
-  - `codereview`: Task code is being reviewed for architecture, security, and test quality.
-  - `qareview`: Task is being verified independently by QA against expected results.
+  - `spec_review`: Task needs specification or design review.
+  - `ready_todo`: Task is fully specified and ready to be picked up.
+  - `in_progress`: Task is currently being worked on by developer.
+  - `code_review`: Task code is being reviewed for architecture, security, and test quality.
+  - `qa_review`: Task is being verified independently by QA against expected results.
   - `blocked`: Task cannot proceed due to external dependencies.
   - `done`: Task is fully completed.
   - `nope`: Task was cancelled or won't be done.

@@ -145,7 +145,7 @@ test('PUT clears completed_at when the task leaves done', async () => {
     await withServer(ws, async (base) => {
         await seed(base, dir);
         await put(base, dir, 'TST-1', { status: 'done' });
-        const task = await put(base, dir, 'TST-1', { status: 'inprogress' });
+        const task = await put(base, dir, 'TST-1', { status: 'in_progress' });
         assert.equal(task.completed_at, null);
     });
 });
@@ -171,7 +171,7 @@ test('POST rejects a status outside the canonical nine', async () => {
         assert.equal(res.status, 400);
         const { error } = await res.json();
         assert.match(error, /Invalid status 'in progress'/);
-        assert.match(error, /inprogress/);
+        assert.match(error, /in_progress/);
     });
 });
 
@@ -212,8 +212,8 @@ test('PUT accepts every one of the nine canonical statuses', async () => {
     const { ws, dir } = workspaceWith('Test Project');
     await withServer(ws, async (base) => {
         await seed(base, dir);
-        const all = ['backlog', 'specreview', 'readytodo', 'inprogress', 'codereview',
-                     'qareview', 'blocked', 'done', 'nope'];
+        const all = ['backlog', 'spec_review', 'ready_todo', 'in_progress', 'code_review',
+                     'qa_review', 'blocked', 'done', 'nope'];
         for (const status of all) {
             const task = await put(base, dir, 'TST-1', { status });
             assert.equal(task.status, status);
@@ -251,16 +251,16 @@ test('GET /api/status?project= narrows to one project', async () => {
 test('GET /api/status?limit= caps each status independently, not the total', async () => {
     const { ws, dir } = workspaceWith('Test Project');
     await withServer(ws, async (base) => {
-        // Three tasks in backlog, three moved to inprogress.
+        // Three tasks in backlog, three moved to in_progress.
         for (let i = 0; i < 6; i++) await seed(base, dir);
         for (const id of ['TST-4', 'TST-5', 'TST-6']) {
-            await put(base, dir, id, { status: 'inprogress' });
+            await put(base, dir, id, { status: 'in_progress' });
         }
         const res = await (await fetch(`${base}/api/status?limit=2`)).json();
         const tasks = res.projects[0].tasks;
         const perStatus = {};
         for (const t of tasks) perStatus[t.status] = (perStatus[t.status] || 0) + 1;
-        assert.deepEqual(perStatus, { backlog: 2, inprogress: 2 },
+        assert.deepEqual(perStatus, { backlog: 2, in_progress: 2 },
             'each status is capped at 2, so a two-status project returns 4 tasks');
     });
 });
@@ -438,8 +438,8 @@ test('POST /api/projects appends to an existing .gitignore without eating a line
 test('POST honors a valid status instead of forcing backlog', async () => {
     const { ws, dir } = workspaceWith('Test Project');
     await withServer(ws, async (base) => {
-        const task = await seed(base, dir, { status: 'codereview' });
-        assert.equal(task.status, 'codereview');
+        const task = await seed(base, dir, { status: 'code_review' });
+        assert.equal(task.status, 'code_review');
         assert.ok(task.created_at && task.moved_at, 'still stamped on create');
     });
 });
@@ -464,7 +464,7 @@ test('POST stamps completed_at for a task created straight into done', async () 
 test('POST leaves completed_at absent for any status other than done', async () => {
     const { ws, dir } = workspaceWith('Test Project');
     await withServer(ws, async (base) => {
-        const task = await seed(base, dir, { status: 'readytodo' });
+        const task = await seed(base, dir, { status: 'ready_todo' });
         assert.equal(task.completed_at, undefined);
     });
 });
@@ -485,7 +485,7 @@ test('GET with limit returns a summary computed over the whole board', async () 
     await withServer(ws, async (base) => {
         for (let i = 0; i < 10; i++) await seed(base, dir);          // TST-1..10 in backlog
         const done = await seed(base, dir, { status: 'done' });       // TST-11
-        await put(base, dir, 'TST-1', { status: 'inprogress' });
+        await put(base, dir, 'TST-1', { status: 'in_progress' });
         await put(base, dir, 'TST-2', { running: true });
         await put(base, dir, 'TST-3', { status: 'blocked', blockedBy: [done.id] });
         await put(base, dir, 'TST-4', { status: 'blocked', blockedBy: ['TST-5'] });
@@ -500,7 +500,7 @@ test('GET with limit returns a summary computed over the whole board', async () 
         assert.equal(p.summary.counts.done, 1);
 
         const interrupted = p.summary.interrupted.map(t => t.id).sort();
-        assert.deepEqual(interrupted, ['TST-1', 'TST-2'], 'inprogress or running, both');
+        assert.deepEqual(interrupted, ['TST-1', 'TST-2'], 'in_progress or running, both');
 
         assert.deepEqual(p.summary.unblockable.map(t => t.id), ['TST-3'],
             'blocked with every dependency done');
@@ -521,12 +521,12 @@ test('GET with workable=1 returns only workable tasks, in selection order', asyn
     const { ws, dir } = workspaceWith('Test Project');
     await withServer(ws, async (base) => {
         await seed(base, dir, { priority: 'critical' });              // TST-1 backlog critical
-        await seed(base, dir, { status: 'qareview', priority: 'low' }); // TST-2
+        await seed(base, dir, { status: 'qa_review', priority: 'low' }); // TST-2
         await seed(base, dir, { status: 'done' });                    // TST-3
         await seed(base, dir, { status: 'nope' });                    // TST-4
         await put(base, dir, 'TST-3', {});                            // no-op, keeps ids stable
-        await seed(base, dir, { status: 'readytodo', priority: 'high' }); // TST-5
-        await seed(base, dir, { status: 'readytodo', priority: 'critical' }); // TST-6
+        await seed(base, dir, { status: 'ready_todo', priority: 'high' }); // TST-5
+        await seed(base, dir, { status: 'ready_todo', priority: 'critical' }); // TST-6
         const blocked = await seed(base, dir);                        // TST-7
         await put(base, dir, blocked.id, { status: 'blocked', blockedBy: ['TST-1'] });
 
@@ -537,8 +537,39 @@ test('GET with workable=1 returns only workable tasks, in selection order', asyn
         assert.ok(!ids.includes('TST-3'), 'done excluded');
         assert.ok(!ids.includes('TST-4'), 'nope excluded');
         assert.ok(!ids.includes('TST-7'), 'blocked excluded');
-        assert.equal(ids[0], 'TST-2', 'stage beats priority: low qareview before critical backlog');
+        assert.equal(ids[0], 'TST-2', 'stage beats priority: low qa_review before critical backlog');
         assert.deepEqual(ids, ['TST-2', 'TST-6', 'TST-5', 'TST-1'],
             'stage first, then priority, then age');
+    });
+});
+
+test('legacy compact status names are accepted and stored as snake_case', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        // Built by concatenation so a future mechanical rename cannot
+        // "fix" these fixtures into canonical names, as one already did —
+        // which silently turned this into a test of nothing.
+        const legacyCode = 'code' + 'review';
+        const legacyQa = 'qa' + 'review';
+        const created = await seed(base, dir, { status: legacyCode });
+        assert.equal(created.status, 'code_review', 'POST normalizes the legacy name');
+        const moved = await put(base, dir, created.id, { status: legacyQa });
+        assert.equal(moved.status, 'qa_review', 'PUT normalizes the legacy name');
+        const modern = await put(base, dir, created.id, { status: 'ready_todo' });
+        assert.equal(modern.status, 'ready_todo');
+    });
+});
+
+test('legacy names already on disk read back as snake_case', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        await seed(base, dir);
+        const fsMod = require('node:fs'); const p = require('node:path');
+        const tp = p.join(dir, '.meridian', 'tasks.json');
+        const tasks = JSON.parse(fsMod.readFileSync(tp, 'utf8'));
+        tasks[0].status = 'in' + 'progress'; // sed-proof, see above
+        fsMod.writeFileSync(tp, JSON.stringify(tasks));
+        const res = await (await fetch(`${base}/api/status?project=${encodeURIComponent(dir)}`)).json();
+        assert.equal(res.projects[0].tasks[0].status, 'in_progress');
     });
 });

@@ -122,11 +122,11 @@ what was missing and where the task went; a pass earns nothing.
 | Status | Action |
 |---|---|
 | `backlog` | dispatch `meridian:spec-generator` |
-| `specreview` | dispatch `meridian:spec-reviewer` |
-| `readytodo` | dispatch `meridian:developer` |
-| `inprogress` | dispatch `meridian:developer` **with the resumption briefing** (section 6) |
-| `codereview` | dispatch `meridian:code-reviewer` |
-| `qareview` | dispatch `meridian:qa` |
+| `spec_review` | dispatch `meridian:spec-reviewer` |
+| `ready_todo` | dispatch `meridian:developer` |
+| `in_progress` | dispatch `meridian:developer` **with the resumption briefing** (section 6) |
+| `code_review` | dispatch `meridian:code-reviewer` |
+| `qa_review` | dispatch `meridian:qa` |
 | `blocked` | **Do not start.** Report `justification` and `blockedBy`, and stop. |
 | `done`, `nope` | **Refuse.** See section 7. |
 
@@ -138,7 +138,7 @@ carrying it was interrupted. Say so, then enter at its `status` row above.
 A task flows through **consecutive stages in a single invocation**. It does not
 stop at a stage boundary waiting to be invoked again. A `backlog` task runs all
 the spec stages and continues straight into the build stages without a second call to this
-skill; a `readytodo` task runs implementation, code review and QA, is committed,
+skill; a `ready_todo` task runs implementation, code review and QA, is committed,
 and lands in `done`.
 
 Stop only where `pipeline.md` says to stop: the task reaches `done`,
@@ -147,15 +147,15 @@ a specialist failure. Report where it ended and why.
 
 **One task at a time.** Never drive two tasks concurrently.
 
-## 6. Resumption briefing — `inprogress` only
+## 6. Resumption briefing — `in_progress` only
 
-An `inprogress` task may have left partial work in the working tree: a
+An `in_progress` task may have left partial work in the working tree: a
 half-written module, a staged test, a change already made. So when, and only
-when, the entry status is `inprogress`, the `meridian:developer` dispatch
+when, the entry status is `in_progress`, the `meridian:developer` dispatch
 carries a resumption briefing on top of its normal payload:
 
 - **the stage it stopped at** — that it was mid-implementation, and whether it
-  got there from `readytodo` or was sent back by code review or QA;
+  got there from `ready_todo` or was sent back by code review or QA;
 - **the open round's `last_review_findings`** — the blocking findings it had not
   finished addressing, verbatim, and nothing else from that round;
 - **an instruction to establish actual state with `git status` and `git diff`
@@ -163,11 +163,11 @@ carries a resumption briefing on top of its normal payload:
   starts writing before it looks either redoes work that is already in the tree
   or overwrites it.
 
-**No other status gets a briefing.** `codereview` and `qareview` simply
+**No other status gets a briefing.** `code_review` and `qa_review` simply
 dispatch their agent and run the stage from the top: a review is never
 half-done. It either returned a verdict, in which case the task would not still
 be sitting in that status, or it did not, in which case there is nothing
-partial to resume — only a review to rerun. `backlog` and `specreview` are the
+partial to resume — only a review to rerun. `backlog` and `spec_review` are the
 same, against the spec instead of the tree. Inventing a briefing for those
 stages feeds a reviewer context it is meant not to have.
 
@@ -199,7 +199,7 @@ Every status change, every `running` flip, every counter increment, every
 BASE="${MERIDIAN_URL:-http://localhost:3333}"
 curl -sS -X PUT "$BASE/api/projects/tasks/<task id>" \
   -H 'Content-Type: application/json' \
-  -d '{"projectPath":"<absolute path of the current directory>","status":"inprogress","running":true}'
+  -d '{"projectPath":"<absolute path of the current directory>","status":"in_progress","running":true}'
 ```
 
 `projectPath` goes in the body; the id goes in the URL. Send only the fields

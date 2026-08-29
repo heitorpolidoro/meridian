@@ -70,7 +70,7 @@ means the board you are choosing from is not the whole board.
 Consider the six runnable statuses in this order — closest to finished first:
 
 ```
-qareview → codereview → inprogress → readytodo → specreview → backlog
+qa_review → code_review → in_progress → ready_todo → spec_review → backlog
 ```
 
 Take the first status in that sequence that has any task in it. That status is
@@ -83,9 +83,9 @@ being picked, and `done` and `nope` are finished. Handing any of the three to
 reports a `blocked` task's `justification` and `blockedBy` rather than starting
 it. Selecting one would just spend an invocation to be told that.
 
-Why right-to-left: a task in `qareview` is one verdict away from being
+Why right-to-left: a task in `qa_review` is one verdict away from being
 committed and shipped. A task in `backlog` has not been specified yet. Starting
-the `backlog` task leaves the `qareview` task sitting in flight, half-paid-for,
+the `backlog` task leaves the `qa_review` task sitting in flight, half-paid-for,
 with its working tree waiting on it — and work in flight that nobody finishes is
 the expensive kind.
 
@@ -103,12 +103,12 @@ Priority breaks ties *within* a stage and **never crosses stages**.
 
 State this plainly, because it looks like an oversight and invites being
 "simplified" into a flat sort by priority: a `critical` task in `backlog` must
-**not** jump ahead of a `low` task in `qareview`. That is not a bug in the
+**not** jump ahead of a `low` task in `qa_review`. That is not a bug in the
 ordering — it is the whole point of it. Priority says which work matters most
 to *start*; stage says which work is closest to *finishing*. Sorting by
 priority first would start the urgent thing and abandon the nearly-finished
 thing, which is how a board fills up with tasks stuck at 90%. The urgent
-`backlog` task is next in line — it is chosen the moment the `qareview` task
+`backlog` task is next in line — it is chosen the moment the `qa_review` task
 clears.
 
 If the operator wants the `critical` task worked first anyway, that is a
@@ -123,7 +123,7 @@ stage, and the `created_at` tiebreak if one was needed. Name the runner-up when
 there was one, so the operator can see the choice rather than trusting it.
 
 Say so explicitly whenever the pick was not the highest-priority task on the
-board: "`X` is `critical` in `backlog`, but `Y` in `qareview` is closer to done,
+board: "`X` is `critical` in `backlog`, but `Y` in `qa_review` is closer to done,
 so `Y` goes first." That sentence is the one that stops the choice from looking
 like a mistake.
 
@@ -141,7 +141,7 @@ whose whole job is to proceed is friction, not safety: the operator invoked
 keeps the choice inspectable; the operator can always interrupt.
 
 `meridian:work` enters the task at the stage its status indicates and owns
-everything from there — including the resumption briefing an `inprogress` task
+everything from there — including the resumption briefing an `in_progress` task
 needs.
 
 ## 6. When there is nothing to pick

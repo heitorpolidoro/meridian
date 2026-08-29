@@ -64,7 +64,7 @@ Do **not** prompt for them, and never refuse to create a task for lack of them.
 They are not optional forever, only later: `meridian:spec-generator` writes
 them while producing the spec, and `meridian:spec-reviewer` refuses to approve
 a spec whose `expected_results` are empty or not mechanically verifiable. That
-gate sits on the `specreview → readytodo` transition, which is where a task
+gate sits on the `spec_review → ready_todo` transition, which is where a task
 stops being an idea. `meridian:qa` receives **only** a task's
 `expected_results`, so nothing reaches QA without passing that gate first.
 
@@ -87,19 +87,19 @@ task" — take the status they name. It must be one of the nine; if it is not, l
 them and ask. Creating where reality is beats creating a lie and fixing it later.
 
 **Report what that status is missing; never go and produce it.** A task created
-at `codereview` has no spec and no `expected_results`, and satisfying a stage's
+at `code_review` has no spec and no `expected_results`, and satisfying a stage's
 prerequisites is `meridian:work`'s job — it owns the stage checks, the reroute
 rule and the iteration cap. Duplicating that walk here would give the two skills
 different answers to the same question. So say, plainly, something like:
 
-> Created `PROJ-42` at `codereview`. It has no spec and no expected results, so
+> Created `PROJ-42` at `code_review`. It has no spec and no expected results, so
 > `meridian:work` will send it back to be specced before reviewing anything.
 
 Two cases worth naming when they come up:
 
 - **`done`** — the honest target for work that is genuinely finished. It is a
   record, not a pipeline run, and the server stamps `completed_at` on create.
-- **`codereview` or later, for work in progress** — `meridian:work` will route it
+- **`code_review` or later, for work in progress** — `meridian:work` will route it
   back to be specced, writing a spec for code that already exists. That is
   reasonable, but tell the operator to expect it rather than letting it surprise
   them.

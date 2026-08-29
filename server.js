@@ -1,7 +1,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { deriveKey, nextTaskId, getTasks, saveTasks, stampNewTask, stampTaskUpdate, MalformedTasksError } = require('./lib/tasks');
+const { deriveKey, nextTaskId, getTasks, saveTasks, stampNewTask, stampTaskUpdate, normalizeStatus, MalformedTasksError } = require('./lib/tasks');
 const { ensureMeridianIgnored } = require('./lib/gitignore');
 const { registerProject } = require('./lib/projects');
 
@@ -141,8 +141,8 @@ function migrateProjects() {
 migrateProjects();
 
 const VALID_STATUSES = [
-    'backlog', 'specreview', 'readytodo', 'inprogress', 'codereview',
-    'qareview', 'blocked', 'done', 'nope'
+    'backlog', 'spec_review', 'ready_todo', 'in_progress', 'code_review',
+    'qa_review', 'blocked', 'done', 'nope'
 ];
 const PRIORITY_ORDER = ['critical', 'high', 'medium', 'low'];
 const DEFAULT_PRIORITY = 'medium';
@@ -187,12 +187,12 @@ function handleTaskReadError(err, res) {
 // list; it computes them here instead.
 
 // The selection order meridian:next applies, computed where the data already
-// is. Stage first — a task in qareview is one verdict from shipping, a backlog
+// is. Stage first — a task in qa_review is one verdict from shipping, a backlog
 // task has not been specced — then priority within a stage, then oldest first.
 // Priority deliberately never crosses stages: a critical idea does not outrank
 // a low task that is nearly done. done, nope and blocked are not candidates at
 // any priority, so they are not returned at all.
-const WORKABLE_ORDER = ['qareview', 'codereview', 'inprogress', 'readytodo', 'specreview', 'backlog'];
+const WORKABLE_ORDER = ['qa_review', 'code_review', 'in_progress', 'ready_todo', 'spec_review', 'backlog'];
 
 function workableTasks(tasks) {
     return tasks
@@ -215,7 +215,7 @@ function summarizeBoard(tasks) {
     }
 
     const interrupted = tasks
-        .filter(t => t.status === 'inprogress' || t.running === true)
+        .filter(t => t.status === 'in_progress' || t.running === true)
         .map(t => ({ id: t.id, title: t.title, status: t.status, running: t.running === true }));
 
     // A blocked task whose dependencies are all done is waiting on nothing.
@@ -521,6 +521,7 @@ app.post('/api/projects/tasks', (req, res) => {
             return res.status(400).json({ error: 'projectPath and title are required' });
         }
 
+        if (req.body && req.body.status) req.body.status = normalizeStatus(req.body.status);
         const invalid = validateTaskFields(req.body);
         if (invalid) {
             return res.status(400).json({ error: invalid });
@@ -547,7 +548,7 @@ app.post('/api/projects/tasks', (req, res) => {
         const newTask = stampNewTask({
             id: nextTaskId(tasksData.tasks, key),
             title,
-            status: status || 'backlog',
+            status: normalizeStatus(status) || 'backlog',
             justification: justification || '',
             priority: priority || DEFAULT_PRIORITY,
             expected_results: Array.isArray(expected_results) ? expected_results : [],
@@ -578,6 +579,7 @@ app.put('/api/projects/tasks/:taskId', (req, res) => {
             return res.status(400).json({ error: 'projectPath is required' });
         }
 
+        if (req.body && req.body.status) req.body.status = normalizeStatus(req.body.status);
         const invalid = validateTaskFields(req.body);
         if (invalid) {
             return res.status(400).json({ error: invalid });

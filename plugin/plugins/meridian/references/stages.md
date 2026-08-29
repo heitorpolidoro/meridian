@@ -13,9 +13,9 @@ sits at a status, that status names one agent, and you dispatch it. What follows
 is that list, in the order a task normally passes through it — but the order is
 descriptive, not a script: you enter wherever the task already is.
 
-### `backlog` and `specreview` — specifying
+### `backlog` and `spec_review` — specifying
 
-Enter at step 1 from `backlog`, at step 2 from `specreview`.
+Enter at step 1 from `backlog`, at step 2 from `spec_review`.
 
 1. **Generate the spec.** Set `running: true`. Dispatch `meridian:spec-generator`
    with the task title, its `expected_results`, the `spec_path` of every task in
@@ -29,12 +29,12 @@ Enter at step 1 from `backlog`, at step 2 from `specreview`.
    Authoring them is the generator's job; persisting them is yours. Agents never
    write task state.
 
-2. **Review the spec.** Move the task to `specreview`. Set `running: true`.
+2. **Review the spec.** Move the task to `spec_review`. Set `running: true`.
    Dispatch `meridian:spec-reviewer` with **only** the spec path and the task's
    `expected_results` — nothing about how the spec was produced. When it
    returns, set `running: false`.
 
-3. **On `APPROVED`:** move the task to `readytodo` and clear
+3. **On `APPROVED`:** move the task to `ready_todo` and clear
    `last_review_findings` to `[]` in the same update. The task is now ready to build.
    (No unblocking sweep here — dependents wait for `done`, not for an approved
    spec.)
@@ -50,27 +50,27 @@ Enter at step 1 from `backlog`, at step 2 from `specreview`.
    `docs/suggestions-log.md` under a heading `## [<id>] <title> — <date>`, then
    trim that file to its last 30 entries so it cannot grow without bound.
 
-### `readytodo`, `inprogress`, `codereview` and `qareview` — building
+### `ready_todo`, `in_progress`, `code_review` and `qa_review` — building
 
-Enter at step 1 from `readytodo` or `inprogress`, at step 2 from `codereview`,
-at step 3 from `qareview`.
+Enter at step 1 from `ready_todo` or `in_progress`, at step 2 from `code_review`,
+at step 3 from `qa_review`.
 
-1. **Implement.** Move the task to `inprogress`. Set `running: true`. Dispatch
+1. **Implement.** Move the task to `in_progress`. Set `running: true`. Dispatch
    `meridian:developer` with the `spec_path` and the task's `expected_results`.
    It works TDD and stages its changes with `git add` without committing. When it
    returns, set `running: false`.
 
-2. **Code review.** Move the task to `codereview`. Set `running: true`. Dispatch
+2. **Code review.** Move the task to `code_review`. Set `running: true`. Dispatch
    `meridian:code-reviewer` with the `spec_path`; it scopes its own review with
    `git diff --stat`. When it returns, set `running: false`.
    - **`APPROVED`** → continue to step 3.
    - **`NEEDS_REVISION`** → run the **stagnation check**. If it clears, increment
      `code_review_iterations`, store the blocking findings in
-     `last_review_findings`, move the task back to `inprogress`, set
+     `last_review_findings`, move the task back to `in_progress`, set
      `running: true`, and redispatch `meridian:developer` with the findings only.
      When it returns, set `running: false` and repeat step 2.
 
-3. **QA.** Move the task to `qareview`. Set `running: true`. Dispatch
+3. **QA.** Move the task to `qa_review`. Set `running: true`. Dispatch
    `meridian:qa` with **only** the task's `expected_results` plus pointers to the
    running system. Never pass it the developer's reasoning, the developer's
    report, or the code reviewer's verdict — its independence is the point. When
@@ -97,7 +97,7 @@ at step 3 from `qareview`.
      `git log --grep '<id>'` must find it.
 
      Both artifacts are optional and routinely absent: `docs/suggestions-log.md`
-     does not exist until the `specreview` stage first writes it, and a task
+     does not exist until the `spec_review` stage first writes it, and a task
      created straight into a later status has no `spec_path` at all. The guards
      matter because `git add` fails **closed** on a missing pathspec — one
      absent file aborts the whole command and stages *nothing*, not even the
@@ -116,7 +116,7 @@ at step 3 from `qareview`.
      sweep.
    - **`NEEDS_REVISION`** → run the **stagnation check**. If it clears, increment
      `qa_iterations`, store the blocking findings in `last_review_findings`, move
-     the task back to `inprogress`, set `running: true`, and redispatch
+     the task back to `in_progress`, set `running: true`, and redispatch
      `meridian:developer` with the findings only. When it returns, set
      `running: false` and repeat from step 2.
 

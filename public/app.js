@@ -1,10 +1,10 @@
 const KANBAN_STATUSES = [
     { id: 'backlog', label: 'Backlog' },
-    { id: 'specreview', label: 'Spec Review' },
-    { id: 'readytodo', label: 'Ready to Do' },
-    { id: 'inprogress', label: 'In Progress' },
-    { id: 'codereview', label: 'Code Review' },
-    { id: 'qareview', label: 'QA / Review' },
+    { id: 'spec_review', label: 'Spec Review' },
+    { id: 'ready_todo', label: 'Ready to Do' },
+    { id: 'in_progress', label: 'In Progress' },
+    { id: 'code_review', label: 'Code Review' },
+    { id: 'qa_review', label: 'QA / Review' },
     { id: 'blocked', label: 'Blocked' },
     { id: 'done', label: 'Done' },
     { id: 'nope', label: 'Nope' }
@@ -13,12 +13,12 @@ const KANBAN_STATUSES = [
 const STATUS_PRIORITY = {
     'blocked': 7,
     'pending': 7,
-    'qareview': 6,
-    'codereview': 5,
-    'inprogress': 4,
-    'readytodo': 3,
+    'qa_review': 6,
+    'code_review': 5,
+    'in_progress': 4,
+    'ready_todo': 3,
     'todo': 3,
-    'specreview': 2,
+    'spec_review': 2,
     'backlog': 1
 };
 
@@ -59,8 +59,8 @@ function isRecentlyDismissed(task, windowDays, now = new Date()) {
 // offers a human; every other transition belongs to the pipeline, driven
 // through the API by meridian:work. lib/board.js is the source of truth.
 const WORKING_STATUSES = [
-    'backlog', 'specreview', 'readytodo', 'inprogress',
-    'codereview', 'qareview', 'blocked'
+    'backlog', 'spec_review', 'ready_todo', 'in_progress',
+    'code_review', 'qa_review', 'blocked'
 ];
 
 function manualTransition(status) {
@@ -636,7 +636,7 @@ function renderDashboardTasksPreview(tasks) {
     if (activeTasks.length === 0) return '<div class="empty-state">No active tasks.</div>';
     
     return activeTasks.map(t => {
-        const statusId = t.status.replace(/_/g, '').replace(/ /g, '').toLowerCase();
+        const statusId = t.status;
         const kanbanStatus = KANBAN_STATUSES.find(s => s.id === statusId);
         const displayStatus = kanbanStatus ? kanbanStatus.label : t.status;
         const idDisplay = t.id ? `[${t.id}] ` : '';
@@ -929,7 +929,7 @@ function renderKanbanBoard(tasks) {
     let summaryHtml = '';
 
     KANBAN_STATUSES.forEach(statusCol => {
-        let colTasks = tasks.filter(t => t.status.toLowerCase().replace(/_/g, '').replace(/ /g, '') === statusCol.id);
+        let colTasks = tasks.filter(t => t.status === statusCol.id);
         colTasks = sortColumnTasks(colTasks, statusCol.id === 'done');
         if (isGlobal) colTasks = interleavedByProject(colTasks);
         const firstTask = colTasks[0];
@@ -1066,7 +1066,7 @@ window.changeTaskStatus = async function(taskId, newStatusId, targetProjPath) {
         }
     }
     
-    // Persist the canonical status id (e.g. 'qareview'), never the column label.
+    // Persist the canonical status id (e.g. 'qa_review'), never the column label.
     // The server rejects anything outside the nine canonical statuses.
     if (!KANBAN_STATUSES.some(s => s.id === newStatusId)) {
         showFlashMessage(`Unknown status '${newStatusId}'`, 'error');

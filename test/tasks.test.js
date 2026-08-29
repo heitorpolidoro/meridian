@@ -182,19 +182,19 @@ test('stampTaskUpdate: a write without a status change touches only updated_at',
 });
 
 test('stampTaskUpdate: a status change sets moved_at', () => {
-    const t = stampTaskUpdate({ id: 'A-1', status: 'inprogress', moved_at: 'earlier' }, 'readytodo');
+    const t = stampTaskUpdate({ id: 'A-1', status: 'in_progress', moved_at: 'earlier' }, 'ready_todo');
     assert.match(t.moved_at, ISO);
     assert.notEqual(t.moved_at, 'earlier');
 });
 
 test('stampTaskUpdate: entering done sets completed_at', () => {
-    const t = stampTaskUpdate({ id: 'A-1', status: 'done' }, 'qareview');
+    const t = stampTaskUpdate({ id: 'A-1', status: 'done' }, 'qa_review');
     assert.match(t.completed_at, ISO);
     assert.equal(t.completed_at, t.moved_at);
 });
 
 test('stampTaskUpdate: leaving done clears completed_at', () => {
-    const t = stampTaskUpdate({ id: 'A-1', status: 'inprogress', completed_at: '2026-08-01T00:00:00.000Z' }, 'done');
+    const t = stampTaskUpdate({ id: 'A-1', status: 'in_progress', completed_at: '2026-08-01T00:00:00.000Z' }, 'done');
     assert.equal(t.completed_at, null);
 });
 

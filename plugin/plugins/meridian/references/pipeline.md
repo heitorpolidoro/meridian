@@ -25,11 +25,11 @@ the beginning.
 | Status | Dispatch | Verify before dispatching | If the check fails |
 |---|---|---|---|
 | `backlog` | `meridian:spec-generator` | title is non-empty | ask the operator for one |
-| `specreview` | `meridian:spec-reviewer` | `spec_path` is set **and the file exists** | the spec was never written — go back to `backlog` |
-| `readytodo` | `meridian:developer` | spec file exists; `expected_results` non-empty; every `blockedBy` id is `done` | missing spec or results → back to `backlog`. Unmet dependency → move to `blocked` |
-| `inprogress` | `meridian:developer` (re-dispatch) | same as `readytodo` | same as `readytodo`, plus the resumption briefing |
-| `codereview` | `meridian:code-reviewer` | there is something to review (`git diff --stat` against the task's base is non-empty) | the developer never ran — go back to `readytodo` |
-| `qareview` | `meridian:qa` | `expected_results` non-empty | QA receives only these; go back to `backlog` |
+| `spec_review` | `meridian:spec-reviewer` | `spec_path` is set **and the file exists** | the spec was never written — go back to `backlog` |
+| `ready_todo` | `meridian:developer` | spec file exists; `expected_results` non-empty; every `blockedBy` id is `done` | missing spec or results → back to `backlog`. Unmet dependency → move to `blocked` |
+| `in_progress` | `meridian:developer` (re-dispatch) | same as `ready_todo` | same as `ready_todo`, plus the resumption briefing |
+| `code_review` | `meridian:code-reviewer` | there is something to review (`git diff --stat` against the task's base is non-empty) | the developer never ran — go back to `ready_todo` |
+| `qa_review` | `meridian:qa` | `expected_results` non-empty | QA receives only these; go back to `backlog` |
 | `blocked` | Not runnable. See **Unblocking**. | the `blockedBy` ids are genuinely still open | all `done` → unblock it instead of reporting |
 | `done`, `nope` | Nothing to do. | — | refuse |
 
@@ -49,8 +49,8 @@ the task back and forth forever. The cap of five below covers reroutes too.
 A task found with `running: true` and no live agent behind it was interrupted.
 Say so, and resume it from its status row above.
 
-The `inprogress` row carries one thing this file does not define: an interrupted
-`inprogress` task may have left partial work in the working tree, so its
+The `in_progress` row carries one thing this file does not define: an interrupted
+`in_progress` task may have left partial work in the working tree, so its
 `meridian:developer` dispatch also needs the **resumption briefing** — see
 "Resumption briefing" in the `work` skill, which owns dispatch payloads and
 holds that rule. No other status gets one.
@@ -61,7 +61,7 @@ Normally you are given an explicit task id and this question does not arise —
 work that task. The rule below is the fallback for when you are not.
 
 Within a single stage — several tasks sitting in `backlog`, or several in
-`readytodo` — pick in this order:
+`ready_todo` — pick in this order:
 
 1. **Priority**, `critical` before `high` before `medium` before `low`. A task
    with no priority counts as `medium`.
@@ -78,7 +78,7 @@ task created late outranks a `low` one created first, while the board shows the
 picked and why.
 
 Choosing *across* stages — whether to spec a `backlog` item or build a
-`readytodo` one — is not decided here. That is the `next` skill's job. If you
+`ready_todo` one — is not decided here. That is the `next` skill's job. If you
 have no id and tasks are waiting in more than one stage, say which candidates
 you found and ask, rather than guessing.
 
@@ -205,7 +205,7 @@ for genuine disagreement on something the agents never disagreed about.
 ## Unblocking
 
 `blockedBy` gates **implementation, not specification.** A task whose
-dependencies are still open may be specced and reach `readytodo` — writing its
+dependencies are still open may be specced and reach `ready_todo` — writing its
 spec needs the *specs* of the tasks it depends on, not their finished code,
 which is exactly why the `backlog` stage passes the `spec_path` of every
 `blockedBy` task to the generator. Only dispatching the developer requires those
@@ -220,7 +220,7 @@ Whenever a task reaches `done`, sweep the board:
 
 1. Read every task with status `blocked`.
 2. For each, check its `blockedBy` ids. If **all** of them are now `done`, move
-   that task to `readytodo` when it already has an approved spec (`spec_path`
+   that task to `ready_todo` when it already has an approved spec (`spec_path`
    set and the file present), and to `backlog` when it does not. Clear the
    dependency justification either way. Never send a task with an approved spec
    back to `backlog` — that discards the spec work and specs it a second time.
@@ -241,7 +241,7 @@ So the report goes to a file, and only a short contract comes back.
 
 **Every dispatch prompt names a report path.** Build it as
 `.meridian/reports/<task id>-<stage>-<round>.md` — for example
-`.meridian/reports/MERID-7-codereview-2.md`. `.meridian/` is gitignored, so
+`.meridian/reports/MERID-7-code_review-2.md`. `.meridian/` is gitignored, so
 these are runtime state, not repository content. Create the directory if it is
 not there.
 

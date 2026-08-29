@@ -829,11 +829,11 @@ textarea:focus {
 }
 
 .status-blocked { background: rgba(239, 68, 68, 0.2); color: #fca5a5; }
-.status-qareview { background: rgba(168, 85, 247, 0.2); color: #d8b4fe; }
-.status-codereview { background: rgba(6, 182, 212, 0.2); color: #67e8f9; }
-.status-inprogress { background: rgba(234, 179, 8, 0.2); color: #fde047; }
-.status-readytodo { background: rgba(59, 130, 246, 0.2); color: #93c5fd; }
-.status-specreview { background: rgba(236, 72, 153, 0.2); color: #f9a8d4; }
+.status-qa_review { background: rgba(168, 85, 247, 0.2); color: #d8b4fe; }
+.status-code_review { background: rgba(6, 182, 212, 0.2); color: #67e8f9; }
+.status-in_progress { background: rgba(234, 179, 8, 0.2); color: #fde047; }
+.status-ready_todo { background: rgba(59, 130, 246, 0.2); color: #93c5fd; }
+.status-spec_review { background: rgba(236, 72, 153, 0.2); color: #f9a8d4; }
 .status-backlog { background: rgba(156, 163, 175, 0.2); color: #d1d5db; }
 .status-done { background: rgba(34, 197, 94, 0.2); color: #86efac; }
 .status-nope { background: rgba(107, 114, 128, 0.2); color: #9ca3af; text-decoration: line-through; }
