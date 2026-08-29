@@ -101,6 +101,11 @@ look like a clean one.
 
 ## 3. Show the board
 
+**Findings only, throughout this skill.** Every check below runs every time,
+but a check that comes back clean produces no output. Silence after the table
+means checked-and-clean, and the operator learns to read it that way; a report
+padded with healthy checks buries the one line that matters.
+
 Print one compact table grouped by status, in pipeline order:
 
 `backlog`, `specreview`, `readytodo`, `inprogress`, `codereview`, `qareview`,
@@ -126,9 +131,10 @@ cap or a specialist failure — only a human clears it; show its
 `justification`), and a `blockedBy` id that matches no task on the board (a
 dangling dependency can never reach `done`, so that task is stuck permanently).
 
-State the consistency line plainly either way. When nothing is stale, say
-"No blocked task has all its dependencies done." Silence reads as "not
-checked".
+When there is nothing to report, report nothing — no "no blocked task has all
+its dependencies done", no "all running flags are consistent". A finding earns
+a line; health does not. The operator asked for the board, not for a checklist
+of everything that is not wrong with it.
 
 Do not unblock anything. Moving those tasks back to `backlog` is the unblocking
 sweep in `pipeline.md`, which runs inside `work`; this skill only

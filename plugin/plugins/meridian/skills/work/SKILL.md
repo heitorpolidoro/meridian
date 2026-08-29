@@ -115,6 +115,9 @@ prerequisites were never produced. `references/pipeline.md`'s entry table gives
 the check each stage must run first and where to send the task when it fails.
 Run that check before dispatching anything. A failed check reroutes the task to
 the stage that should have produced the missing artefact; it does not refuse.
+A check that **passes** is silent: dispatch and move on, without narrating that
+the spec exists or that the flags are consistent. A reroute earns a sentence —
+what was missing and where the task went; a pass earns nothing.
 
 | Status | Action |
 |---|---|
