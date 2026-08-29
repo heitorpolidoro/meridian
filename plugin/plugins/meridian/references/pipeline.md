@@ -111,6 +111,19 @@ test -f "<resolved absolute path>" && echo ok || echo BAD
 
 On `BAD`, do not dispatch — an agent handed a broken path cannot recover.
 
+**Every dispatch prompt opens with a marker line:**
+
+```
+MERIDIAN_TASK: <task id>
+```
+
+Verbatim, first line, exactly that shape. The plugin ships a hook that watches
+Task dispatches for this marker and maintains the `running` flag mechanically —
+including clearing it when a session dies mid-dispatch, the one case the rules
+above can never cover. You still set `running` through the API as those rules
+say: the hook is a janitor, not the owner, and both writing the same value is
+harmless. A dispatch without the marker is invisible to the janitor.
+
 **Every dispatch also names a report path.** Build it as
 `.meridian/reports/<task id>-<stage>-<round>.md`, create the directory if
 needed, and tell the specialist to write its full report there and return only

@@ -134,9 +134,15 @@ operator's column; and a task found with `running: true` was interrupted, not
 active — no agent from a previous session is still alive. An interrupted task
 is a normal candidate, selected by exactly the rules above.
 
-Then hand the chosen id to `meridian:work`, which enters it at the stage its
-status indicates and owns everything from there — including the resumption
-briefing an `inprogress` task needs.
+Then hand the chosen id to `meridian:work` **immediately — do not ask for
+confirmation first**. Being asked "shall I proceed?" after invoking a skill
+whose whole job is to proceed is friction, not safety: the operator invoked
+`next` precisely to have the choice made and acted on. The report above is what
+keeps the choice inspectable; the operator can always interrupt.
+
+`meridian:work` enters the task at the stage its status indicates and owns
+everything from there — including the resumption briefing an `inprogress` task
+needs.
 
 ## 6. When there is nothing to pick
 

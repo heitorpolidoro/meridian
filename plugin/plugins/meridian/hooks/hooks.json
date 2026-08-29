@@ -1,0 +1,52 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/running-flag.sh\" pre",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/running-flag.sh\" post",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/running-flag.sh\" stop",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/running-flag.sh\" stop",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
