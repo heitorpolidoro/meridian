@@ -47,8 +47,23 @@ Enter at step 1 from `backlog`, at step 2 from `spec_review`.
    review the spec again.
 
 5. **Suggestions.** Append the reviewer's non-blocking suggestions to
-   `docs/suggestions-log.md` under a heading `## [<id>] <title> — <date>`, then
-   trim that file to its last 30 entries so it cannot grow without bound.
+   `docs/suggestions-log.md` under a heading `## [<id>] <title> — <date>`.
+
+   **Never trim, truncate or rewrite this file — append only.** It is the one
+   durable, versioned record of every suggestion the pipeline ever produced;
+   the report files also hold them, but those are gitignored and pruned. The
+   operator mines this log periodically, turning entries into tasks or
+   discarding them — a suggestion silently dropped here is gone for good.
+
+   Extract the suggestions **mechanically from the report file**, without
+   reading the report into your context:
+
+   ```bash
+   printf '\n## [%s] %s — %s\n' "<id>" "<title>" "$(date +%F)" >> docs/suggestions-log.md
+   awk '/^## Suggestions/{f=1;next} /^## /{f=0} f' "<report path>" >> docs/suggestions-log.md
+   ```
+
+   Skip the append only when the report's Suggestions section says `None.`
 
 ### `ready_todo`, `in_progress`, `code_review` and `qa_review` — building
 
@@ -63,6 +78,11 @@ at step 3 from `qa_review`.
 2. **Code review.** Move the task to `code_review`. Set `running: true`. Dispatch
    `meridian:code-reviewer` with the `spec_path`; it scopes its own review with
    `git diff --stat`. When it returns, set `running: false`.
+   Whatever the verdict, append the reviewer's suggestions to
+   `docs/suggestions-log.md` exactly as the spec stage's step 5 does — same
+   heading, same mechanical extraction, never trimming. Code-review suggestions
+   are produced every round and would otherwise survive only in a gitignored,
+   pruned report file.
    - **`APPROVED`** → continue to step 3.
    - **`NEEDS_REVISION`** → run the **stagnation check**. If it clears, increment
      `code_review_iterations`, store the blocking findings in
@@ -75,6 +95,9 @@ at step 3 from `qa_review`.
    running system. Never pass it the developer's reasoning, the developer's
    report, or the code reviewer's verdict — its independence is the point. When
    it returns, set `running: false`.
+   Whatever the verdict, append QA's suggestions to `docs/suggestions-log.md`
+   the same way — QA is the third and last reviewer whose suggestions must not
+   be lost.
    - **`APPROVED`** → commit the staged work. The developer already staged its
      implementation with `git add`, so the index is the change; add only the
      pipeline's own artifacts on top of it, by explicit path, and **guard each
