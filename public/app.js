@@ -884,6 +884,19 @@ function renderTaskCardHtml(task) {
     const uid = `j-${task.id}`.replace(/[^a-zA-Z0-9\-]/g, '_');
     const runningClass = task.running ? ' task-card--running' : '';
     const runningBadge = task.running ? '<span class="running-inline-dot" title="Agent is working on this task"></span>' : '';
+    // Terminal cards show when they got there: completed_at for done, moved_at
+    // for nope — the same timestamps their columns sort and window by.
+    const stampRaw = task.status === 'done' ? task.completed_at
+        : task.status === 'nope' ? task.moved_at : null;
+    let stampHtml = '';
+    if (stampRaw) {
+        const d = new Date(stampRaw);
+        if (!Number.isNaN(d.getTime())) {
+            const label = d.toLocaleDateString(undefined, { day: '2-digit', month: 'short' })
+                + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+            stampHtml = `<div class="task-stamp" title="${task.status === 'done' ? 'Completed' : 'Dismissed'} ${d.toLocaleString()}">${label}</div>`;
+        }
+    }
     return `
         <div class="task-card${runningClass}">
             <div class="task-title">${runningBadge}${projectBadge}<span class="task-id-code">${taskIdDisplay}</span>${task.title}</div>
@@ -901,6 +914,7 @@ function renderTaskCardHtml(task) {
                 <button class="task-move-btn task-move-${move.to}" onclick="changeTaskStatus('${task.id}', '${move.to}', '${projPathAttr}')" title="Move this task to ${move.to}">${move.label}</button>
             </div>`;
             })()}
+            ${stampHtml}
         </div>
     `;
 }
