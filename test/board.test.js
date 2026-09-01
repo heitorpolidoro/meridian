@@ -78,3 +78,36 @@ test('an unparseable moved_at counts as old rather than throwing', () => {
 test('a null window shows every noped task', () => {
     assert.equal(isRecentlyDismissed({ moved_at: '2020-01-01T00:00:00.000Z' }, null, NOW), true);
 });
+
+// --- terminal columns sort by recency, not by id ---
+
+const { byRecencyDesc } = require('../lib/board');
+
+test('done sorts by completed_at descending, not by id', () => {
+    const tasks = [
+        { id: 'T-9', completed_at: '2026-08-01T00:00:00.000Z' },
+        { id: 'T-2', completed_at: '2026-08-30T00:00:00.000Z' },
+        { id: 'T-5', completed_at: '2026-08-15T00:00:00.000Z' }
+    ];
+    assert.deepEqual(tasks.sort(byRecencyDesc('completed_at')).map(t => t.id),
+        ['T-2', 'T-5', 'T-9'], 'the old task finished most recently comes first');
+});
+
+test('tasks without the timestamp sink to the bottom', () => {
+    const tasks = [
+        { id: 'T-1' },
+        { id: 'T-2', completed_at: '2026-08-30T00:00:00.000Z' },
+        { id: 'T-3', completed_at: null }
+    ];
+    const ids = tasks.sort(byRecencyDesc('completed_at')).map(t => t.id);
+    assert.equal(ids[0], 'T-2');
+    assert.deepEqual(new Set(ids.slice(1)), new Set(['T-1', 'T-3']));
+});
+
+test('the same comparator serves nope via moved_at', () => {
+    const tasks = [
+        { id: 'T-4', moved_at: '2026-08-10T00:00:00.000Z' },
+        { id: 'T-8', moved_at: '2026-08-29T00:00:00.000Z' }
+    ];
+    assert.deepEqual(tasks.sort(byRecencyDesc('moved_at')).map(t => t.id), ['T-8', 'T-4']);
+});

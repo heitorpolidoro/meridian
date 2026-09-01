@@ -69,6 +69,15 @@ function manualTransition(status) {
     return null;
 }
 
+// Mirrors lib/board.js#byRecencyDesc — that file is the source of truth.
+function byRecencyDesc(field) {
+    return (a, b) => {
+        const ra = (a && a[field]) || '';
+        const rb = (b && b[field]) || '';
+        return String(rb).localeCompare(String(ra));
+    };
+}
+
 const dashboardView = document.getElementById('dashboard-view');
 const projectView = document.getElementById('project-view');
 const btnBack = document.getElementById('back-to-dashboard-btn');
@@ -792,7 +801,7 @@ function parseTIdNumber(id) {
     return parseInt(id.trim().substring(1), 10);
 }
 
-function sortColumnTasks(tasks, isDoneColumn = false) {
+function sortColumnTasks(tasks) {
     return [...tasks].sort((a, b) => {
         const isStdA = isStandardTId(a.id);
         const isStdB = isStandardTId(b.id);
@@ -803,7 +812,7 @@ function sortColumnTasks(tasks, isDoneColumn = false) {
         if (isStdA && isStdB) {
             const numA = parseTIdNumber(a.id);
             const numB = parseTIdNumber(b.id);
-            return isDoneColumn ? numB - numA : numA - numB;
+            return numA - numB;
         }
 
         return 0;
@@ -930,7 +939,13 @@ function renderKanbanBoard(tasks) {
 
     KANBAN_STATUSES.forEach(statusCol => {
         let colTasks = tasks.filter(t => t.status === statusCol.id);
-        colTasks = sortColumnTasks(colTasks, statusCol.id === 'done');
+        if (statusCol.id === 'done') {
+            colTasks = [...colTasks].sort(byRecencyDesc('completed_at'));
+        } else if (statusCol.id === 'nope') {
+            colTasks = [...colTasks].sort(byRecencyDesc('moved_at'));
+        } else {
+            colTasks = sortColumnTasks(colTasks);
+        }
         if (isGlobal) colTasks = interleavedByProject(colTasks);
         const firstTask = colTasks[0];
         const firstTaskIdDisplay = (firstTask && firstTask.id) ? `[${firstTask.id}] ` : '';
