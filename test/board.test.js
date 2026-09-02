@@ -111,3 +111,47 @@ test('the same comparator serves nope via moved_at', () => {
     ];
     assert.deepEqual(tasks.sort(byRecencyDesc('moved_at')).map(t => t.id), ['T-8', 'T-4']);
 });
+
+// --- empty columns collapse into rails ---
+// `count` is the total number of tasks in the status, never the done/nope
+// windowed count. A rail is a status with nothing in it at all.
+
+const { collapsedColumns } = require('../lib/board');
+
+test('an empty column collapses', () => {
+    assert.deepEqual(collapsedColumns([{ id: 'backlog', count: 0 }], new Set()), new Set(['backlog']));
+});
+
+test('an empty column the operator expanded this session stays open', () => {
+    assert.deepEqual(collapsedColumns([{ id: 'backlog', count: 0 }], new Set(['backlog'])), new Set());
+});
+
+test('a column with tasks never collapses, expanded or not', () => {
+    assert.deepEqual(collapsedColumns([{ id: 'in_progress', count: 2 }], new Set(['in_progress'])), new Set());
+    assert.deepEqual(collapsedColumns([{ id: 'in_progress', count: 2 }], new Set()), new Set());
+});
+
+test('a done column with tasks is not a rail even if the window hides them all', () => {
+    // These three tasks may all be older than the done window, so the column
+    // header would read 0 and a "+3 concluídas" chip would show. The window is
+    // irrelevant here: count is the total in the status, and 3 > 0.
+    assert.deepEqual(collapsedColumns([{ id: 'done', count: 3 }], new Set()), new Set());
+});
+
+test('no columns means nothing to collapse', () => {
+    assert.deepEqual(collapsedColumns([], new Set()), new Set());
+});
+
+test('a mixed board collapses exactly its empty statuses', () => {
+    const columns = [
+        { id: 'backlog', count: 0 },
+        { id: 'ready_todo', count: 1 },
+        { id: 'done', count: 0 },
+        { id: 'nope', count: 4 }
+    ];
+    assert.deepEqual(collapsedColumns(columns, new Set()), new Set(['backlog', 'done']));
+});
+
+test('a missing expanded set is treated as empty', () => {
+    assert.deepEqual(collapsedColumns([{ id: 'qa_review', count: 0 }]), new Set(['qa_review']));
+});

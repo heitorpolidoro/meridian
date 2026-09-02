@@ -573,3 +573,20 @@ test('legacy names already on disk read back as snake_case', async () => {
         assert.equal(res.projects[0].tasks[0].status, 'in_progress');
     });
 });
+
+// --- SPA fallback: deep links must land on the app, not on a 404 ---
+// The browser resolves /<slug> and /tickets itself once app.js is running;
+// that only works if the server answers those paths with index.html.
+
+test('GET /<slug> and GET /tickets serve index.html for the SPA to route', async () => {
+    const { ws } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        for (const p of ['/fixture-project', '/tickets']) {
+            const res = await fetch(`${base}${p}`);
+            assert.equal(res.status, 200, `status for ${p}`);
+            assert.ok((res.headers.get('content-type') || '').startsWith('text/html'), `content-type for ${p}`);
+            const body = await res.text();
+            assert.ok(body.includes('id="project-view"'), `body for ${p} has the project view`);
+        }
+    });
+});

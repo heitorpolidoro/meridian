@@ -28,7 +28,6 @@ const errorContainer = document.getElementById('error-container');
 let currentProjectsData = [];
 let currentProjectViewPath = null;
 let isInitialRouteHandled = false;
-let hideEmptyColumns = localStorage.getItem('meridian_hide_empty_columns') === 'true';
 let doneWindowDays = (() => {
     const v = localStorage.getItem('meridian_done_window');
     return v === '' ? null : (v === null ? 7 : Number(v));
@@ -78,9 +77,49 @@ function byRecencyDesc(field) {
     };
 }
 
+// Mirrors lib/board.js#collapsedColumns — that file is the source of truth.
+// `count` is the total number of tasks in the status, never the done/nope
+// windowed count: a done column whose tasks are all older than the window is
+// a full column with a chip, not a rail.
+function collapsedColumns(columns, expanded) {
+    const open = expanded || new Set();
+    const out = new Set();
+    for (const col of columns || []) {
+        if (col.count > 0) continue;
+        if (open.has(col.id)) continue;
+        out.add(col.id);
+    }
+    return out;
+}
+
+// Rails the operator expanded this session. Not persisted: a reload collapses
+// every empty column again.
+const expandedRails = new Set();
+
+// Mirrors lib/routes.js#resolveRoute — that file is the source of truth.
+const GLOBAL_SLUGS = ['tickets', 'all-tickets', 'global'];
+
+function resolveRoute(pathname, projects) {
+    let slug = String(pathname || '').replace(/^\/+|\/+$/g, '');
+    try { slug = decodeURIComponent(slug); } catch { /* keep the raw slug */ }
+    if (!slug) return { view: 'dashboard' };
+
+    const lower = slug.toLowerCase();
+    if (GLOBAL_SLUGS.includes(lower)) return { view: 'global' };
+
+    const proj = (projects || []).find(p => {
+        const rel = p.relativePath || String(p.path || '').split('/').pop() || '';
+        return rel.toLowerCase() === lower || String(p.name || '').toLowerCase() === lower;
+    });
+    if (proj) return { view: 'project', path: proj.path };
+
+    return { view: 'unknown', slug };
+}
+
 const dashboardView = document.getElementById('dashboard-view');
 const projectView = document.getElementById('project-view');
-const btnBack = document.getElementById('back-to-dashboard-btn');
+const viewLoading = document.getElementById('view-loading');
+const breadcrumb = document.getElementById('breadcrumb');
 const btnEdit = document.getElementById('pv-edit-btn');
 
 function showFlashMessage(msg, type = 'info') {
@@ -120,51 +159,50 @@ function renderProjects(data) {
     renderErrors(data.errors);
     currentProjectsData = data.projects || [];
 
-    if (currentProjectsData.length === 0) {
-        projectsContainer.innerHTML = `<div class="empty-state" style="grid-column: 1 / -1; font-size: 1.2rem;">No projects found in the current directory.</div>`;
-        return;
-    }
-
     let hasAnyIssues = false;
 
-    projectsContainer.innerHTML = currentProjectsData.map(proj => {
-        const needsFix = proj.missingAgentsMd || proj.missingMeridianRules || proj.outdatedMeridianRules || proj.missingClaudeAgents || proj.outdatedClaudeAgents || proj.missingAgyAgents || proj.outdatedAgyAgents || proj.missingStack || proj.missingDescription;
-        if (needsFix) hasAnyIssues = true;
+    if (currentProjectsData.length === 0) {
+        projectsContainer.innerHTML = `<div class="empty-state" style="grid-column: 1 / -1; font-size: 1.2rem;">No projects found in the current directory.</div>`;
+    } else {
+        projectsContainer.innerHTML = currentProjectsData.map(proj => {
+            const needsFix = proj.missingAgentsMd || proj.missingMeridianRules || proj.outdatedMeridianRules || proj.missingClaudeAgents || proj.outdatedClaudeAgents || proj.missingAgyAgents || proj.outdatedAgyAgents || proj.missingStack || proj.missingDescription;
+            if (needsFix) hasAnyIssues = true;
 
-        // Convert legacy stack string to array if needed
-        let stackArray = Array.isArray(proj.stack) ? proj.stack : (proj.stack ? proj.stack.split(',').map(s => s.trim()).filter(Boolean) : []);
-        const stackHtml = stackArray.map(tech => `<span class="stack-badge">${tech}</span>`).join('');
+            // Convert legacy stack string to array if needed
+            let stackArray = Array.isArray(proj.stack) ? proj.stack : (proj.stack ? proj.stack.split(',').map(s => s.trim()).filter(Boolean) : []);
+            const stackHtml = stackArray.map(tech => `<span class="stack-badge">${tech}</span>`).join('');
 
-        return `
-        <div class="project-card" onclick="showProjectView('${proj.path.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}')">
-            <div class="project-header">
-                <h2 class="project-title">
-                    ${proj.name}
-                </h2>
-                <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap; margin-bottom: 0.5rem; margin-top: 0.5rem;">
-                    ${proj.missingAgentsMd ? '<span class="missing-agents-badge" title="Missing AGENTS.md in project root">⚠️ Missing AGENTS.md</span>' : ''}
-                    ${proj.missingMeridianRules && !proj.missingAgentsMd ? '<span class="outdated-agents-badge" title="Missing Meridian Instructions block">⚠️ Missing Meridian Rules</span>' : ''}
-                    ${proj.outdatedMeridianRules && !proj.missingAgentsMd ? '<span class="outdated-agents-badge" title="Meridian Instructions block is outdated">⚠️ Outdated Meridian Rules</span>' : ''}
-                    ${proj.missingClaudeAgents ? '<span class="outdated-agents-badge" title="Missing Claude Agents (.claude/agents/)">⚠️ Missing Claude Agents</span>' : ''}
-                    ${proj.outdatedClaudeAgents && !proj.missingClaudeAgents ? '<span class="outdated-agents-badge" title="Outdated Claude Agents (.claude/agents/)">⚠️ Outdated Claude Agents</span>' : ''}
-                    ${proj.missingAgyAgents ? '<span class="outdated-agents-badge" title="Missing Agy Agents (.agents/agents/)">⚠️ Missing Agy Agents</span>' : ''}
-                    ${proj.outdatedAgyAgents && !proj.missingAgyAgents ? '<span class="outdated-agents-badge" title="Outdated Agy Agents (.agents/agents/)">⚠️ Outdated Agy Agents</span>' : ''}
-                    ${proj.missingStack ? '<span class="missing-stack-badge" title="Missing Stack">⚠️ Missing Stack</span>' : ''}
-                    ${proj.missingDescription ? '<span class="missing-desc-badge" title="Missing Description">⚠️ Missing Description</span>' : ''}
-                    ${needsFix 
-                        ? `<button class="fix-ai-btn" onclick="openFixModal('${proj.path.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}', '${proj.name.replace(/'/g, "\\'")}', this, ${proj.missingAgentsMd}, ${proj.missingStack}, ${proj.missingDescription}, ${proj.missingMeridianRules}, ${proj.outdatedMeridianRules}, ${proj.missingClaudeAgents}, ${proj.outdatedClaudeAgents}, ${proj.missingAgyAgents}, ${proj.outdatedAgyAgents}); event.stopPropagation();">Fix 🪄</button>` 
-                        : ''}
+            return `
+            <div class="project-card" onclick="showProjectView('${proj.path.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}')">
+                <div class="project-header">
+                    <h2 class="project-title">
+                        ${proj.name}
+                    </h2>
+                    <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap; margin-bottom: 0.5rem; margin-top: 0.5rem;">
+                        ${proj.missingAgentsMd ? '<span class="missing-agents-badge" title="Missing AGENTS.md in project root">⚠️ Missing AGENTS.md</span>' : ''}
+                        ${proj.missingMeridianRules && !proj.missingAgentsMd ? '<span class="outdated-agents-badge" title="Missing Meridian Instructions block">⚠️ Missing Meridian Rules</span>' : ''}
+                        ${proj.outdatedMeridianRules && !proj.missingAgentsMd ? '<span class="outdated-agents-badge" title="Meridian Instructions block is outdated">⚠️ Outdated Meridian Rules</span>' : ''}
+                        ${proj.missingClaudeAgents ? '<span class="outdated-agents-badge" title="Missing Claude Agents (.claude/agents/)">⚠️ Missing Claude Agents</span>' : ''}
+                        ${proj.outdatedClaudeAgents && !proj.missingClaudeAgents ? '<span class="outdated-agents-badge" title="Outdated Claude Agents (.claude/agents/)">⚠️ Outdated Claude Agents</span>' : ''}
+                        ${proj.missingAgyAgents ? '<span class="outdated-agents-badge" title="Missing Agy Agents (.agents/agents/)">⚠️ Missing Agy Agents</span>' : ''}
+                        ${proj.outdatedAgyAgents && !proj.missingAgyAgents ? '<span class="outdated-agents-badge" title="Outdated Agy Agents (.agents/agents/)">⚠️ Outdated Agy Agents</span>' : ''}
+                        ${proj.missingStack ? '<span class="missing-stack-badge" title="Missing Stack">⚠️ Missing Stack</span>' : ''}
+                        ${proj.missingDescription ? '<span class="missing-desc-badge" title="Missing Description">⚠️ Missing Description</span>' : ''}
+                        ${needsFix 
+                            ? `<button class="fix-ai-btn" onclick="openFixModal('${proj.path.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}', '${proj.name.replace(/'/g, "\\'")}', this, ${proj.missingAgentsMd}, ${proj.missingStack}, ${proj.missingDescription}, ${proj.missingMeridianRules}, ${proj.outdatedMeridianRules}, ${proj.missingClaudeAgents}, ${proj.outdatedClaudeAgents}, ${proj.missingAgyAgents}, ${proj.outdatedAgyAgents}); event.stopPropagation();">Fix 🪄</button>` 
+                            : ''}
+                    </div>
+                    <p class="project-purpose">${proj.description}</p>
+                    <div class="project-stack">${stackHtml}</div>
                 </div>
-                <p class="project-purpose">${proj.description}</p>
-                <div class="project-stack">${stackHtml}</div>
-            </div>
             
-            <div class="dashboard-tasks-preview">
-                ${renderDashboardTasksPreview(proj.tasks || [])}
+                <div class="dashboard-tasks-preview">
+                    ${renderDashboardTasksPreview(proj.tasks || [])}
+                </div>
             </div>
-        </div>
-        `;
-    }).join('');
+            `;
+        }).join('');
+    }
 
     const fixAllBtn = document.getElementById('fix-all-btn');
     if (fixAllBtn) {
@@ -659,27 +697,62 @@ function renderDashboardTasksPreview(tasks) {
 }
 
 function handleUrlRouting() {
-    const rawPath = window.location.pathname.replace(/^\/+|\/+$/g, '');
-    if (!rawPath) {
-        showDashboard(false);
-        return;
+    const route = resolveRoute(window.location.pathname, currentProjectsData);
+    switch (route.view) {
+        case 'dashboard':
+            showDashboard(false);
+            break;
+        case 'global':
+            showGlobalTicketsView(false);
+            break;
+        case 'project':
+            showProjectView(route.path, false);
+            break;
+        default:
+            // Nothing lives here: say so, and do not leave a dead URL in the bar.
+            showDashboard(false);
+            showFlashMessage(`No project at /${route.slug}`, 'error');
+            history.replaceState(null, '', '/');
     }
+}
 
-    if (rawPath.toLowerCase() === 'tickets' || rawPath.toLowerCase() === 'all-tickets' || rawPath.toLowerCase() === 'global') {
-        showGlobalTicketsView(false);
+// Swaps the visible view. The first call removes the cold-load placeholder;
+// nothing is shown before the first SSE message has picked a route, so a deep
+// link never flashes the dashboard. The leaving view hides at once; the
+// entering one replays the view-enter animation.
+function activateView(name) {
+    if (viewLoading) viewLoading.remove();
+    const entering = name === 'dashboard' ? dashboardView : projectView;
+    const leaving = name === 'dashboard' ? projectView : dashboardView;
+    leaving.classList.add('hidden');
+    leaving.classList.remove('view--active');
+    entering.classList.remove('hidden');
+    entering.classList.add('view--active');
+    document.body.dataset.view = name;
+}
+
+// Breadcrumb: hidden on the dashboard; "Meridian › <current>" elsewhere.
+function setBreadcrumb(current) {
+    if (!breadcrumb) return;
+    if (!current) {
+        breadcrumb.classList.add('hidden');
+        breadcrumb.innerHTML = '';
         return;
     }
-    
-    const proj = currentProjectsData.find(p => {
-        const relPath = p.relativePath || p.path.split('/').pop();
-        return relPath.toLowerCase() === rawPath.toLowerCase() || p.name.toLowerCase() === rawPath.toLowerCase();
+    breadcrumb.innerHTML = `<a href="/" data-nav="dashboard">Meridian</a>`
+        + `<span class="breadcrumb-sep" aria-hidden="true">›</span>`
+        + `<span class="breadcrumb-current"></span>`;
+    breadcrumb.querySelector('.breadcrumb-current').textContent = current;
+    breadcrumb.classList.remove('hidden');
+}
+
+if (breadcrumb) {
+    breadcrumb.addEventListener('click', (e) => {
+        const link = e.target.closest('a[data-nav="dashboard"]');
+        if (!link) return;
+        e.preventDefault();
+        showDashboard(true);
     });
-    
-    if (proj) {
-        showProjectView(proj.path, false);
-    } else {
-        showDashboard(false);
-    }
 }
 
 window.addEventListener('popstate', () => {
@@ -688,9 +761,9 @@ window.addEventListener('popstate', () => {
 
 function showDashboard(pushState = true) {
     currentProjectViewPath = null;
-    projectView.classList.add('hidden');
-    dashboardView.classList.remove('hidden');
-    if (btnBack) btnBack.classList.add('hidden');
+    activateView('dashboard');
+    setBreadcrumb(null);
+    document.title = 'Meridian Dashboard';
     if (pushState && window.location.pathname !== '/') {
         history.pushState(null, '', '/');
     }
@@ -698,9 +771,7 @@ function showDashboard(pushState = true) {
 
 window.showProjectView = function(projPath, pushState = true) {
     currentProjectViewPath = projPath;
-    dashboardView.classList.add('hidden');
-    projectView.classList.remove('hidden');
-    if (btnBack) btnBack.classList.remove('hidden');
+    activateView('project');
     refreshProjectView();
     
     if (pushState && currentProjectsData.length > 0) {
@@ -715,9 +786,9 @@ window.showProjectView = function(projPath, pushState = true) {
 
 window.showGlobalTicketsView = function(pushState = true) {
     currentProjectViewPath = '__GLOBAL__';
-    dashboardView.classList.add('hidden');
-    projectView.classList.remove('hidden');
-    if (btnBack) btnBack.classList.remove('hidden');
+    activateView('global');
+    setBreadcrumb('All Tickets');
+    document.title = 'All Tickets · Meridian';
     refreshProjectView();
     
     if (pushState && window.location.pathname !== '/tickets') {
@@ -736,10 +807,6 @@ if (headerTitle) {
     headerTitle.addEventListener('click', () => showDashboard(true));
 }
 
-if (btnBack) {
-    btnBack.addEventListener('click', () => showDashboard(true));
-}
-
 btnEdit.addEventListener('click', () => {
     if (currentProjectViewPath) {
         openEditModal(currentProjectViewPath);
@@ -754,8 +821,8 @@ function refreshProjectView() {
         document.getElementById('pv-desc').textContent = 'Aggregated Kanban view of tasks across all monitored workspace projects.';
         document.getElementById('pv-stack').innerHTML = `<span class="stack-badge" style="background: rgba(99, 102, 241, 0.2); color: #a5b4fc; border-color: rgba(99, 102, 241, 0.4);">All ${currentProjectsData.length} Projects</span>`;
         
-        btnEdit.style.display = 'none';
-        addTaskForm.style.display = 'none';
+        btnEdit.classList.add('hidden');
+        addTaskForm.classList.add('hidden');
 
         let allTasks = [];
         currentProjectsData.forEach(proj => {
@@ -772,8 +839,8 @@ function refreshProjectView() {
         return;
     }
     
-    btnEdit.style.display = '';
-    addTaskForm.style.display = 'flex';
+    btnEdit.classList.remove('hidden');
+    addTaskForm.classList.remove('hidden');
     
     const proj = currentProjectsData.find(p => p.path === currentProjectViewPath);
     if (!proj) {
@@ -782,6 +849,8 @@ function refreshProjectView() {
     }
     
     // Update Header
+    document.title = `${proj.name} · Meridian`;
+    setBreadcrumb(proj.name);
     document.getElementById('pv-title').textContent = proj.name;
     document.getElementById('pv-desc').textContent = proj.description || 'No description provided.';
     
@@ -919,20 +988,74 @@ function renderTaskCardHtml(task) {
     `;
 }
 
+// What the operator has done to the board that a rebuild would otherwise
+// throw away: scroll positions, opened details, revealed hidden-done groups,
+// and the rails expanded this session. Every SSE message rebuilds the board's
+// innerHTML, so this is captured before and restored after.
+function captureBoardState(board) {
+    const state = {
+        boardScrollLeft: board.scrollLeft,
+        columnScrollTop: {},
+        openDetails: new Set(),
+        revealedHidden: new Set(),
+        expandedRails: new Set(expandedRails)
+    };
+    board.querySelectorAll('.kanban-column[data-status-id]').forEach(col => {
+        const id = col.dataset.statusId;
+        const tasksEl = col.querySelector('.kanban-tasks');
+        if (tasksEl) state.columnScrollTop[id] = tasksEl.scrollTop;
+        const group = col.querySelector('.done-hidden-tasks');
+        if (group && !group.classList.contains('hidden')) state.revealedHidden.add(id);
+    });
+    board.querySelectorAll('.task-justification.visible').forEach(el => {
+        if (el.id) state.openDetails.add(el.id);
+    });
+    return state;
+}
+
+// Restores what captureBoardState took. Anything that no longer exists (a task
+// that moved column, a column now collapsed) is skipped, never thrown on.
+// Hidden groups are revealed before scroll offsets are set, since revealing
+// changes the column's scrollHeight.
+function restoreBoardState(board, state) {
+    if (!state) return;
+    state.openDetails.forEach(uid => {
+        const el = board.querySelector(`#${CSS.escape(uid)}`);
+        if (!el) return;
+        el.classList.add('visible');
+        const toggle = el.previousElementSibling;
+        if (toggle && toggle.classList.contains('task-justification-toggle')) toggle.classList.add('open');
+    });
+    state.revealedHidden.forEach(id => {
+        const col = board.querySelector(`.kanban-column[data-status-id="${id}"]`);
+        if (!col) return;
+        const group = col.querySelector('.done-hidden-tasks');
+        const chip = col.querySelector('.done-hidden-chip');
+        if (group) group.classList.remove('hidden');
+        if (chip) chip.remove();
+    });
+    Object.entries(state.columnScrollTop).forEach(([id, top]) => {
+        const tasksEl = board.querySelector(`.kanban-column[data-status-id="${id}"] .kanban-tasks`);
+        if (tasksEl) tasksEl.scrollTop = top;
+    });
+    board.scrollLeft = state.boardScrollLeft;
+}
+
+window.expandRail = function(statusId) {
+    expandedRails.add(statusId);
+    refreshProjectView();
+};
+
+window.railKeydown = function(event, statusId) {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    expandRail(statusId);
+};
+
 function renderKanbanBoard(tasks) {
     const board = document.getElementById('kanban-board');
     const summaryBar = document.getElementById('status-summary-bar');
-    const toggleEmptyColsInput = document.getElementById('toggle-empty-cols');
     const isGlobal = currentProjectViewPath === '__GLOBAL__';
-
-    if (toggleEmptyColsInput) {
-        toggleEmptyColsInput.checked = hideEmptyColumns;
-        toggleEmptyColsInput.onchange = (e) => {
-            hideEmptyColumns = e.target.checked;
-            localStorage.setItem('meridian_hide_empty_columns', e.target.checked);
-            refreshProjectView();
-        };
-    }
 
     const doneWindowSelect = document.getElementById('done-window');
     if (doneWindowSelect) {
@@ -946,6 +1069,14 @@ function renderKanbanBoard(tasks) {
 
     renderRunningTickets(tasks);
 
+    // Rails are decided on the total per status — the same number the summary
+    // card shows — never on the done/nope windowed count.
+    const collapsed = collapsedColumns(
+        KANBAN_STATUSES.map(s => ({ id: s.id, count: tasks.filter(t => t.status === s.id).length })),
+        expandedRails
+    );
+
+    const boardState = captureBoardState(board);
     board.innerHTML = '';
     if (summaryBar) summaryBar.innerHTML = '';
     
@@ -979,8 +1110,14 @@ function renderKanbanBoard(tasks) {
             `;
         }
 
-        if (hideEmptyColumns && colTasks.length === 0) {
-            return; // Skip rendering empty column
+        if (collapsed.has(statusCol.id)) {
+            board.insertAdjacentHTML('beforeend', `
+            <div class="kanban-column kanban-column--collapsed" data-status-id="${statusCol.id}" role="button" tabindex="0" title="Expand ${statusCol.label}" onclick="expandRail('${statusCol.id}')" onkeydown="railKeydown(event, '${statusCol.id}')">
+                <span class="kanban-rail-label">${statusCol.label}</span>
+                <span class="kanban-column-count">0</span>
+            </div>
+            `);
+            return;
         }
 
         let visibleTasks = colTasks;
@@ -1000,6 +1137,10 @@ function renderKanbanBoard(tasks) {
             </div>
         ` : '';
 
+        // Only an expanded rail is truly empty; a windowed done/nope column
+        // with nothing visible still has its chip, never this placeholder.
+        const emptyHtml = colTasks.length === 0 ? '<div class="kanban-empty">Empty</div>' : '';
+
         const colHtml = `
             <div class="kanban-column" data-status-id="${statusCol.id}">
                 <div class="kanban-column-header">
@@ -1009,6 +1150,7 @@ function renderKanbanBoard(tasks) {
                 <div class="kanban-tasks">
                     ${visibleTasks.map(task => renderTaskCardHtml(task)).join('')}
                     ${hiddenChipHtml}
+                    ${emptyHtml}
                 </div>
             </div>
         `;
@@ -1019,6 +1161,8 @@ function renderKanbanBoard(tasks) {
     if (summaryBar) {
         summaryBar.innerHTML = summaryHtml;
     }
+
+    restoreBoardState(board, boardState);
 }
 
 window.toggleJustification = function(uid, toggleEl) {
@@ -1034,15 +1178,6 @@ window.scrollToKanbanColumn = function(statusId) {
         col.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
         col.classList.add('column-highlight');
         setTimeout(() => col.classList.remove('column-highlight'), 1200);
-    }
-};
-
-// Intercept SSE updates so if we are in project view, it updates live
-const originalRenderProjects = renderProjects;
-window.renderProjects = function(data) {
-    originalRenderProjects(data); // Rebuilds the DOM for dashboard behind the scenes
-    if (currentProjectViewPath) {
-        refreshProjectView(); // Re-render kanban without reloading page
     }
 };
 

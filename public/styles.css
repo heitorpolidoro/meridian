@@ -369,6 +369,10 @@ h1 span {
     margin-bottom: 2rem;
 }
 
+#error-container:empty {
+    display: none;
+}
+
 .error-banner {
     background: rgba(239, 68, 68, 0.1);
     border: 1px solid rgba(239, 68, 68, 0.4);
@@ -429,6 +433,18 @@ h1 span {
     align-items: center;
     gap: 1rem;
     margin-top: 1rem;
+}
+
+.fix-all-btn {
+    background: #10b981;
+    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
+}
+
+/* Dashboard-only actions. Registering a project and Fix All belong to the
+   overview; the board views keep only the always-on All Tickets button. */
+body:not([data-view="dashboard"]) #open-add-modal-btn,
+body:not([data-view="dashboard"]) #fix-all-btn {
+    display: none !important;
 }
 
 button {
@@ -575,32 +591,208 @@ textarea:focus {
     margin-top: 2rem;
 }
 
+/* ── Views ───────────────────────────────────────────────────────────── */
+/* Both views start hidden; app.js shows one once the first SSE message has
+   resolved the URL. Until then only the loading placeholder is visible. */
+.view-loading {
+    color: var(--text-secondary);
+    font-style: italic;
+    text-align: center;
+    padding: 3rem 0;
+}
+
+@keyframes view-enter {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.view.view--active {
+    animation: view-enter 180ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .view.view--active {
+        animation: none;
+    }
+}
+
+/* Breadcrumb: "Meridian › <current>", shown only in board views */
+.breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    min-width: 0;
+}
+
+.breadcrumb a {
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: color 0.2s ease;
+}
+
+.breadcrumb a:hover {
+    color: var(--text-primary);
+}
+
+.breadcrumb-sep {
+    opacity: 0.5;
+}
+
+.breadcrumb-current {
+    color: var(--text-primary);
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ── Board views fill the viewport ────────────────────────────────────── */
+/* In project and global view the page itself never scrolls: the container is
+   exactly one viewport tall, every band above the board is fixed-height, and
+   the board takes what is left. The dashboard keeps its scrolling page. */
+body[data-view="project"],
+body[data-view="global"] {
+    overflow: hidden;
+    height: 100vh;
+}
+
+body:not([data-view="dashboard"]) .container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    max-width: none;
+    padding: 1.25rem 2rem;
+}
+
+/* Compact header: one row — title, breadcrumb, actions */
+body:not([data-view="dashboard"]) header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    text-align: left;
+    margin-bottom: 1rem;
+    flex: 0 0 auto;
+}
+
+body:not([data-view="dashboard"]) header h1 {
+    font-size: 1.2rem;
+    margin-bottom: 0;
+    white-space: nowrap;
+}
+
+body:not([data-view="dashboard"]) header .subtitle {
+    display: none;
+}
+
+body:not([data-view="dashboard"]) .breadcrumb {
+    flex: 1 1 auto;
+}
+
+body:not([data-view="dashboard"]) .header-actions {
+    flex-direction: row;
+    justify-content: flex-end;
+    margin-top: 0;
+    flex: 0 0 auto;
+}
+
+body:not([data-view="dashboard"]) .status-indicator {
+    margin-top: 0;
+}
+
+body:not([data-view="dashboard"]) #error-container {
+    flex: 0 0 auto;
+}
+
+#project-view {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
 /* Kanban Board & Project View Styles */
 .project-view-header {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    margin-bottom: 2rem;
-    padding: 1.5rem;
+    margin-bottom: 1rem;
+    padding: 1rem 1.25rem;
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.05);
     border-radius: 12px;
+    flex: 0 0 auto;
 }
 
 .project-header-info h2 {
-    font-size: 1.8rem;
-    margin-bottom: 0.5rem;
+    font-size: 1.5rem;
+    margin-bottom: 0.35rem;
 }
 
 .project-header-info p {
     color: var(--text-secondary);
 }
 
-.kanban-header {
+.pv-stack {
+    margin-top: 0.5rem;
+}
+
+.kanban-toolbar {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 1.5rem;
+    margin-bottom: 1rem;
+    flex: 0 0 auto;
+}
+
+.toolbar-controls {
+    display: flex;
+    align-items: center;
+    gap: 1.2rem;
+}
+
+.toolbar-control {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    user-select: none;
+    background: rgba(255, 255, 255, 0.03);
+    padding: 0.35rem 0.75rem;
+    border-radius: 6px;
+    border: 1px solid var(--card-border);
+    transition: all 0.2s ease;
+}
+
+.toolbar-select {
+    width: auto;
+    padding: 0;
+    cursor: pointer;
+    background: transparent;
+    color: var(--text-secondary);
+    border: none;
+    outline: none;
+    font-size: inherit;
+}
+
+.toolbar-select:focus {
+    border: none;
+    background: transparent;
+}
+
+.add-task-form {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.add-task-input {
+    width: auto;
+    min-width: 300px;
 }
 
 .kanban-board {
@@ -608,21 +800,76 @@ textarea:focus {
     gap: 1rem;
     overflow-x: auto;
     padding-bottom: 1rem;
-    height: calc(100vh - 260px);
-    min-height: 400px;
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto;
     align-items: stretch;
 }
 
+/* Columns flex to fill the row within bounds; past that the board scrolls */
 .kanban-column {
-    flex: 0 0 280px;
+    flex: 1 1 260px;
+    min-width: 260px;
+    max-width: 360px;
     background: #121215;
     border-radius: 8px;
     border: 1px solid #27272a;
+    border-top: 3px solid var(--card-border);
     display: flex;
     flex-direction: column;
     height: 100%;
     max-height: 100%;
     overflow: hidden;
+}
+
+/* Status accent: the same colour family as the .status-<id> badges */
+.kanban-column[data-status-id="backlog"] { border-top-color: #9ca3af; }
+.kanban-column[data-status-id="spec_review"] { border-top-color: #ec4899; }
+.kanban-column[data-status-id="ready_todo"] { border-top-color: #3b82f6; }
+.kanban-column[data-status-id="in_progress"] { border-top-color: #eab308; }
+.kanban-column[data-status-id="code_review"] { border-top-color: #06b6d4; }
+.kanban-column[data-status-id="qa_review"] { border-top-color: #a855f7; }
+.kanban-column[data-status-id="blocked"] { border-top-color: #ef4444; }
+.kanban-column[data-status-id="done"] { border-top-color: #22c55e; }
+.kanban-column[data-status-id="nope"] { border-top-color: #6b7280; }
+
+/* An empty status collapses into a 44px rail; click or Enter expands it */
+.kanban-column--collapsed {
+    flex: 0 0 44px;
+    min-width: 44px;
+    max-width: 44px;
+    width: 44px;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.75rem 0;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.kanban-column--collapsed:hover,
+.kanban-column--collapsed:focus-visible {
+    background: #18181b;
+    border-color: #3f3f46;
+    outline: none;
+}
+
+.kanban-rail-label {
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.kanban-empty {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    font-style: italic;
+    text-align: center;
+    padding: 1.5rem 0;
+    opacity: 0.7;
 }
 
 .kanban-column-header {
@@ -851,6 +1098,17 @@ textarea:focus {
 }
 
 /* Flash Messages */
+.flash-message-container {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
 .flash-message {
     padding: 12px 20px;
     border-radius: 8px;
@@ -882,7 +1140,8 @@ textarea:focus {
     gap: 0.75rem;
     overflow-x: auto;
     padding: 0.25rem 0.25rem 0.75rem 0.25rem;
-    margin-bottom: 1.25rem;
+    margin-bottom: 1rem;
+    flex: 0 0 auto;
 }
 
 .status-summary-bar::-webkit-scrollbar {
@@ -992,7 +1251,8 @@ textarea:focus {
 
 /* ── Running Tickets Section ─────────────────────────────────────────── */
 .running-tickets-section {
-    margin-bottom: 1.25rem;
+    flex: 0 0 auto;
+    margin-bottom: 1rem;
     background: rgba(16, 185, 129, 0.05);
     border: 1px solid rgba(16, 185, 129, 0.2);
     border-radius: 10px;
