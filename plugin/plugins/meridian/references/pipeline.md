@@ -55,6 +55,27 @@ The `in_progress` row carries one thing this file does not define: an interrupte
 "Resumption briefing" in the `work` skill, which owns dispatch payloads and
 holds that rule. No other status gets one.
 
+## A board read expires on use
+
+The board's only store is `tasks.json`, behind the API. What a fetch put into
+your context is **history, not state**: another session — another harness,
+even — may have moved tasks the moment after you read them, and a copy in
+context never hears about it. Context is the one cache this system cannot
+delete, so treat it as already stale.
+
+Never decide over an earlier fetch. Re-fetch, scoped to the project, before
+every decision that depends on board state:
+
+- entering a task at a stage (the entry checks read the task as it is *now*);
+- choosing a task when no id was given;
+- the unblocking sweep — it must see the dependencies' current statuses, not
+  the ones from before the task you just finished;
+- reporting final state to the operator.
+
+A fetch consumed by one decision is spent. The scoped `GET` is small and the
+server reads the disk fresh on every request — re-fetching costs little, and
+acting on a stale copy costs a wrong write.
+
 ## Choosing which task
 
 Normally you are given an explicit task id and this question does not arise —
