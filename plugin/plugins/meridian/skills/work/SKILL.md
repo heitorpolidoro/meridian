@@ -158,6 +158,9 @@ carries a resumption briefing on top of its normal payload:
   got there from `ready_todo` or was sent back by code review or QA;
 - **the open round's `last_review_findings`** — the blocking findings it had not
   finished addressing, verbatim, and nothing else from that round;
+- **the task's `resume_context`, verbatim, when it has one** — the note left at
+  the moment of interruption. The server clears it automatically when the task
+  moves on; do not clear it yourself.
 - **an instruction to establish actual state with `git status` and `git diff`
   before writing anything.** Not after, not alongside — before. A developer that
   starts writing before it looks either redoes work that is already in the tree

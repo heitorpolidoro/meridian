@@ -603,7 +603,8 @@ app.put('/api/projects/tasks/:taskId', (req, res) => {
 
         const scalarFields = [
             'status', 'justification', 'title', 'priority', 'spec_path',
-            'spec_iterations', 'code_review_iterations', 'qa_iterations'
+            'spec_iterations', 'code_review_iterations', 'qa_iterations',
+            'resume_context'
         ];
         for (const field of scalarFields) {
             if (req.body[field] !== undefined) task[field] = req.body[field];
@@ -620,6 +621,9 @@ app.put('/api/projects/tasks/:taskId', (req, res) => {
         if (req.body.running !== undefined) task.running = Boolean(req.body.running);
 
         stampTaskUpdate(task, prevStatus);
+        // The stamp clears resume_context on a status change; a note provided
+        // in this same request is deliberate for the new position — keep it.
+        if (req.body.resume_context !== undefined) task.resume_context = req.body.resume_context;
 
         saveTasks(projectPath, tasksData);
         

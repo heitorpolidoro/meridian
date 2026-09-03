@@ -251,6 +251,23 @@ Whenever a task reaches `done`, sweep the board:
 
 Report what the sweep unblocked.
 
+## Stopping mid-task leaves a note
+
+If you must stop with a task unfinished — the operator asked, the context is
+nearly full, anything — do not just walk away. In one `PUT`: set
+`running: false` and write `resume_context`, a few lines saying where you are,
+what is done, and what the next action was going to be. You know these things
+now; the session that resumes will not.
+
+When the session dies instead of stopping, the plugin's stop hook writes a
+mechanical note in your place — timestamp, git state, latest report path. Yours
+is better: write it whenever you get the chance to.
+
+The server clears `resume_context` on any status change, so a consumed note
+disappears the moment the task moves on. Never clear it by hand, and never
+carry one forward — a note describing a point the task already left is worse
+than none.
+
 ## Specialist reports stay out of your context
 
 A specialist's full report — its reasoning, its file walkthrough, the outputs it

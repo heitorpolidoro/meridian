@@ -83,7 +83,27 @@ case "$MODE" in
     # turn of every session that never dispatched a Meridian specialist.
     [ -s "$LEDGER" ] || { rm -f "$LEDGER"; exit 0; }
     while IFS="$(printf '\t')" read -r ID CWD; do
-      [ -n "$ID" ] && [ -n "$CWD" ] && put_running "$ID" "$CWD" false
+      [ -n "$ID" ] && [ -n "$CWD" ] || continue
+      # Leave a resume note alongside the cleared flag. A shell hook cannot
+      # summarise what the agent was doing, but it can point the resumer at
+      # the evidence: when it stopped, the git state, the latest report file.
+      # Only characters safe inside a JSON string are used.
+      DIR=$(printf '%s' "$CWD" | sed 's/^"//; s/"$//')
+      WHEN=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+      GITBIT="git n/a"
+      if git -C "$DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        BR=$(git -C "$DIR" rev-parse --abbrev-ref HEAD 2>/dev/null | tr -cd 'A-Za-z0-9._/-')
+        STAGED=$(git -C "$DIR" diff --cached --name-only 2>/dev/null | grep -c . || true)
+        DIRTY=$(git -C "$DIR" diff --name-only 2>/dev/null | grep -c . || true)
+        GITBIT="git $BR staged:$STAGED modified:$DIRTY"
+      fi
+      REPORT=$(ls -t "$DIR/.meridian/reports/$ID-"*.md 2>/dev/null | head -1)
+      RPTBIT=""
+      [ -n "$REPORT" ] && RPTBIT="; latest report .meridian/reports/$(basename "$REPORT" | tr -cd 'A-Za-z0-9._-')"
+      CTX="Interrupted mid-dispatch $WHEN; $GITBIT$RPTBIT. Establish actual state with git status and git diff before writing anything."
+      curl -sS -m 2 -X PUT "$BASE/api/projects/tasks/$ID" \
+        -H 'Content-Type: application/json' \
+        -d "{\"projectPath\":$CWD,\"running\":false,\"resume_context\":\"$CTX\"}" >/dev/null 2>&1 || true
     done < "$LEDGER"
     rm -f "$LEDGER"
     ;;

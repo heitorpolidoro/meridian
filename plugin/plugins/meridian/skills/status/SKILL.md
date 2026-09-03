@@ -158,8 +158,10 @@ or that sits in the status the developer occupies while working, is describing
 work that stopped mid-flight. Neither flag can be true and honest at the moment
 this skill reads the board.
 
-For each interrupted task report `id`, `title`, `status`, `running`, and the
-open round's `last_review_findings` if it has any.
+For each interrupted task report `id`, `title`, `status`, `running`, the
+open round's `last_review_findings` if it has any, and its `resume_context`
+if present — that note was left at the moment of interruption, by the
+stopping session or by the plugin's stop hook, precisely to be read now.
 
 ## 6. Offer to resume
 

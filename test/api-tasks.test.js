@@ -590,3 +590,29 @@ test('GET /<slug> and GET /tickets serve index.html for the SPA to route', async
         }
     });
 });
+
+test('resume_context is written via PUT and cleared when the task progresses', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        const t = await seed(base, dir, { status: 'in_progress' });
+        const noted = await put(base, dir, t.id, { resume_context: 'mid-implementation; tests green except nav_test' });
+        assert.equal(noted.resume_context, 'mid-implementation; tests green except nav_test');
+
+        const touched = await put(base, dir, t.id, { running: false });
+        assert.equal(touched.resume_context, 'mid-implementation; tests green except nav_test',
+            'a write without a status change keeps the note');
+
+        const moved = await put(base, dir, t.id, { status: 'code_review' });
+        assert.equal(moved.resume_context, undefined,
+            'progressing to another stage clears it — the note described a point that no longer exists');
+    });
+});
+
+test('a status change and a fresh resume_context in the same request keep the new note', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        const t = await seed(base, dir, { status: 'in_progress' });
+        const moved = await put(base, dir, t.id, { status: 'blocked', resume_context: 'stopped by cap' });
+        assert.equal(moved.resume_context, 'stopped by cap');
+    });
+});
