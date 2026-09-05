@@ -45,3 +45,25 @@
 - `/project_b` at 1440×900 renders four full columns at their 260 px minimum plus five rails and overflows the board by 12 px (scrollWidth 1388 vs clientWidth 1376), which yields a barely-there horizontal scrollbar. Letting columns shrink a little below 260 px before overflowing, or trimming the 1 rem gap when rails are present, would avoid the sliver scroll on common laptop widths.
 - `index.html` loads the Google Fonts stylesheet before the end-of-body `<script>`, so when `fonts.googleapis.com` is slow or unreachable the script (and therefore the first route/`#view-loading` removal) waits for that request to fail. Loading the font non-render-blocking (`media="print" onload="this.media='all'"`, or a `<link rel="preload">` with `font-display: swap`) would keep the SPA boot independent of third-party latency.
 - The breadcrumb's `textContent` is `Meridian›Project D` (spacing comes from CSS `gap`), so text copied or read by assistive tech runs the words together; adding whitespace around the separator span, or an `aria-label` on the nav items, would read more naturally.
+
+## [MERID-3] Capture task statistics: events log and per-dispatch token usage — 2026-09-05
+
+- Consider noting in the spec (or accepting as implementation detail) that
+  `python3` is a new runtime dependency for this shell script, distinct from
+  the "no jq" design constraint already documented in the script's header —
+  worth a one-line comment in the implementation calling out why Python was
+  chosen over pure shell for this one multi-line JSON aggregation, so a future
+  reader doesn't mistake it for a lapse in the "no external tools" convention.
+- The spec does not pin down the exact `{"error": "..."}` message text for each
+  of the 7 validation steps in §3; harmless since expected_results only checks
+  status codes, but worth deciding once during implementation so error
+  messages read consistently with the existing task routes' style.
+
+## [MERID-3] Capture task statistics: events log and per-dispatch token usage (code review) — 2026-09-05
+
+- `lib/events.js`'s catch block binds `err` but never uses it (`} catch (err) { return false; }`). Harmless (no lint configured), but could be `catch { return false; }` for a marginally cleaner read if a future lint pass is added.
+- `test/api-events.test.js`'s "rejects a type other than dispatch_tokens" test iterates 3 variants (`undefined`, `'status'`, `'something_else'`) which is fine, but the file's own comment style elsewhere sometimes documents *why* a given negative case matters — not necessary here, just noting for consistency across the test suite as it grows.
+
+## [MERID-3] Capture task statistics: events log and per-dispatch token usage (QA) — 2026-09-05
+- `isRegisteredProject` in server.js re-reads and re-parses `projects.json` from disk on every `/api/projects/events` call; fine at current scale, but if this endpoint becomes hot (e.g. one call per subagent dispatch across many concurrent sessions) it may be worth caching or reusing whatever in-memory registry `getStatusData` already uses.
+- The `capture_tokens` "since empty" fallback (degrades to "newest file, unconditionally" when no ledger mtime is available) is explicitly flagged in the script's own comment as a known best-effort compromise; no test exercises this fallback path specifically (only the "ledger present with old mtime" happy path and the "no subagents dir/file" negative paths are covered). Not blocking since it's documented as an accepted degradation, but a follow-up test for that branch would close the coverage gap.

@@ -51,6 +51,96 @@ cwd_json() {
   printf '%s' "$c"
 }
 
+# BSD `stat` (macOS) vs GNU `stat` (Linux CI) — mtime in epoch seconds, or
+# empty when the path does not exist.
+mtime_of() { stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null; }
+
+# Claude Code sends transcript_path; absent under Antigravity, which is the
+# primary "skip silently" case for token capture.
+transcript_path() {
+  printf '%s' "$INPUT" | grep -o '"transcript_path"[[:space:]]*:[[:space:]]*"[^"]*"' \
+    | head -1 | sed 's/^"transcript_path"[[:space:]]*:[[:space:]]*"//; s/"$//'
+}
+
+# Best-effort extractor for the agent name, so the posted event can carry it.
+agent_type() {
+  printf '%s' "$INPUT" | grep -o '"subagent_type"[[:space:]]*:[[:space:]]*"[^"]*"' \
+    | head -1 | sed 's/.*"\([^"]*\)"$/\1/'
+}
+
+capture_tokens() { # $1=task id  $2=cwd JSON string  $3=ledger mtime (epoch secs, may be empty)
+  local id="$1" cwdj="$2" since="$3"
+  local tpath sid tdir subdir
+  tpath="$(transcript_path)"; [ -n "$tpath" ] || return 0
+  sid="$(session_id)"; [ -n "$sid" ] || return 0
+  tdir="$(dirname "$tpath")"
+  subdir="$tdir/$sid/subagents"
+  [ -d "$subdir" ] || return 0
+
+  # Newest agent-*.jsonl modified after the pre-dispatch ledger timestamp is
+  # the transcript for the dispatch that just returned. `since` empty (no
+  # ledger mtime available) degrades to "newest file, unconditionally" —
+  # acceptable for this best-effort path.
+  local newest="" newest_mtime=0 f mtime
+  for f in "$subdir"/agent-*.jsonl; do
+    [ -e "$f" ] || continue
+    mtime="$(mtime_of "$f")"; [ -n "$mtime" ] || continue
+    if [ -n "$since" ] && [ "$mtime" -le "$since" ]; then continue; fi
+    if [ "$mtime" -gt "$newest_mtime" ]; then newest_mtime="$mtime"; newest="$f"; fi
+  done
+  [ -n "$newest" ] || return 0
+
+  local tokens out_tokens ctx_tokens
+  tokens="$(python3 - "$newest" <<'PYEOF'
+import json, sys
+
+path = sys.argv[1]
+output_tokens = 0
+last_usage = None
+try:
+    with open(path) as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except ValueError:
+                continue
+            usage = entry.get('usage')
+            if not isinstance(usage, dict):
+                msg = entry.get('message')
+                usage = msg.get('usage') if isinstance(msg, dict) else None
+            if isinstance(usage, dict):
+                output_tokens += usage.get('output_tokens', 0) or 0
+                last_usage = usage
+except OSError:
+    pass
+
+if last_usage is None:
+    print('0 0')
+else:
+    ctx = (last_usage.get('input_tokens', 0) or 0) \
+        + (last_usage.get('cache_read_input_tokens', 0) or 0) \
+        + (last_usage.get('cache_creation_input_tokens', 0) or 0)
+    print(f'{output_tokens} {ctx}')
+PYEOF
+)"
+  out_tokens="${tokens%% *}"
+  ctx_tokens="${tokens##* }"
+  [ -n "$out_tokens" ] || return 0
+
+  local agent agent_json payload
+  agent="$(agent_type)"
+  agent_json=""
+  [ -n "$agent" ] && agent_json="\"agent\":\"$agent\","
+  payload=$(printf '{"projectPath":%s,"task":"%s","type":"dispatch_tokens",%s"output_tokens":%s,"context_tokens":%s}' \
+    "$cwdj" "$id" "$agent_json" "$out_tokens" "$ctx_tokens")
+  curl -sS -m 2 -X POST "$BASE/api/projects/events" \
+    -H 'Content-Type: application/json' \
+    -d "$payload" >/dev/null 2>&1 || true
+}
+
 put_running() { # $1 = task id, $2 = cwd as JSON string, $3 = true|false
   curl -sS -m 2 -X PUT "$BASE/api/projects/tasks/$1" \
     -H 'Content-Type: application/json' \
@@ -71,11 +161,14 @@ case "$MODE" in
       put_running "$ID" "$CWD" true
       printf '%s\t%s\n' "$ID" "$CWD" >> "$LEDGER"
     else
+      LEDGER_MTIME=""
+      [ -f "$LEDGER" ] && LEDGER_MTIME="$(mtime_of "$LEDGER")"
       put_running "$ID" "$CWD" false
       if [ -f "$LEDGER" ]; then
         grep -v "^$ID	" "$LEDGER" > "$LEDGER.new" 2>/dev/null || true
         mv "$LEDGER.new" "$LEDGER" 2>/dev/null || true
       fi
+      capture_tokens "$ID" "$CWD" "$LEDGER_MTIME"
     fi
     ;;
   stop)

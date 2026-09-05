@@ -4,6 +4,7 @@ const path = require('path');
 const { deriveKey, nextTaskId, getTasks, saveTasks, stampNewTask, stampTaskUpdate, normalizeStatus, MalformedTasksError } = require('./lib/tasks');
 const { ensureMeridianIgnored } = require('./lib/gitignore');
 const { registerProject } = require('./lib/projects');
+const { appendEvent } = require('./lib/events');
 
 const app = express();
 const PORT = process.env.PORT || 3333;
@@ -558,7 +559,11 @@ app.post('/api/projects/tasks', (req, res) => {
         
         tasksData.tasks.push(newTask);
         saveTasks(projectPath, tasksData);
-        
+
+        appendEvent(projectPath, {
+            task: newTask.id, field: 'status', from: null, to: newTask.status, at: newTask.created_at
+        });
+
         res.status(201).json({ success: true, task: newTask });
     } catch (err) {
         console.error('Error adding task:', err.message);
@@ -600,6 +605,7 @@ app.put('/api/projects/tasks/:taskId', (req, res) => {
 
         const task = tasksData.tasks[taskIndex];
         const prevStatus = task.status;
+        const prevRunning = task.running === true;
 
         const scalarFields = [
             'status', 'justification', 'title', 'priority', 'spec_path',
@@ -626,7 +632,15 @@ app.put('/api/projects/tasks/:taskId', (req, res) => {
         if (req.body.resume_context !== undefined) task.resume_context = req.body.resume_context;
 
         saveTasks(projectPath, tasksData);
-        
+
+        if (task.status !== prevStatus) {
+            appendEvent(projectPath, { task: task.id, field: 'status', from: prevStatus, to: task.status, at: task.moved_at });
+        }
+        const newRunning = task.running === true;
+        if (newRunning !== prevRunning) {
+            appendEvent(projectPath, { task: task.id, field: 'running', from: prevRunning, to: newRunning, at: task.updated_at });
+        }
+
         res.json({ success: true, task: tasksData.tasks[taskIndex] });
     } catch (err) {
         console.error('Error updating task:', err.message);
@@ -659,10 +673,69 @@ app.delete('/api/projects/tasks/:taskId', (req, res) => {
         }
         
         saveTasks(projectPath, tasksData);
-        
+
         res.json({ success: true });
     } catch (err) {
         console.error('Error deleting task:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// True when projectPath resolves to an entry already in PROJECTS_JSON_PATH's
+// registry — the same comparison getStatusData uses for options.project.
+function isRegisteredProject(projectPath) {
+    if (!fs.existsSync(PROJECTS_JSON_PATH)) return false;
+    let parsed;
+    try {
+        parsed = JSON.parse(fs.readFileSync(PROJECTS_JSON_PATH, 'utf8'));
+    } catch (err) {
+        return false;
+    }
+    return (parsed.projects || []).some(p => path.resolve(p.path) === path.resolve(projectPath));
+}
+
+// REST API to log a per-dispatch token usage event. Unlike the task CRUD
+// routes, this endpoint has no other integrity check on what it appends to
+// events.jsonl, so it rejects an unregistered projectPath outright.
+app.post('/api/projects/events', (req, res) => {
+    try {
+        const { projectPath, task, type, agent, output_tokens, context_tokens } = req.body;
+
+        if (typeof projectPath !== 'string' || !projectPath) {
+            return res.status(400).json({ error: 'projectPath is required' });
+        }
+        if (!isRegisteredProject(projectPath)) {
+            return res.status(400).json({ error: `Project not registered with Meridian: ${projectPath}` });
+        }
+        if (typeof task !== 'string' || !task.trim()) {
+            return res.status(400).json({ error: 'task is required' });
+        }
+        if (type !== 'dispatch_tokens') {
+            return res.status(400).json({ error: `Invalid type '${type}'. Allowed: dispatch_tokens` });
+        }
+        if (typeof output_tokens !== 'number' || !Number.isFinite(output_tokens)) {
+            return res.status(400).json({ error: 'output_tokens must be a finite number' });
+        }
+        if (typeof context_tokens !== 'number' || !Number.isFinite(context_tokens)) {
+            return res.status(400).json({ error: 'context_tokens must be a finite number' });
+        }
+        if (agent !== undefined && typeof agent !== 'string') {
+            return res.status(400).json({ error: 'agent must be a string' });
+        }
+
+        const event = {
+            task,
+            type: 'dispatch_tokens',
+            output_tokens,
+            context_tokens,
+            at: new Date().toISOString()
+        };
+        if (typeof agent === 'string') event.agent = agent;
+        appendEvent(projectPath, event);
+
+        res.status(201).json({ success: true });
+    } catch (err) {
+        console.error('Error logging dispatch_tokens event:', err.message);
         res.status(500).json({ error: err.message });
     }
 });
