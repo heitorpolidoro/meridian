@@ -616,3 +616,128 @@ test('a status change and a fresh resume_context in the same request keep the ne
         assert.equal(moved.resume_context, 'stopped by cap');
     });
 });
+
+// --- sub-tasks: `parent` field, one-level validation ---
+
+test('POST accepts a parent referencing an existing task on the same board', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        const parentTask = await seed(base, dir, { title: 'parent' });
+        const res = await fetch(`${base}/api/projects/tasks`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectPath: dir, title: 'child', parent: parentTask.id })
+        });
+        assert.equal(res.status, 201);
+        const { task } = await res.json();
+        assert.equal(task.parent, parentTask.id);
+    });
+});
+
+test('POST rejects a parent naming a task id that does not exist', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        const res = await fetch(`${base}/api/projects/tasks`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectPath: dir, title: 'child', parent: 'TST-99' })
+        });
+        assert.equal(res.status, 400);
+    });
+});
+
+test('POST rejects a parent naming a task that itself already has a parent', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        const a = await seed(base, dir, { title: 'grandparent' });
+        const b = await seed(base, dir, { title: 'parent', parent: a.id });
+        const res = await fetch(`${base}/api/projects/tasks`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectPath: dir, title: 'child', parent: b.id })
+        });
+        assert.equal(res.status, 400);
+    });
+});
+
+test('PUT rejects a parent equal to the task\'s own id', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        const t = await seed(base, dir);
+        const res = await fetch(`${base}/api/projects/tasks/${t.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectPath: dir, parent: t.id })
+        });
+        assert.equal(res.status, 400);
+    });
+});
+
+test('PUT rejects a parent assignment to a task that already has children', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        const p = await seed(base, dir, { title: 'parent' });
+        await seed(base, dir, { title: 'child', parent: p.id });
+        const other = await seed(base, dir, { title: 'other' });
+        const res = await fetch(`${base}/api/projects/tasks/${p.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectPath: dir, parent: other.id })
+        });
+        assert.equal(res.status, 400);
+    });
+});
+
+test('PUT with parent: null clears a previously set parent field', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        const p = await seed(base, dir, { title: 'parent' });
+        const c = await seed(base, dir, { title: 'child', parent: p.id });
+        assert.equal(c.parent, p.id);
+        const cleared = await put(base, dir, c.id, { parent: null });
+        assert.equal(cleared.parent, undefined);
+
+        const one = await (await fetch(`${base}/api/status?project=${encodeURIComponent(dir)}`)).json();
+        const reread = one.projects[0].tasks.find(t => t.id === c.id);
+        assert.equal(reread.parent, undefined, 'the clear persists after re-reading');
+    });
+});
+
+test('PUT accepts a valid parent, persists it with no subtasks/children key anywhere', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        const p = await seed(base, dir, { title: 'parent' });
+        const c = await seed(base, dir, { title: 'child' });
+        const updated = await put(base, dir, c.id, { parent: p.id });
+        assert.equal(updated.parent, p.id);
+
+        const file = path.join(dir, '.meridian', 'tasks.json');
+        const raw = fs.readFileSync(file, 'utf8');
+        assert.doesNotMatch(raw, /"subtasks"/);
+        assert.doesNotMatch(raw, /"children"/);
+        const tasks = JSON.parse(raw);
+        const childOnDisk = tasks.find(t => t.id === c.id);
+        assert.equal(childOnDisk.parent, p.id);
+        const parentOnDisk = tasks.find(t => t.id === p.id);
+        assert.equal(parentOnDisk.subtasks, undefined);
+        assert.equal(parentOnDisk.children, undefined);
+    });
+});
+
+test('a malformed-parent request does not write anything', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        const t = await seed(base, dir, { title: 'lonely' });
+        const file = path.join(dir, '.meridian', 'tasks.json');
+        const before = fs.readFileSync(file, 'utf8');
+
+        const res = await fetch(`${base}/api/projects/tasks/${t.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectPath: dir, parent: 'TST-99' })
+        });
+        assert.equal(res.status, 400);
+        assert.equal(fs.readFileSync(file, 'utf8'), before,
+            'a rejected parent must not leave a partial write');
+    });
+});

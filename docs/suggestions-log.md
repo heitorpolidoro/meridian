@@ -67,3 +67,27 @@
 ## [MERID-3] Capture task statistics: events log and per-dispatch token usage (QA) — 2026-09-05
 - `isRegisteredProject` in server.js re-reads and re-parses `projects.json` from disk on every `/api/projects/events` call; fine at current scale, but if this endpoint becomes hot (e.g. one call per subagent dispatch across many concurrent sessions) it may be worth caching or reusing whatever in-memory registry `getStatusData` already uses.
 - The `capture_tokens` "since empty" fallback (degrades to "newest file, unconditionally" when no ledger mtime is available) is explicitly flagged in the script's own comment as a known best-effort compromise; no test exercises this fallback path specifically (only the "ledger present with old mtime" happy path and the "no subagents dir/file" negative paths are covered). Not blocking since it's documented as an accepted degradation, but a follow-up test for that branch would close the coverage gap.
+
+## [MERID-5] Sub-tasks: parent field, board badge and progress chip — 2026-09-06
+
+- schema.md's "Update" section currently enumerates the exact fields a PUT
+  accepts ("Update accepts `status`, `title`, `justification`, `priority`,
+  `spec_path`, ... `last_review_findings` and `running`.") and the "Create"
+  section similarly says "Create accepts only these fields, plus an optional
+  `status`." The spec's plan for schema.md only adds a field-table row and a
+  validation-rule paragraph — it does not touch either enumeration sentence,
+  so once `parent` is implemented, those two sentences will read as
+  understating what the endpoints actually accept. This isn't required by the
+  literal `expected_results` wording (which only asks for the field table and
+  the validation rule in prose), so it isn't a blocking gap, but it's worth
+  fixing in the same PR to keep schema.md internally consistent with itself,
+  since schema.md declares itself the single source of truth other prose must
+  agree with.
+- Consider explicitly noting in the spec (or leaving to the implementer's
+  judgment, as now) whether a PUT that sets `parent` to the value it already
+  has should short-circuit without re-validating — current logic re-validates
+  and would pass harmlessly, so this is cosmetic, not a bug.
+
+## [MERID-5] Sub-tasks: parent field, board badge and progress chip (QA) — 2026-09-06
+
+- The two-of-three flaky `npm test` runs (random port collision in `withServer`, unrelated to this change) suggest widening the port range or adding a retry/uniqueness guard in `test/api-tasks.test.js`'s port selection, to reduce sporadic CI noise. Not blocking for this task since it is pre-existing and unrelated to the `parent` feature.

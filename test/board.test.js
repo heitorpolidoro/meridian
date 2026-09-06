@@ -155,3 +155,54 @@ test('a mixed board collapses exactly its empty statuses', () => {
 test('a missing expanded set is treated as empty', () => {
     assert.deepEqual(collapsedColumns([{ id: 'qa_review', count: 0 }]), new Set(['qa_review']));
 });
+
+// --- sub-task derivation: children, progress, badge ---
+
+const { childrenOf, subtaskProgress, parentBadge } = require('../lib/board');
+
+test('childrenOf returns every task whose parent matches the given task\'s id', () => {
+    const parentTask = { id: 'T-1' };
+    const tasks = [
+        parentTask,
+        { id: 'T-2', parent: 'T-1' },
+        { id: 'T-3', parent: 'T-1' },
+        { id: 'T-4', parent: 'T-9' }
+    ];
+    assert.deepEqual(childrenOf(tasks, parentTask).map(t => t.id), ['T-2', 'T-3']);
+});
+
+test('childrenOf excludes a same-id task from a different projectPath', () => {
+    const parentTask = { id: 'T-1', projectPath: '/proj/a' };
+    const tasks = [
+        parentTask,
+        { id: 'T-2', parent: 'T-1', projectPath: '/proj/a' },
+        { id: 'T-2', parent: 'T-1', projectPath: '/proj/b' }
+    ];
+    const children = childrenOf(tasks, parentTask);
+    assert.equal(children.length, 1);
+    assert.equal(children[0].projectPath, '/proj/a');
+});
+
+test('subtaskProgress returns null for a task with no children', () => {
+    const parentTask = { id: 'T-1' };
+    assert.equal(subtaskProgress([parentTask], parentTask), null);
+});
+
+test('subtaskProgress returns { done, total } counting children whose status is done', () => {
+    const parentTask = { id: 'T-1' };
+    const tasks = [
+        parentTask,
+        { id: 'T-2', parent: 'T-1', status: 'done' },
+        { id: 'T-3', parent: 'T-1', status: 'in_progress' },
+        { id: 'T-4', parent: 'T-1', status: 'done' }
+    ];
+    assert.deepEqual(subtaskProgress(tasks, parentTask), { done: 2, total: 3 });
+});
+
+test('parentBadge returns null for a task without a parent', () => {
+    assert.equal(parentBadge({ id: 'T-1' }), null);
+});
+
+test('parentBadge returns ↳ <id> for a task with a parent', () => {
+    assert.equal(parentBadge({ id: 'T-2', parent: 'T-1' }), '↳ T-1');
+});

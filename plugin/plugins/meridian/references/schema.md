@@ -35,6 +35,7 @@ truncate the file, and never write it from an empty in-memory list.
 | `justification` | string — why the task is blocked, or why it exists | agent |
 | `expected_results` | array of strings — concrete, mechanically verifiable outcomes | agent |
 | `blockedBy` | array of task ids that must reach `done` first | agent |
+| `parent` | string, id of another task on the same board, optional | agent |
 | `spec_path` | string, e.g. `docs/tasks/MERID-1-spec.md` | agent |
 | `spec_iterations` | integer, spec revision rounds consumed | agent |
 | `code_review_iterations` | integer, code review revision rounds consumed | agent |
@@ -55,6 +56,16 @@ of these four in a request body has no effect — the server overwrites them.
 
 `blockedBy` is the primary reason a task is `blocked`; that dependency is
 sufficient justification on its own (e.g. `justification: "Blocked on MERID-3"`).
+
+`parent` links a task to another task on the same board as its sub-task.
+Nesting is capped at **one level**: the server rejects a write with `HTTP 400`
+when the referenced parent does not exist on the same board, when the
+referenced parent itself already has a `parent`, when the task being written
+already has children (other tasks naming it as `parent`), or when a task
+names itself as its own parent. Sending `"parent": null` on update clears the
+field. No `subtasks`/`children` array is ever stored on the parent — anything
+that needs a task's children derives them by filtering the task list on
+`parent` at read time.
 
 **`blockedBy` gates implementation, not specification.** A task with open
 dependencies is still specced and reaches `ready_todo` — writing its spec needs
@@ -177,7 +188,7 @@ The response is `{ "success": true, "task": { ... } }`; take the server-assigned
 only the fields you are changing; omitted fields are left alone. Update accepts
 `status`, `title`, `justification`, `priority`, `spec_path`, `spec_iterations`,
 `code_review_iterations`, `qa_iterations`, `blockedBy`, `expected_results`,
-`last_review_findings` and `running`. Fields only settable through update —
+`last_review_findings`, `parent` and `running`. Fields only settable through update —
 `spec_path`, the three iteration counters and `last_review_findings` — are
 absent from a freshly created task until the first update sets them; treat an
 absent counter as `0` and an absent `last_review_findings` as `[]`.

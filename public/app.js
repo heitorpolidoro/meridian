@@ -92,6 +92,29 @@ function collapsedColumns(columns, expanded) {
     return out;
 }
 
+// Mirrors lib/board.js#childrenOf — that file is the source of truth. Scoped
+// by projectPath when tasks carry one, so the global view's flattened,
+// projectPath-tagged task list does not cross-match same-id tasks from two
+// different projects.
+function childrenOf(tasks, task) {
+    return (tasks || []).filter(t =>
+        t && task && t.parent === task.id &&
+        (t.projectPath || null) === (task.projectPath || null)
+    );
+}
+
+// Mirrors lib/board.js#subtaskProgress — that file is the source of truth.
+function subtaskProgress(tasks, task) {
+    const children = childrenOf(tasks, task);
+    if (children.length === 0) return null;
+    return { done: children.filter(t => t.status === 'done').length, total: children.length };
+}
+
+// Mirrors lib/board.js#parentBadge — that file is the source of truth.
+function parentBadge(task) {
+    return task && task.parent ? `↳ ${task.parent}` : null;
+}
+
 // Rails the operator expanded this session. Not persisted: a reload collapses
 // every empty column again.
 const expandedRails = new Set();
@@ -946,13 +969,19 @@ function renderRunningTickets(tasks) {
     }).join('');
 }
 
-function renderTaskCardHtml(task) {
+function renderTaskCardHtml(task, allTasks) {
     const taskIdDisplay = task.id ? `[${task.id}] ` : '';
     const projPathAttr = task.projectPath ? task.projectPath.replace(/\\/g, '\\\\').replace(/'/g, "\\'") : '';
     const projectBadge = task.projectName ? `<span class="project-tag-badge" title="${task.projectName}">${task.projectName}</span>` : '';
     const uid = `j-${task.id}`.replace(/[^a-zA-Z0-9\-]/g, '_');
     const runningClass = task.running ? ' task-card--running' : '';
     const runningBadge = task.running ? '<span class="running-inline-dot" title="Agent is working on this task"></span>' : '';
+    const parentBadgeLabel = parentBadge(task);
+    const progress = subtaskProgress(allTasks, task);
+    const parentBadgeHtml = parentBadgeLabel !== null
+        ? `<span class="task-parent-badge" title="Parent task ${task.parent}">${parentBadgeLabel}</span>` : '';
+    const progressChipHtml = progress !== null
+        ? `<span class="task-progress-chip" title="Sub-tasks done">${progress.done}/${progress.total}</span>` : '';
     // Terminal cards show when they got there: completed_at for done, moved_at
     // for nope — the same timestamps their columns sort and window by.
     const stampRaw = task.status === 'done' ? task.completed_at
@@ -968,7 +997,7 @@ function renderTaskCardHtml(task) {
     }
     return `
         <div class="task-card${runningClass}">
-            <div class="task-title">${runningBadge}${projectBadge}<span class="task-id-code">${taskIdDisplay}</span>${task.title}</div>
+            <div class="task-title">${runningBadge}${projectBadge}${parentBadgeHtml}${progressChipHtml}<span class="task-id-code">${taskIdDisplay}</span>${task.title}</div>
             ${task.justification ? `
             <div class="task-justification-toggle" onclick="toggleJustification('${uid}', this)" title="Show/hide details">
                 <span class="toggle-arrow">▶</span> <em>details</em>
@@ -1133,7 +1162,7 @@ function renderKanbanBoard(tasks) {
         const hiddenChipHtml = hiddenTasks.length > 0 ? `
             <div class="done-hidden-chip" onclick="this.nextElementSibling.classList.remove('hidden'); this.remove();">+${hiddenTasks.length} ${statusCol.id === 'nope' ? 'descartadas' : 'concluídas'}</div>
             <div class="done-hidden-tasks hidden">
-                ${hiddenTasks.map(task => renderTaskCardHtml(task)).join('')}
+                ${hiddenTasks.map(task => renderTaskCardHtml(task, tasks)).join('')}
             </div>
         ` : '';
 
@@ -1148,7 +1177,7 @@ function renderKanbanBoard(tasks) {
                     <span class="kanban-column-count">${visibleTasks.length}</span>
                 </div>
                 <div class="kanban-tasks">
-                    ${visibleTasks.map(task => renderTaskCardHtml(task)).join('')}
+                    ${visibleTasks.map(task => renderTaskCardHtml(task, tasks)).join('')}
                     ${hiddenChipHtml}
                     ${emptyHtml}
                 </div>

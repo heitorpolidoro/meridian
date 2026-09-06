@@ -168,6 +168,27 @@ function validateTaskFields(body) {
     return null;
 }
 
+// Enforces one level of nesting. `taskId` is the id of the task being
+// written (null on create, since the id doesn't exist yet — a brand-new
+// task can neither be its own parent nor already have children).
+// Returns an error message, or null when the value is acceptable.
+function validateParentField(parentId, tasks, taskId) {
+    if (taskId && parentId === taskId) {
+        return 'A task cannot be its own parent';
+    }
+    const parentTask = tasks.find(t => t.id === parentId);
+    if (!parentTask) {
+        return `Parent task '${parentId}' does not exist on this board`;
+    }
+    if (parentTask.parent) {
+        return `Parent task '${parentId}' already has a parent; only one level of nesting is allowed`;
+    }
+    if (taskId && tasks.some(t => t.parent === taskId)) {
+        return `Task '${taskId}' already has sub-tasks and cannot be given a parent`;
+    }
+    return null;
+}
+
 // Turns a malformed tasks.json into a 500 rather than letting the caller
 // read-modify-write an empty list over the user's backlog.
 function handleTaskReadError(err, res) {
@@ -536,6 +557,13 @@ app.post('/api/projects/tasks', (req, res) => {
             throw err;
         }
 
+        if (req.body.parent !== undefined && req.body.parent !== null) {
+            const invalidParent = validateParentField(req.body.parent, tasksData.tasks, null);
+            if (invalidParent) {
+                return res.status(400).json({ error: invalidParent });
+            }
+        }
+
         // Derive key from project-info.json
         const infoPath = path.join(projectPath, '.meridian', 'project-info.json');
         let key = 'TASK';
@@ -554,9 +582,10 @@ app.post('/api/projects/tasks', (req, res) => {
             priority: priority || DEFAULT_PRIORITY,
             expected_results: Array.isArray(expected_results) ? expected_results : [],
             running: false,
-            blockedBy: Array.isArray(blockedBy) ? blockedBy : []
+            blockedBy: Array.isArray(blockedBy) ? blockedBy : [],
+            ...(req.body.parent !== undefined && req.body.parent !== null ? { parent: req.body.parent } : {})
         });
-        
+
         tasksData.tasks.push(newTask);
         saveTasks(projectPath, tasksData);
 
@@ -607,6 +636,13 @@ app.put('/api/projects/tasks/:taskId', (req, res) => {
         const prevStatus = task.status;
         const prevRunning = task.running === true;
 
+        if (req.body.parent !== undefined && req.body.parent !== null) {
+            const invalidParent = validateParentField(req.body.parent, tasksData.tasks, taskId);
+            if (invalidParent) {
+                return res.status(400).json({ error: invalidParent });
+            }
+        }
+
         const scalarFields = [
             'status', 'justification', 'title', 'priority', 'spec_path',
             'spec_iterations', 'code_review_iterations', 'qa_iterations',
@@ -623,6 +659,11 @@ app.put('/api/projects/tasks/:taskId', (req, res) => {
         }
         if (req.body.last_review_findings !== undefined) {
             task.last_review_findings = Array.isArray(req.body.last_review_findings) ? req.body.last_review_findings : [];
+        }
+        if (req.body.parent === null) {
+            delete task.parent;
+        } else if (req.body.parent !== undefined) {
+            task.parent = req.body.parent;
         }
         if (req.body.running !== undefined) task.running = Boolean(req.body.running);
 
