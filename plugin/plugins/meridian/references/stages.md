@@ -19,10 +19,13 @@ Enter at step 1 from `backlog`, at step 2 from `spec_review`.
 
 1. **Generate the spec.** Set `running: true`. Dispatch `meridian:spec-generator`
    with the task title, its `expected_results`, the `spec_path` of every task in
-   `blockedBy`, and a pointer to `AGENTS.md`. It writes
+   `blockedBy`, a pointer to `AGENTS.md`, and whether this task carries a
+   `parent` (so it knows `NEEDS_SPLIT` isn't open to it). It writes
    `docs/tasks/<id>-spec.md` and returns an `EXPECTED_RESULTS:` block. When it
    returns, set `running: false` and record **both** `spec_path` and the
    returned `expected_results`, in one `PUT`.
+   - On `VERDICT: NEEDS_SPLIT`, no spec was written — follow "A NEEDS_SPLIT
+     verdict" in `pipeline.md` instead of recording a `spec_path`.
 
    A task created by `meridian:new` usually arrives with `expected_results`
    empty — that skill captures ideas and does not demand acceptance criteria.
@@ -30,9 +33,11 @@ Enter at step 1 from `backlog`, at step 2 from `spec_review`.
    write task state.
 
 2. **Review the spec.** Move the task to `spec_review`. Set `running: true`.
-   Dispatch `meridian:spec-reviewer` with **only** the spec path and the task's
-   `expected_results` — nothing about how the spec was produced. When it
-   returns, set `running: false`.
+   Dispatch `meridian:spec-reviewer` with **only** the spec path, the task's
+   `expected_results`, and whether this task carries a `parent` — nothing
+   about how the spec was produced. When it returns, set `running: false`.
+   - On `VERDICT: NEEDS_SPLIT`, follow "A NEEDS_SPLIT verdict" in
+     `pipeline.md`.
 
 3. **On `APPROVED`:** move the task to `ready_todo` and clear
    `last_review_findings` to `[]` in the same update. The task is now ready to build.
@@ -71,9 +76,12 @@ Enter at step 1 from `ready_todo` or `in_progress`, at step 2 from `code_review`
 at step 3 from `qa_review`.
 
 1. **Implement.** Move the task to `in_progress`. Set `running: true`. Dispatch
-   `meridian:developer` with the `spec_path` and the task's `expected_results`.
-   It works TDD and stages its changes with `git add` without committing. When it
-   returns, set `running: false`.
+   `meridian:developer` with the `spec_path`, the task's `expected_results`,
+   and whether this task carries a `parent`. It works TDD and stages its
+   changes with `git add` without committing. When it returns, set
+   `running: false`.
+   - On `NEEDS_SPLIT`, do not continue to step 2 (code review) — follow "A
+     NEEDS_SPLIT verdict" in `pipeline.md` instead.
 
 2. **Code review.** Move the task to `code_review`. Set `running: true`. Dispatch
    `meridian:code-reviewer` with the `spec_path`; it scopes its own review with

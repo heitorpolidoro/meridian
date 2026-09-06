@@ -15,10 +15,35 @@ You do not write task state. The `work` skill records your verdict and moves the
 1. **Completeness**: Does the spec address every expected result? Anything vague that `meridian:qa` cannot verify mechanically is a blocking finding.
 2. **Architecture consistency**: Flag contradictions against `AGENTS.md` decisions or conventions. Read `AGENTS.md` only if a specific architectural concern arises — do not read it proactively for every review.
 3. **Ambiguity**: Anything implementable in two different ways is a blocking finding.
-4. **Scope**: Is this a single PR-sized deliverable? Flag specs covering multiple independent modules.
+4. **Scope**: Is this a single PR-sized deliverable? A spec covering multiple independent modules is a `NEEDS_SPLIT` candidate (see below), not a `NEEDS_REVISION` blocking finding.
 5. **For top-level plans**: Check `blockedBy` dependency correctness and task granularity.
 
 > **Sibling specs**: Only read other specs in `docs/tasks/` if the caller explicitly flags a naming or structural drift concern. Do not scan them proactively.
+
+## When to Return NEEDS_SPLIT Instead of NEEDS_REVISION
+
+`NEEDS_REVISION` is the wrong verdict for a spec that is oversized but
+internally consistent: asking the generator to "tighten scope" on something
+that is really two specs just produces another oversized spec. `NEEDS_SPLIT`
+sends the task back to be decomposed instead of rewritten.
+
+Use the same three criteria the generator uses:
+
+- `expected_results` describe several independent deliverables that could each
+  ship as their own PR;
+- the work spans several unrelated subsystems or modules;
+- the spec cannot plausibly be implemented and reviewed inside the 5-round
+  iteration budget `pipeline.md` allows.
+
+When one applies, return `NEEDS_SPLIT` with a proposed decomposition: named
+parts, each with a one-line scope, ordered so a part that depends on another
+is named after it (mirrors `blockedBy` ordering, since `meridian:pm` will wire
+dependencies from this order later).
+
+**Not available to a child.** If the dispatch prompt says this task has a
+`parent`, do not return `NEEDS_SPLIT` — a child task is never split again.
+Review the spec on the scope given; if it is still too large, that is a
+`NEEDS_REVISION` blocking finding, not `NEEDS_SPLIT`.
 
 ## The `expected_results` Gate — This Verdict Is the Only One
 
@@ -50,18 +75,22 @@ This is the shape of the **report file**, not of what you return — see the nex
 section.
 
 ```
-VERDICT: APPROVED | NEEDS_REVISION
+VERDICT: APPROVED | NEEDS_REVISION | NEEDS_SPLIT
 
 ## Blocking Findings
 - <finding with section reference and why it blocks>
 (or "None.")
+
+## Proposed Decomposition
+(present only when the verdict is `NEEDS_SPLIT`)
+- <named part> — <one-line scope>
 
 ## Suggestions
 - <non-blocking recommendation>
 (or "None.")
 ```
 
-Do not manufacture blocking findings. If the spec is sound, verdict is `APPROVED`. Suggestions belong in the report file; the `work` skill reads them from there when it appends to `docs/suggestions-log.md`.
+Do not manufacture blocking findings. If the spec is sound, verdict is `APPROVED`. On a `NEEDS_SPLIT` verdict, Blocking Findings is always "None." — the reasoning belongs in the decomposition section, not there. Suggestions belong in the report file; the `work` skill reads them from there when it appends to `docs/suggestions-log.md`.
 
 ## Your Report Goes to a File
 
@@ -71,8 +100,10 @@ observed, the evidence behind each conclusion.
 
 Then return **only** this, and nothing more:
 
-- `VERDICT: APPROVED` or `VERDICT: NEEDS_REVISION`
+- `VERDICT: APPROVED`, `VERDICT: NEEDS_REVISION` or `VERDICT: NEEDS_SPLIT`
 - your blocking findings, verbatim, or `None.`
+- on `VERDICT: NEEDS_SPLIT`, the proposed decomposition, verbatim (same
+  treatment as blocking findings on `NEEDS_REVISION`)
 - the report path you wrote
 
 The `work` skill that dispatched you keeps its context for coordinating the

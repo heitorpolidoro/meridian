@@ -29,6 +29,30 @@ operator's intent: satisfy them in the spec, and return them again, refined for
 verifiability but not replaced. Do not write them into `.meridian/tasks.json` —
 the `work` skill persists them through the API, exactly as it does `spec_path`.
 
+## When the Task Needs Splitting Instead of a Spec
+
+Sometimes the right call is to not write a spec at all: the task in front of
+you is not one deliverable. Make that judgement call before you start writing,
+not by discovering it halfway through a spec.
+
+Treat these as guidance for judgement, not a mechanical threshold:
+
+- `expected_results` describe several independent deliverables that could each
+  ship as their own PR;
+- the work spans several unrelated subsystems or modules;
+- you judge the task cannot be implemented and reviewed inside the 5-round
+  iteration budget `pipeline.md` allows.
+
+When one applies, return `NEEDS_SPLIT` instead of a spec, with a proposed
+decomposition: named parts, each with a one-line scope, ordered so a part that
+depends on another is named after it (mirrors `blockedBy` ordering, since
+`meridian:pm` will wire dependencies from this order later).
+
+**Not available to a child.** If the dispatch prompt says this task has a
+`parent`, do not return `NEEDS_SPLIT` — a child task is never split again.
+Instead, write the best spec you can and say why you couldn't split it in your
+report.
+
 ## Pre-Requisites
 
 1. Read `AGENTS.md` (architecture, stack, conventions, file map).
@@ -38,7 +62,7 @@ the `work` skill persists them through the API, exactly as it does `spec_path`.
 
 ## What Makes a Good Spec
 
-- **One deliverable**: PR-sized unit. If asked to spec multiple independent deliverables, propose the split in the first line.
+- **One deliverable**: PR-sized unit. When it plainly is not, return `NEEDS_SPLIT` (see below) instead of writing a spec for several deliverables at once.
 - **Concrete, checkable Expected Results**: Every result must be mechanically verifiable (HTTP status, DB constraint, test outcome, UI interaction).
 - **Explicit scope boundaries**: State what the task does NOT include.
 
@@ -72,9 +96,11 @@ observed, the evidence behind each conclusion.
 
 Then return **only** this, and nothing more:
 
-- the spec path you wrote
-- the `EXPECTED_RESULTS:` block
-- the report path you wrote
+- on an ordinary run: the spec path you wrote, the `EXPECTED_RESULTS:` block,
+  and the report path you wrote;
+- on `NEEDS_SPLIT`: `VERDICT: NEEDS_SPLIT`, the proposed decomposition
+  verbatim, and the report path you wrote — no spec path, no
+  `EXPECTED_RESULTS:` block, because neither was produced.
 
 The `work` skill that dispatched you keeps its context for coordinating the
 whole task across several specialists and rounds. A full report returned inline

@@ -24,6 +24,34 @@ For every unit of behavior in the spec:
 3. **Confirm test passes.** Re-run and verify green. Never claim passing without running it.
 4. **Refactor.** Keep all tests green.
 
+## When Scope Splitting Reveals Itself Mid-Implementation
+
+Sometimes the spec looked PR-sized but the implementation surfaces work that
+isn't: several independent deliverables, work spanning unrelated subsystems,
+or a task too large to finish and get through review. When that happens, stop
+and return `NEEDS_SPLIT` instead of pushing through.
+
+Use the same three criteria used earlier in the pipeline:
+
+- the work surfacing describes several independent deliverables that could
+  each ship as their own PR;
+- it spans several unrelated subsystems or modules;
+- it cannot plausibly be finished and reviewed inside the 5-round iteration
+  budget `pipeline.md` allows.
+
+When one applies, report `NEEDS_SPLIT` with a proposed decomposition: named
+parts, each with a one-line scope, ordered so a part that depends on another
+is named after it (mirrors `blockedBy` ordering, since `meridian:pm` will wire
+dependencies from this order later).
+
+**Not available to a child.** If the dispatch prompt says this task has a
+`parent`, do not return `NEEDS_SPLIT` — a child task is never split again.
+Instead, finish the smallest correct increment and report `BLOCKED` with what
+is missing.
+
+Do not commit and do not leave a half-implemented split — stage only what is
+done and passing.
+
 ## Code Quality
 
 - Follow conventions from `AGENTS.md` (formatting, linter clean, architecture boundaries).
@@ -44,10 +72,12 @@ observed, the evidence behind each conclusion.
 
 Then return **only** this, and nothing more:
 
-- `DONE` or `BLOCKED`
-- one line of test evidence (suite result and count)
-- the `expected_results` you could not meet, if any
-- the report path you wrote
+- on `DONE` or `BLOCKED`: the bare token, one line of test evidence (suite
+  result and count), the `expected_results` you could not meet if any, and the
+  report path you wrote;
+- on `NEEDS_SPLIT`: the bare token, the proposed decomposition verbatim in
+  place of expected-results-not-met and test evidence (neither applies —
+  nothing was finished to test), and the report path you wrote.
 
 The `work` skill that dispatched you keeps its context for coordinating the
 whole task across several specialists and rounds. A full report returned inline

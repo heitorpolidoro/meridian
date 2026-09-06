@@ -223,6 +223,58 @@ When that happens:
 Burning an iteration on an infrastructure failure spends the operator's budget
 for genuine disagreement on something the agents never disagreed about.
 
+## A NEEDS_SPLIT verdict
+
+`meridian:spec-generator`, `meridian:spec-reviewer` and `meridian:developer` —
+and no other specialist — may return `NEEDS_SPLIT` when they judge the task is
+not one PR-sized deliverable: `expected_results` (or, for the developer, the
+work actually surfacing) describing several independent deliverables, work
+spanning several unrelated subsystems, or a task the specialist judges cannot
+be implemented and reviewed inside the 5-round iteration budget above. Source
+of truth for the criteria is each agent's own file — agents never read this
+file. The verdict carries a proposed decomposition (named parts, one-line
+scope each), to be treated exactly like a blocking finding: verbatim, current
+round only.
+
+**One level, split at most once — the guard.** Before honoring a `NEEDS_SPLIT`
+verdict, check the task itself against the board just fetched:
+
+- if it already has a `parent`, it is a child;
+- if some other task on the board already names it as `parent`, it has already
+  been split once.
+
+Either condition means the specialist should never have returned this verdict
+for this task. Treat it exactly as **specialist failure** (the section above):
+`blocked`, `justification` naming which agent returned `NEEDS_SPLIT` and why it
+wasn't eligible, `running: false`, no iteration increment, no retry, and — the
+one thing that differs from an ordinary specialist failure — **do not dispatch
+`meridian:pm`** either.
+
+**The happy path**, when the guard clears:
+
+- Set `running: false`. **Do not increment** `spec_iterations`,
+  `code_review_iterations` or `qa_iterations` — a split replaces the round
+  rather than spending one.
+- Dispatch `meridian:pm` with: the task id, its title, its `expected_results`,
+  its `spec_path` if it has one, and the specialist's proposed decomposition
+  verbatim. Pass the resolved `schema.md` path, exactly as any other dispatch
+  in "Dispatching a specialist" above requires.
+- `meridian:pm` creates the children and reconfigures this task through the
+  API itself — see its split procedure in `agents/pm.md`. This file only says
+  what happens around that dispatch, not what `pm` does inside it.
+- When `meridian:pm` returns, re-fetch the task before reporting on it — the
+  same "a board read expires on use" rule as anywhere else in this file
+  applies to a write another agent just made.
+- Stop driving this task; move to another one or report and stop.
+
+**Return to the flow.** The task returns to the pipeline through the
+**existing** unblocking sweep, unmodified — once every id in its `blockedBy`
+(the children) reaches `done`, the sweep moves it to `backlog` (its
+`spec_path` was cleared as part of the split, so the "has an approved spec"
+branch never applies to it) for a fresh, reduced-scope spec describing only
+the integration/verification work that remains. No new sweep logic is added or
+needed.
+
 ## Unblocking
 
 `blockedBy` gates **implementation, not specification.** A task whose
@@ -250,6 +302,10 @@ Whenever a task reaches `done`, sweep the board:
    blocked and surface it to the operator; only a human clears those.
 
 Report what the sweep unblocked.
+
+This is also the mechanism that returns a split task's parent to the flow once
+its children finish — see "A NEEDS_SPLIT verdict" above — and no separate
+mechanism exists for that case.
 
 ## Stopping mid-task leaves a note
 

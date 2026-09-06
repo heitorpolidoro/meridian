@@ -91,3 +91,54 @@
 ## [MERID-5] Sub-tasks: parent field, board badge and progress chip (QA) — 2026-09-06
 
 - The two-of-three flaky `npm test` runs (random port collision in `withServer`, unrelated to this change) suggest widening the port range or adding a retry/uniqueness guard in `test/api-tasks.test.js`'s port selection, to reduce sporadic CI noise. Not blocking for this task since it is pre-existing and unrelated to the `parent` feature.
+
+## [MERID-6] Pipeline NEEDS_SPLIT verdict and pm split procedure — 2026-09-06
+
+- `spec-reviewer.md`'s Approach subsection (lines 98-103 of the spec) says to
+  "Update 'Output Format'," but the actual section in
+  `agents/spec-reviewer.md` is titled `## Report Format` — there is no section
+  literally named "Output Format." The intended target is unambiguous (it's
+  the only section with the `VERDICT:` / `## Blocking Findings` /
+  `## Suggestions` shape the spec describes), so this doesn't rise to a
+  blocking ambiguity, but the spec should use the file's actual heading name.
+- `pm.md`'s Job 3 procedure directs creating each child via `POST
+  /api/projects/tasks` carrying `parent: <original task id>` directly at
+  create time. I confirmed in `server.js` (around line 560-586) that the
+  create endpoint does in fact accept and validate `parent` on `POST`, so this
+  is correct against real server behavior. However, `schema.md`'s own Create
+  section text ("Create accepts only these fields, plus an optional status")
+  enumerates `projectPath, title, priority, justification, expected_results,
+  blockedBy` and does not mention `parent` as accepted on create — a
+  pre-existing gap in `schema.md` (not introduced by this task, and out of
+  this task's declared scope). Since `schema.md` states elsewhere "if any
+  other prose disagrees with it, this file wins," a future reader taking that
+  literally could conclude `pm.md`'s Job 3 is wrong when it is not. Worth a
+  follow-up task to add `parent` to schema.md's list of create-accepted
+  fields; not blocking for MERID-6 since it doesn't touch schema.md by design
+  and the procedure as written matches actual server behavior.
+- The instruction to add a cross-reference sentence to the existing `##
+  Unblocking` section ("after the numbered sweep steps") doesn't say whether
+  it goes before or after the existing "Report what the sweep unblocked."
+  trailing sentence. Low-stakes phrasing/placement ambiguity, not something
+  `meridian:qa` could ever check either way.
+- `pm.md`'s YAML frontmatter `description` ("Plans and curates a Meridian
+  backlog...") and its "Never dispatches agents and never writes production
+  code" framing are otherwise still accurate after adding Job 3, but doesn't
+  mention splitting; consider having the same edit that fixes the "exactly two
+  jobs" sentence also touch the frontmatter description for consistency.
+
+
+## [MERID-6] Pipeline NEEDS_SPLIT verdict and pm split procedure (code review) — 2026-09-06
+- `docs/suggestions-log.md` already has an unstaged entry from a prior round
+  (MERID-6, 2026-09-06) noting that the spec's Approach text says "Update
+  'Output Format'" when the actual section in `spec-reviewer.md` is titled
+  `## Report Format`. The implementation used the file's real heading name
+  (correct behavior), so this is purely a spec-wording nit, not a defect in
+  the staged changes — no action needed here, just confirming it doesn't
+  point at anything wrong in the diff under review.
+- `pm.md`'s YAML frontmatter `description` ("Plans and curates a Meridian
+  backlog... Never dispatches agents and never writes production code.")
+  still doesn't mention the new splitting job. Not required by the spec and
+  not blocking, but a one-line addition there would keep the summary in sync
+  with the file's own three-job framing.
+
