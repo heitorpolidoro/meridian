@@ -1510,6 +1510,48 @@ function formatDuration(ms) {
     return parts.join(' ');
 }
 
+// Agent names come from event data (posted via POST /api/projects/events)
+// and are untrusted — escape before interpolating into innerHTML, both in
+// the visible cell text and in the title attribute.
+function escapeHtml(str) {
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+// Every agent this codebase dispatches through the plugin is named
+// "meridian:<role>" — the prefix is redundant once it's the only kind of
+// name shown in this table, so it's stripped for display only (the raw
+// value from the API is untouched).
+function formatAgentName(agent) {
+    if (!agent) return '(no agent)';
+    return agent.startsWith('meridian:') ? agent.slice('meridian:'.length) : agent;
+}
+
+// `agents` is stages.<name>.agents from the API: already sorted by
+// totalOutputTokens desc, one entry per distinct agent (a `null` agent
+// groups dispatch_tokens events that carried no `agent` field). An empty
+// array means the stage had zero dispatch_tokens attributed to it at all —
+// that, and only that, is the placeholder case; a stage whose one and only
+// contributor is the `null`/no-agent group still renders "(no agent)", not
+// the placeholder. More than one agent renders the dominant one plus a
+// compact "+N" suffix, with a title attribute listing every agent's token
+// total for the full picture on hover.
+function formatStageAgentCell(agents) {
+    if (!agents || agents.length === 0) {
+        return '<span class="stats-agent-placeholder">—</span>';
+    }
+    const label = escapeHtml(formatAgentName(agents[0].agent));
+    const suffix = agents.length > 1 ? ` (+${agents.length - 1})` : '';
+    const title = agents
+        .map(a => `${formatAgentName(a.agent)}: ${Math.round(a.totalOutputTokens).toLocaleString()} tokens`)
+        .join('\n');
+    return `<span class="stats-agent-cell" title="${escapeHtml(title)}">${label}${suffix}</span>`;
+}
+
 function renderStatsPanel(data) {
     const stageTbody = document.getElementById('stats-stage-tbody');
     const stageNames = Object.keys(data.stages).sort();
@@ -1517,7 +1559,7 @@ function renderStatsPanel(data) {
         const s = data.stages[name];
         return `<tr>
             <td>${name}</td>
-            <td>${s.taskCount}</td>
+            <td>${formatStageAgentCell(s.agents)}</td>
             <td>${formatDuration(s.avgMs)}</td>
             <td>${formatDuration(s.maxMs)}</td>
             <td>${Math.round(s.avgTokens).toLocaleString()}</td>

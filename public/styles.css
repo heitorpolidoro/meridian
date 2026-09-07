@@ -1242,6 +1242,12 @@ body:not([data-view="dashboard"]) #error-container {
     color: var(--text-secondary);
     user-select: none;
 }
+.stats-agent-placeholder {
+    color: var(--text-secondary);
+}
+.stats-agent-cell {
+    cursor: default;
+}
 .stats-ongoing-badge {
     font-size: 0.7rem;
     color: #818cf8;

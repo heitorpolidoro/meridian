@@ -274,6 +274,126 @@ test('aggregateWorkspaceStats: a project entry with events:[] (or missing) contr
     assert.deepEqual(withEmpty.stages, withoutEntry.stages);
 });
 
+// --- stages.<name>.agents ----------------------------------------------------
+
+test('a stage whose dispatch_tokens events all carry the same agent produces one agents entry', () => {
+    const t0 = new Date('2026-01-01T00:00:00.000Z');
+    const now = new Date('2026-01-01T02:00:00.000Z');
+    const events = [
+        { task: 'X', field: 'status', from: null, to: 'in_progress', at: t0.toISOString() },
+        { task: 'X', type: 'dispatch_tokens', agent: 'meridian:developer', output_tokens: 100, context_tokens: 1000, at: '2026-01-01T00:10:00.000Z' },
+        { task: 'X', type: 'dispatch_tokens', agent: 'meridian:developer', output_tokens: 50, context_tokens: 500, at: '2026-01-01T00:20:00.000Z' }
+    ];
+    const { stages } = aggregateStats(events, now);
+    assert.deepEqual(stages.in_progress.agents, [
+        { agent: 'meridian:developer', totalOutputTokens: 150, dispatches: 2 }
+    ]);
+});
+
+test('a stage with dispatches from two agents produces both entries sorted with the larger total first', () => {
+    const t0 = new Date('2026-01-01T00:00:00.000Z');
+    const now = new Date('2026-01-01T02:00:00.000Z');
+    const events = [
+        { task: 'X', field: 'status', from: null, to: 'in_progress', at: t0.toISOString() },
+        { task: 'X', type: 'dispatch_tokens', agent: 'meridian:developer', output_tokens: 100, context_tokens: 1000, at: '2026-01-01T00:10:00.000Z' },
+        { task: 'X', type: 'dispatch_tokens', agent: 'meridian:qa', output_tokens: 400, context_tokens: 1000, at: '2026-01-01T00:20:00.000Z' }
+    ];
+    const { stages } = aggregateStats(events, now);
+    assert.equal(stages.in_progress.agents.length, 2);
+    assert.equal(stages.in_progress.agents[0].agent, 'meridian:qa');
+    assert.equal(stages.in_progress.agents[0].totalOutputTokens, 400);
+    assert.equal(stages.in_progress.agents[1].agent, 'meridian:developer');
+    assert.equal(stages.in_progress.agents[1].totalOutputTokens, 100);
+});
+
+test('a dispatch_tokens event with no agent field groups under agent: null, mixed with an agent-carrying event both appear', () => {
+    const t0 = new Date('2026-01-01T00:00:00.000Z');
+    const now = new Date('2026-01-01T02:00:00.000Z');
+    const events = [
+        { task: 'X', field: 'status', from: null, to: 'in_progress', at: t0.toISOString() },
+        { task: 'X', type: 'dispatch_tokens', output_tokens: 100, context_tokens: 1000, at: '2026-01-01T00:10:00.000Z' },
+        { task: 'X', type: 'dispatch_tokens', agent: 'meridian:developer', output_tokens: 50, context_tokens: 500, at: '2026-01-01T00:20:00.000Z' }
+    ];
+    const { stages } = aggregateStats(events, now);
+    assert.equal(stages.in_progress.agents.length, 2);
+    const nullEntry = stages.in_progress.agents.find(a => a.agent === null);
+    const devEntry = stages.in_progress.agents.find(a => a.agent === 'meridian:developer');
+    assert.ok(nullEntry);
+    assert.equal(nullEntry.totalOutputTokens, 100);
+    assert.equal(nullEntry.dispatches, 1);
+    assert.ok(devEntry);
+    assert.equal(devEntry.totalOutputTokens, 50);
+    assert.equal(devEntry.dispatches, 1);
+});
+
+test('a stage with time/status data but zero dispatch_tokens events has agents: []', () => {
+    const t0 = new Date('2026-01-01T00:00:00.000Z');
+    const t1 = new Date('2026-01-01T01:00:00.000Z');
+    const now = new Date('2026-01-01T02:00:00.000Z');
+    const events = [
+        { task: 'X', field: 'status', from: null, to: 'backlog', at: t0.toISOString() },
+        { task: 'X', field: 'status', from: 'backlog', to: 'in_progress', at: t1.toISOString() },
+        { task: 'X', type: 'dispatch_tokens', agent: 'meridian:developer', output_tokens: 100, context_tokens: 1000, at: '2026-01-01T01:10:00.000Z' }
+    ];
+    const { stages } = aggregateStats(events, now);
+    assert.deepEqual(stages.backlog.agents, []);
+});
+
+test('a dispatch_tokens event for a task with no status events still produces stages.unknown.agents reflecting its agent', () => {
+    const events = [
+        { task: 'Y', type: 'dispatch_tokens', agent: 'meridian:developer', output_tokens: 42, context_tokens: 999, at: '2026-01-01T00:00:00.000Z' }
+    ];
+    const { stages } = aggregateStats(events, new Date('2026-01-01T01:00:00.000Z'));
+    assert.deepEqual(stages.unknown.agents, [
+        { agent: 'meridian:developer', totalOutputTokens: 42, dispatches: 1 }
+    ]);
+});
+
+test('a dispatch_tokens event for a task with no status events and no agent field produces stages.unknown.agents with agent: null', () => {
+    const events = [
+        { task: 'Y', type: 'dispatch_tokens', output_tokens: 42, context_tokens: 999, at: '2026-01-01T00:00:00.000Z' }
+    ];
+    const { stages } = aggregateStats(events, new Date('2026-01-01T01:00:00.000Z'));
+    assert.deepEqual(stages.unknown.agents, [
+        { agent: null, totalOutputTokens: 42, dispatches: 1 }
+    ]);
+});
+
+test('agents.dispatches counts events, not tokens — three same-agent events of 100 tokens each produce dispatches: 3', () => {
+    const t0 = new Date('2026-01-01T00:00:00.000Z');
+    const now = new Date('2026-01-01T02:00:00.000Z');
+    const events = [
+        { task: 'X', field: 'status', from: null, to: 'in_progress', at: t0.toISOString() },
+        { task: 'X', type: 'dispatch_tokens', agent: 'meridian:developer', output_tokens: 100, context_tokens: 1000, at: '2026-01-01T00:10:00.000Z' },
+        { task: 'X', type: 'dispatch_tokens', agent: 'meridian:developer', output_tokens: 100, context_tokens: 1000, at: '2026-01-01T00:20:00.000Z' },
+        { task: 'X', type: 'dispatch_tokens', agent: 'meridian:developer', output_tokens: 100, context_tokens: 1000, at: '2026-01-01T00:30:00.000Z' }
+    ];
+    const { stages } = aggregateStats(events, now);
+    assert.deepEqual(stages.in_progress.agents, [
+        { agent: 'meridian:developer', totalOutputTokens: 300, dispatches: 3 }
+    ]);
+});
+
+test('aggregateWorkspaceStats merges same-named agents across two projects contributing to the same stage into one entry', () => {
+    const now = new Date('2026-01-01T10:00:00.000Z');
+    const eventsA = [
+        { task: 'T1', field: 'status', from: null, to: 'in_progress', at: '2026-01-01T00:00:00.000Z' },
+        { task: 'T1', type: 'dispatch_tokens', agent: 'meridian:developer', output_tokens: 100, context_tokens: 1000, at: '2026-01-01T00:10:00.000Z' }
+    ];
+    const eventsB = [
+        { task: 'T1', field: 'status', from: null, to: 'in_progress', at: '2026-01-01T00:00:00.000Z' },
+        { task: 'T1', type: 'dispatch_tokens', agent: 'meridian:developer', output_tokens: 50, context_tokens: 1000, at: '2026-01-01T00:10:00.000Z' }
+    ];
+    const { stages } = aggregateWorkspaceStats([
+        { path: '/ws/projA', name: 'A', events: eventsA },
+        { path: '/ws/projB', name: 'B', events: eventsB }
+    ], now);
+
+    assert.deepEqual(stages.in_progress.agents, [
+        { agent: 'meridian:developer', totalOutputTokens: 150, dispatches: 2 }
+    ]);
+});
+
 // --- computeWorkspaceStats (fs-backed) --------------------------------------
 
 function writeRegistry(ws, dirs) {

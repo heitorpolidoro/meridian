@@ -270,6 +270,38 @@ test('GET /api/stats reflects a dispatch_tokens event posted via the API', async
     });
 });
 
+test('GET /api/stats reflects a dispatch_tokens event\'s agent under stages.<stage>.agents', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        const task = await seed(base, dir, { status: 'backlog' });
+        await put(base, dir, task.id, { status: 'in_progress' });
+        await fetch(`${base}/api/projects/events`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                projectPath: dir, task: task.id, type: 'dispatch_tokens',
+                agent: 'meridian:developer', output_tokens: 500, context_tokens: 12000
+            })
+        });
+
+        const res = await fetch(`${base}/api/stats?project=${encodeURIComponent(dir)}`);
+        const body = await res.json();
+        assert.deepEqual(body.stages.in_progress.agents, [
+            { agent: 'meridian:developer', totalOutputTokens: 500, dispatches: 1 }
+        ]);
+    });
+});
+
+test('GET /app.js contains formatStageAgentCell and stats-agent-placeholder', async () => {
+    const { ws } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        const res = await fetch(`${base}/app.js`);
+        const body = await res.text();
+        assert.match(body, /formatStageAgentCell/);
+        assert.match(body, /stats-agent-placeholder/);
+    });
+});
+
 test('a malformed line appended directly to events.jsonl does not fail GET /api/stats', async () => {
     const { ws, dir } = workspaceWith('Test Project');
     await withServer(ws, async (base) => {
@@ -316,5 +348,7 @@ test('GET / serves index.html containing the Stats tab and panel markup', async 
         assert.match(body, /id="stats-task-tbody"/);
         assert.match(body, /class="stats-col-project"/);
         assert.match(body, /data-sort="project"/);
+        assert.match(body, /<th>Agent<\/th>/);
+        assert.doesNotMatch(body, /<th>Tasks<\/th>/);
     });
 });
