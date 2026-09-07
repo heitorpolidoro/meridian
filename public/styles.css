@@ -731,6 +731,26 @@ body:not([data-view="dashboard"]) #error-container {
     min-height: 0;
 }
 
+/* #board-panel / #stats-panel were added by MERID-4 with no layout CSS at
+   all, so each defaulted to flex:0 1 auto / min-height:auto inside
+   #project-view's column flex — growing to full content height instead of
+   being capped to the viewport, with the overflow silently clipped by
+   body[data-view="project"|"global"]'s overflow:hidden. These rules make
+   both proper links in the scroll chain again: bounded flex children that
+   hand scrolling off to the elements actually designed for it. */
+#board-panel {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+#stats-panel {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+}
+
 /* Kanban Board & Project View Styles */
 .project-view-header {
     display: flex;

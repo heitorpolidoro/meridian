@@ -176,3 +176,7 @@
 ## [MERID-7] Workspace stats: card shortcut and All Tickets aggregation (QA) — 2026-09-07
 
 - `public/app.js`'s `renderStatsPanel` interpolates the workspace aggregate's `project` label (from `project.name`/`project.path`) directly into an `innerHTML` template string with no HTML-escaping, so a project name containing `<script>`/event-handler markup would execute in the stats table. This is not a regression introduced by this task — the same unescaped-interpolation pattern already exists for `proj.name` in `renderProjects` (`public/app.js:202`) and elsewhere in the file — and the developer's own `docs/suggestions-log.md` entry for this task already flags it as a pre-existing, non-blocking issue worth a follow-up `escapeHtml` helper task. I agree it is not blocking for MERID-7 given the precedent, but it is worth tracking as a separate hardening task.
+
+## [MERID-8] Fix broken scroll in project/global views (QA) — 2026-09-07
+
+- The working tree carries unstaged, unrelated changes (a `.status-summary-bar` feature removal spanning `app.js`/`index.html`/`styles.css`, plus `hooks.json`/`running-flag.sh`/`allow-meridian.sh` edits) that are not part of MERID-8's staged diff. Worth confirming with whoever owns those before this commit lands, so they aren't accidentally swept into a later commit or lost — not a blocker for this task since `work` only commits what's staged.

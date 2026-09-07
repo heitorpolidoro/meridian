@@ -587,7 +587,44 @@ test('GET /<slug> and GET /tickets serve index.html for the SPA to route', async
             assert.ok((res.headers.get('content-type') || '').startsWith('text/html'), `content-type for ${p}`);
             const body = await res.text();
             assert.ok(body.includes('id="project-view"'), `body for ${p} has the project view`);
+            assert.ok(body.includes('id="board-panel"'), `body for ${p} has the board panel`);
+            assert.ok(body.includes('id="stats-panel"'), `body for ${p} has the stats panel`);
         }
+    });
+});
+
+// --- #board-panel / #stats-panel scroll-chain CSS (MERID-8) ---
+// #board-panel and #stats-panel were added by MERID-4 with no layout CSS,
+// which broke the one-viewport scroll chain in the project/global views.
+// These assertions fetch the CSS the app actually serves (not the file on
+// disk) so the test fails if the fix is ever dropped or fails to ship.
+
+test('GET /styles.css serves the #board-panel / #stats-panel flex-chain rules', async () => {
+    const { ws } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        const res = await fetch(`${base}/styles.css`);
+        assert.equal(res.status, 200);
+        assert.ok((res.headers.get('content-type') || '').startsWith('text/css'), 'content-type is text/css');
+        const css = await res.text();
+
+        const boardPanelRule = css.match(/#board-panel\s*\{[^}]*\}/);
+        assert.ok(boardPanelRule, '#board-panel rule block exists');
+        assert.match(boardPanelRule[0], /flex:\s*1 1 auto/, '#board-panel has flex: 1 1 auto');
+        assert.match(boardPanelRule[0], /min-height:\s*0/, '#board-panel has min-height: 0');
+        assert.match(boardPanelRule[0], /display:\s*flex/, '#board-panel has display: flex');
+        assert.match(boardPanelRule[0], /flex-direction:\s*column/, '#board-panel has flex-direction: column');
+
+        const statsPanelRule = css.match(/#stats-panel\s*\{[^}]*\}/);
+        assert.ok(statsPanelRule, '#stats-panel rule block exists');
+        assert.match(statsPanelRule[0], /flex:\s*1 1 auto/, '#stats-panel has flex: 1 1 auto');
+        assert.match(statsPanelRule[0], /min-height:\s*0/, '#stats-panel has min-height: 0');
+        assert.match(statsPanelRule[0], /overflow-y:\s*auto/, '#stats-panel has overflow-y: auto');
+
+        assert.match(
+            css,
+            /\.hidden\s*\{\s*display:\s*none\s*!important;\s*\}/,
+            '.hidden { display: none !important; } is unchanged, still overriding both panels'
+        );
     });
 });
 
