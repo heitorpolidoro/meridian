@@ -154,3 +154,25 @@
 
 - Minor duplication: the "sum output_tokens / max context_tokens across a list of dispatches" loop in `lib/stats.js` is written three times (once for the per-task-with-status-events branch, once for the per-task-without-status-events branch, and implicitly again as `stageTokenAcc` bookkeeping in the first branch). A small local helper (`function summarizeDispatches(dispatches)`) would remove the duplication between the two `for (const [taskId, dispatches] of dispatchByTask)`-adjacent blocks. Purely cosmetic — the current code is correct, readable, and thoroughly tested, and the task's own spec explicitly hands over this exact implementation, so this is not something to block on.
 
+
+## [MERID-7] Workspace stats: card shortcut and All Tickets aggregation (code review) — 2026-09-07
+
+- `public/app.js` `renderStatsPanel` interpolates `r.project` (sourced from
+  `project.name`/`project.path`, ultimately from a project's own
+  `project-info.json` or its directory path) directly into an `innerHTML`
+  template string with no escaping, so a project name containing HTML/JS
+  (e.g. `<img src=x onerror=...>`) would execute in the stats table. This is
+  not a regression introduced by this diff specifically — the exact same
+  unescaped-interpolation pattern already exists for `proj.name` in
+  `renderProjects` (`public/app.js:202`) and elsewhere in this file (e.g.
+  line 1325), so this diff is consistent with the codebase's existing
+  (pre-existing, not previously fixed) security posture rather than
+  introducing a new class of risk. Worth a follow-up task to introduce a
+  shared `escapeHtml` helper and apply it wherever project/task-derived
+  strings are interpolated into markup, including this new Project column,
+  but not something to block this task on given the precedent.
+
+
+## [MERID-7] Workspace stats: card shortcut and All Tickets aggregation (QA) — 2026-09-07
+
+- `public/app.js`'s `renderStatsPanel` interpolates the workspace aggregate's `project` label (from `project.name`/`project.path`) directly into an `innerHTML` template string with no HTML-escaping, so a project name containing `<script>`/event-handler markup would execute in the stats table. This is not a regression introduced by this task — the same unescaped-interpolation pattern already exists for `proj.name` in `renderProjects` (`public/app.js:202`) and elsewhere in the file — and the developer's own `docs/suggestions-log.md` entry for this task already flags it as a pre-existing, non-blocking issue worth a follow-up `escapeHtml` helper task. I agree it is not blocking for MERID-7 given the precedent, but it is worth tracking as a separate hardening task.

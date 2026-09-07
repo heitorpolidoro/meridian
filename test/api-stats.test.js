@@ -72,13 +72,134 @@ function eventsPath(dir) {
     return path.join(dir, '.meridian', 'events.jsonl');
 }
 
-test('GET /api/stats with no project query param returns 400', async () => {
+// A workspace registering N projects, one shared .meridian/projects.json.
+// Mirrors workspaceWith but for the workspace-aggregate ("no project param")
+// tests this task adds.
+function workspaceWithProjects(names) {
+    const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'meridian-ws-'));
+    const dirs = names.map((name, i) => {
+        const dir = path.join(ws, `fixture-project-${i}`);
+        fs.mkdirSync(path.join(dir, '.meridian'), { recursive: true });
+        fs.writeFileSync(
+            path.join(dir, '.meridian', 'project-info.json'),
+            JSON.stringify({ name, key: `T${i}`, stack: [], description: 'x' })
+        );
+        return dir;
+    });
+    fs.mkdirSync(path.join(ws, '.meridian'), { recursive: true });
+    fs.writeFileSync(
+        path.join(ws, '.meridian', 'projects.json'),
+        JSON.stringify({ projects: dirs.map(path => ({ path })) })
+    );
+    return { ws, dirs };
+}
+
+test('GET /api/stats with no project query param returns 200 with a workspace-wide aggregate across two projects', async () => {
+    const { ws, dirs } = workspaceWithProjects(['Project A', 'Project B']);
+    await withServer(ws, async (base) => {
+        const taskA = await seed(base, dirs[0], { status: 'backlog' });
+        await put(base, dirs[0], taskA.id, { status: 'in_progress' });
+        const taskB = await seed(base, dirs[1], { status: 'backlog' });
+        await put(base, dirs[1], taskB.id, { status: 'in_progress' });
+
+        const res = await fetch(`${base}/api/stats`);
+        assert.equal(res.status, 200);
+        const body = await res.json();
+
+        const keyA = `${dirs[0]}::${taskA.id}`;
+        const keyB = `${dirs[1]}::${taskB.id}`;
+        assert.ok(body.tasks[keyA], 'project A task present under composite key');
+        assert.ok(body.tasks[keyB], 'project B task present under composite key');
+        assert.equal(body.tasks[keyA].project.path, dirs[0]);
+        assert.equal(body.tasks[keyA].project.name, 'Project A');
+        assert.equal(body.tasks[keyB].project.path, dirs[1]);
+        assert.equal(body.tasks[keyB].project.name, 'Project B');
+    });
+});
+
+test('GET /api/stats?project= (present but blank) still returns 400', async () => {
     const { ws } = workspaceWith('Test Project');
     await withServer(ws, async (base) => {
-        const res = await fetch(`${base}/api/stats`);
+        const res = await fetch(`${base}/api/stats?project=`);
         assert.equal(res.status, 400);
         const body = await res.json();
         assert.match(body.error, /project is required/i);
+    });
+});
+
+test('GET /api/stats?project=<one of two> returns only that project\'s tasks', async () => {
+    const { ws, dirs } = workspaceWithProjects(['Project A', 'Project B']);
+    await withServer(ws, async (base) => {
+        const taskA = await seed(base, dirs[0], { status: 'backlog' });
+        const taskB = await seed(base, dirs[1], { status: 'backlog' });
+
+        const res = await fetch(`${base}/api/stats?project=${encodeURIComponent(dirs[0])}`);
+        assert.equal(res.status, 200);
+        const body = await res.json();
+        assert.ok(body.tasks[taskA.id]);
+        assert.ok(!body.tasks[taskB.id]);
+        assert.equal(body.tasks[taskA.id].project, undefined);
+    });
+});
+
+test('a third registered project with no events.jsonl contributes no entries and no error to the workspace aggregate', async () => {
+    const { ws, dirs } = workspaceWithProjects(['Project A', 'Project B', 'Project C']);
+    await withServer(ws, async (base) => {
+        await seed(base, dirs[0], { status: 'backlog' });
+        assert.ok(!fs.existsSync(eventsPath(dirs[2])));
+
+        const res = await fetch(`${base}/api/stats`);
+        assert.equal(res.status, 200);
+        const body = await res.json();
+        const cKeys = Object.keys(body.tasks).filter(k => k.startsWith(`${dirs[2]}::`));
+        assert.deepEqual(cKeys, []);
+        assert.deepEqual(body.errors, []);
+    });
+});
+
+test('a malformed line in one project\'s events.jsonl does not fail the no-project-param request', async () => {
+    const { ws, dirs } = workspaceWithProjects(['Project A', 'Project B']);
+    await withServer(ws, async (base) => {
+        const taskA = await seed(base, dirs[0], { status: 'backlog' });
+        await put(base, dirs[0], taskA.id, { status: 'in_progress' });
+        const taskB = await seed(base, dirs[1], { status: 'backlog' });
+        await put(base, dirs[1], taskB.id, { status: 'in_progress' });
+        fs.appendFileSync(eventsPath(dirs[0]), 'not json\n');
+
+        const res = await fetch(`${base}/api/stats`);
+        assert.equal(res.status, 200);
+        const body = await res.json();
+        assert.ok(body.tasks[`${dirs[1]}::${taskB.id}`]);
+    });
+});
+
+test('two consecutive no-project-param GET /api/stats calls with a mutation in between return different tasks — no caching', async () => {
+    const { ws, dirs } = workspaceWithProjects(['Project A', 'Project B']);
+    await withServer(ws, async (base) => {
+        const taskA = await seed(base, dirs[0], { status: 'backlog' });
+
+        const res1 = await fetch(`${base}/api/stats`);
+        const body1 = await res1.json();
+
+        await put(base, dirs[0], taskA.id, { status: 'in_progress' });
+
+        const res2 = await fetch(`${base}/api/stats`);
+        const body2 = await res2.json();
+
+        const key = `${dirs[0]}::${taskA.id}`;
+        assert.notDeepEqual(body1.tasks[key], body2.tasks[key]);
+        assert.ok(!(body1.tasks[key] && body1.tasks[key].stages.in_progress));
+        assert.ok(body2.tasks[key].stages.in_progress);
+    });
+});
+
+test('GET /app.js contains the stats-icon-btn class and the stats-tab-selection branch', async () => {
+    const { ws } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        const res = await fetch(`${base}/app.js`);
+        const body = await res.text();
+        assert.match(body, /stats-icon-btn/);
+        assert.match(body, /initialTab === 'stats'/);
     });
 });
 
@@ -193,5 +314,7 @@ test('GET / serves index.html containing the Stats tab and panel markup', async 
         assert.match(body, /id="stats-panel"/);
         assert.match(body, /id="stats-stage-tbody"/);
         assert.match(body, /id="stats-task-tbody"/);
+        assert.match(body, /class="stats-col-project"/);
+        assert.match(body, /data-sort="project"/);
     });
 });

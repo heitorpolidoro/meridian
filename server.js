@@ -5,7 +5,7 @@ const { deriveKey, nextTaskId, getTasks, saveTasks, stampNewTask, stampTaskUpdat
 const { ensureMeridianIgnored } = require('./lib/gitignore');
 const { registerProject } = require('./lib/projects');
 const { appendEvent } = require('./lib/events');
-const { computeProjectStats } = require('./lib/stats');
+const { computeProjectStats, computeWorkspaceStats } = require('./lib/stats');
 
 const app = express();
 const PORT = process.env.PORT || 3333;
@@ -445,6 +445,15 @@ app.get('/api/status', (req, res) => {
 // every request re-reads and re-aggregates the file from scratch.
 app.get('/api/stats', (req, res) => {
     const projectPath = req.query.project;
+
+    // No `project` key at all -> workspace-wide aggregate across every
+    // registered project. A present-but-blank `?project=` still 400s, same
+    // as today - only true absence of the query param changes meaning.
+    if (projectPath === undefined) {
+        const { tasks, stages, errors } = computeWorkspaceStats(WORKSPACE_DIR);
+        return res.json({ project: null, generatedAt: new Date().toISOString(), tasks, stages, errors });
+    }
+
     if (typeof projectPath !== 'string' || !projectPath.trim()) {
         return res.status(400).json({ error: 'project is required' });
     }

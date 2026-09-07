@@ -200,6 +200,8 @@ function renderProjects(data) {
                 <div class="project-header">
                     <h2 class="project-title">
                         ${proj.name}
+                        <button type="button" class="stats-icon-btn" title="View stats for ${proj.name.replace(/"/g, '&quot;')}"
+                            onclick="showProjectView('${proj.path.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}', true, 'stats'); event.stopPropagation();">📊</button>
                     </h2>
                     <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap; margin-bottom: 0.5rem; margin-top: 0.5rem;">
                         ${proj.missingAgentsMd ? '<span class="missing-agents-badge" title="Missing AGENTS.md in project root">⚠️ Missing AGENTS.md</span>' : ''}
@@ -792,12 +794,16 @@ function showDashboard(pushState = true) {
     }
 }
 
-window.showProjectView = function(projPath, pushState = true) {
-    showBoardTab();
+window.showProjectView = function(projPath, pushState = true, initialTab = 'board') {
     currentProjectViewPath = projPath;
     activateView('project');
     refreshProjectView();
     if (tabStatsBtn) tabStatsBtn.classList.remove('hidden');
+    if (initialTab === 'stats') {
+        showStatsTab();
+    } else {
+        showBoardTab();
+    }
 
     if (pushState && currentProjectsData.length > 0) {
         const proj = currentProjectsData.find(p => p.path === projPath);
@@ -816,7 +822,7 @@ window.showGlobalTicketsView = function(pushState = true) {
     setBreadcrumb('All Tickets');
     document.title = 'All Tickets · Meridian';
     refreshProjectView();
-    if (tabStatsBtn) tabStatsBtn.classList.add('hidden');
+    if (tabStatsBtn) tabStatsBtn.classList.remove('hidden');
 
     if (pushState && window.location.pathname !== '/tickets') {
         history.pushState(null, '', '/tickets');
@@ -1458,7 +1464,9 @@ let lastStatsData = null;
 let statsSort = { key: 'ms', dir: 'desc' };
 
 async function loadStats() {
-    if (!currentProjectViewPath || currentProjectViewPath === '__GLOBAL__') return;
+    if (!currentProjectViewPath) return;
+    const isGlobal = currentProjectViewPath === '__GLOBAL__';
+    const url = isGlobal ? '/api/stats' : `/api/stats?project=${encodeURIComponent(currentProjectViewPath)}`;
     const loading = document.getElementById('stats-loading');
     const errorBox = document.getElementById('stats-error');
     const content = document.getElementById('stats-content');
@@ -1467,13 +1475,17 @@ async function loadStats() {
     content.classList.add('hidden');
     lastStatsData = null;
     try {
-        const res = await fetch(`/api/stats?project=${encodeURIComponent(currentProjectViewPath)}`);
+        const res = await fetch(url);
         const data = await res.json();
         loading.classList.add('hidden');
         if (data.errors && data.errors.length > 0) {
             errorBox.textContent = data.errors.map(e => e.message).join('; ');
             errorBox.classList.remove('hidden');
-            return;
+            // Errors here are per-project read failures folded into the
+            // response, not a hard failure — data.tasks/stages can still be
+            // non-empty. Fall through and render whatever came back, same
+            // as the single-project path already treats them as
+            // non-fatal-but-shown.
         }
         lastStatsData = data;
         content.classList.remove('hidden');
@@ -1513,34 +1525,38 @@ function renderStatsPanel(data) {
         </tr>`;
     }).join('') || '<tr><td colspan="6">No stage data yet.</td></tr>';
 
+    const showProject = currentProjectViewPath === '__GLOBAL__';
+    const taskTable = document.getElementById('stats-task-table');
+    taskTable.classList.toggle('stats-table--project-hidden', !showProject);
+
     // Flatten tasks x stages into one row per (task, stage) so outliers sort
     // to the top regardless of which task or stage they belong to.
     let rows = [];
-    for (const [taskId, t] of Object.entries(data.tasks)) {
+    for (const [key, t] of Object.entries(data.tasks)) {
+        // Workspace entries carry `task` + `project`; single-project
+        // entries are keyed by the bare task id and carry neither.
+        const taskId = t.task || key;
+        const projectLabel = t.project ? (t.project.name || t.project.path) : '';
         const stageNamesForTask = Object.keys(t.stages);
+        const base = {
+            task: taskId, project: projectLabel,
+            dispatches: t.dispatches.count,
+            outputTokens: t.dispatches.totalOutputTokens,
+            maxContextTokens: t.dispatches.maxContextTokens
+        };
         if (stageNamesForTask.length === 0) {
-            rows.push({
-                task: taskId, stage: '(no status events)', ms: 0, ongoing: false,
-                dispatches: t.dispatches.count,
-                outputTokens: t.dispatches.totalOutputTokens,
-                maxContextTokens: t.dispatches.maxContextTokens
-            });
+            rows.push({ ...base, stage: '(no status events)', ms: 0, ongoing: false });
             continue;
         }
         for (const stageName of stageNamesForTask) {
             const s = t.stages[stageName];
-            rows.push({
-                task: taskId, stage: stageName, ms: s.totalMs, ongoing: s.ongoing,
-                dispatches: t.dispatches.count,
-                outputTokens: t.dispatches.totalOutputTokens,
-                maxContextTokens: t.dispatches.maxContextTokens
-            });
+            rows.push({ ...base, stage: stageName, ms: s.totalMs, ongoing: s.ongoing });
         }
     }
 
-    const { key, dir } = statsSort;
+    const { key: sortKey, dir } = statsSort;
     rows.sort((a, b) => {
-        const va = a[key], vb = b[key];
+        const va = a[sortKey], vb = b[sortKey];
         const cmp = typeof va === 'string' ? va.localeCompare(vb) : va - vb;
         return dir === 'asc' ? cmp : -cmp;
     });
@@ -1548,12 +1564,13 @@ function renderStatsPanel(data) {
     const taskTbody = document.getElementById('stats-task-tbody');
     taskTbody.innerHTML = rows.map(r => `<tr>
         <td>${r.task}</td>
+        <td class="stats-col-project">${r.project}</td>
         <td>${r.stage}${r.ongoing ? ' <span class="stats-ongoing-badge">ongoing</span>' : ''}</td>
         <td>${formatDuration(r.ms)}</td>
         <td>${r.dispatches}</td>
         <td>${r.outputTokens.toLocaleString()}</td>
         <td>${r.maxContextTokens.toLocaleString()}</td>
-    </tr>`).join('') || '<tr><td colspan="6">No task data yet.</td></tr>';
+    </tr>`).join('') || '<tr><td colspan="7">No task data yet.</td></tr>';
 }
 
 document.querySelectorAll('#stats-task-table th[data-sort]').forEach(th => {

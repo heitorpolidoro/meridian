@@ -3,7 +3,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { aggregateStats, readEventLines, TOP_N } = require('../lib/stats');
+const {
+    aggregateStats, readEventLines, TOP_N,
+    listRegisteredProjects, aggregateWorkspaceStats, computeWorkspaceStats
+} = require('../lib/stats');
 
 test('a single task entering backlog then in_progress produces correct stage durations, last one ongoing', () => {
     const t0 = new Date('2026-01-01T00:00:00.000Z');
@@ -156,4 +159,183 @@ test('readEventLines returns both lines of a two-line file in order', () => {
     fs.writeFileSync(file, '{"task":"A","at":"2026-01-01T00:00:00.000Z"}\n{"task":"B","at":"2026-01-01T01:00:00.000Z"}\n');
     const lines = readEventLines(dir);
     assert.deepEqual(lines.map(l => l.task), ['A', 'B']);
+});
+
+// --- listRegisteredProjects -------------------------------------------------
+
+test('listRegisteredProjects resolves names from project-info.json, falls back to basename', () => {
+    const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'meridian-ws-'));
+    const alphaDir = path.join(ws, 'alpha-project');
+    const namelessDir = path.join(ws, 'nameless-project');
+    fs.mkdirSync(path.join(alphaDir, '.meridian'), { recursive: true });
+    fs.writeFileSync(path.join(alphaDir, '.meridian', 'project-info.json'), JSON.stringify({ name: 'Alpha' }));
+    fs.mkdirSync(namelessDir, { recursive: true });
+    fs.mkdirSync(path.join(ws, '.meridian'), { recursive: true });
+    fs.writeFileSync(
+        path.join(ws, '.meridian', 'projects.json'),
+        JSON.stringify({ projects: [{ path: alphaDir }, { path: namelessDir }] })
+    );
+    const result = listRegisteredProjects(ws);
+    assert.deepEqual(result, [
+        { path: alphaDir, name: 'Alpha' },
+        { path: namelessDir, name: 'nameless-project' }
+    ]);
+});
+
+test('listRegisteredProjects returns [] when projects.json is missing', () => {
+    const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'meridian-ws-'));
+    assert.deepEqual(listRegisteredProjects(ws), []);
+});
+
+test('listRegisteredProjects returns [] without throwing when projects.json is malformed', () => {
+    const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'meridian-ws-'));
+    fs.mkdirSync(path.join(ws, '.meridian'), { recursive: true });
+    fs.writeFileSync(path.join(ws, '.meridian', 'projects.json'), 'not json');
+    let result;
+    assert.doesNotThrow(() => { result = listRegisteredProjects(ws); });
+    assert.deepEqual(result, []);
+});
+
+// --- aggregateWorkspaceStats (pure) -----------------------------------------
+
+test('aggregateWorkspaceStats keys colliding task ids per project and tags each with task/project', () => {
+    const projA = { path: '/ws/projA', name: 'Project A' };
+    const projB = { path: '/ws/projB', name: 'Project B' };
+    const events = [
+        { task: 'T1', field: 'status', from: null, to: 'backlog', at: '2026-01-01T00:00:00.000Z' }
+    ];
+    const now = new Date('2026-01-01T01:00:00.000Z');
+    const { tasks } = aggregateWorkspaceStats([
+        { path: projA.path, name: projA.name, events },
+        { path: projB.path, name: projB.name, events }
+    ], now);
+
+    assert.ok(tasks[`${projA.path}::T1`]);
+    assert.ok(tasks[`${projB.path}::T1`]);
+    assert.equal(tasks[`${projA.path}::T1`].task, 'T1');
+    assert.deepEqual(tasks[`${projA.path}::T1`].project, projA);
+    assert.equal(tasks[`${projB.path}::T1`].task, 'T1');
+    assert.deepEqual(tasks[`${projB.path}::T1`].project, projB);
+});
+
+test('aggregateWorkspaceStats merges a shared stage across two projects into one combined stages entry', () => {
+    const now = new Date('2026-01-01T10:00:00.000Z');
+    const eventsA = [
+        { task: 'T1', field: 'status', from: null, to: 'in_progress', at: '2026-01-01T00:00:00.000Z' },
+        { task: 'T1', field: 'status', from: 'in_progress', to: 'done', at: '2026-01-01T01:00:00.000Z' }
+    ];
+    const eventsB = [
+        { task: 'T1', field: 'status', from: null, to: 'in_progress', at: '2026-01-01T00:00:00.000Z' },
+        { task: 'T1', field: 'status', from: 'in_progress', to: 'done', at: '2026-01-01T03:00:00.000Z' }
+    ];
+    const { stages } = aggregateWorkspaceStats([
+        { path: '/ws/projA', name: 'A', events: eventsA },
+        { path: '/ws/projB', name: 'B', events: eventsB }
+    ], now);
+
+    assert.equal(stages.in_progress.taskCount, 2);
+    const expectedAvgMs = (3600 * 1000 + 3 * 3600 * 1000) / 2;
+    assert.equal(stages.in_progress.avgMs, expectedAvgMs);
+});
+
+test('aggregateWorkspaceStats topByTime/topByTokens carry a project field and rank the bigger entry first across projects', () => {
+    const now = new Date('2026-01-01T10:00:00.000Z');
+    const eventsSmall = [
+        { task: 'T1', field: 'status', from: null, to: 'in_progress', at: '2026-01-01T00:00:00.000Z' },
+        { task: 'T1', field: 'status', from: 'in_progress', to: 'done', at: '2026-01-01T01:00:00.000Z' }
+    ];
+    const eventsBig = [
+        { task: 'T1', field: 'status', from: null, to: 'in_progress', at: '2026-01-01T00:00:00.000Z' },
+        { task: 'T1', field: 'status', from: 'in_progress', to: 'done', at: '2026-01-01T05:00:00.000Z' }
+    ];
+    const { stages } = aggregateWorkspaceStats([
+        { path: '/ws/small', name: 'Small', events: eventsSmall },
+        { path: '/ws/big', name: 'Big', events: eventsBig }
+    ], now);
+
+    assert.equal(stages.in_progress.topByTime[0].project.path, '/ws/big');
+    assert.equal(stages.in_progress.topByTime[0].ms, 5 * 3600 * 1000);
+});
+
+test('aggregateWorkspaceStats: a project entry with events:[] (or missing) contributes nothing', () => {
+    const events = [
+        { task: 'T1', field: 'status', from: null, to: 'in_progress', at: '2026-01-01T00:00:00.000Z' }
+    ];
+    const now = new Date('2026-01-01T01:00:00.000Z');
+    const withEmpty = aggregateWorkspaceStats([
+        { path: '/ws/a', name: 'A', events },
+        { path: '/ws/empty', name: 'Empty', events: [] }
+    ], now);
+    const withoutEntry = aggregateWorkspaceStats([
+        { path: '/ws/a', name: 'A', events }
+    ], now);
+
+    assert.deepEqual(Object.keys(withEmpty.tasks), Object.keys(withoutEntry.tasks));
+    assert.deepEqual(withEmpty.stages, withoutEntry.stages);
+});
+
+// --- computeWorkspaceStats (fs-backed) --------------------------------------
+
+function writeRegistry(ws, dirs) {
+    fs.mkdirSync(path.join(ws, '.meridian'), { recursive: true });
+    fs.writeFileSync(
+        path.join(ws, '.meridian', 'projects.json'),
+        JSON.stringify({ projects: dirs.map(d => ({ path: d })) })
+    );
+}
+
+function writeEvents(dir, lines) {
+    fs.mkdirSync(path.join(dir, '.meridian'), { recursive: true });
+    fs.writeFileSync(path.join(dir, '.meridian', 'events.jsonl'), lines.join('\n') + '\n');
+}
+
+test('computeWorkspaceStats reflects both projects real events.jsonl files', () => {
+    const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'meridian-ws-'));
+    const dirA = path.join(ws, 'projA');
+    const dirB = path.join(ws, 'projB');
+    fs.mkdirSync(dirA, { recursive: true });
+    fs.mkdirSync(dirB, { recursive: true });
+    writeEvents(dirA, [JSON.stringify({ task: 'T1', field: 'status', from: null, to: 'backlog', at: '2026-01-01T00:00:00.000Z' })]);
+    writeEvents(dirB, [JSON.stringify({ task: 'T1', field: 'status', from: null, to: 'backlog', at: '2026-01-01T00:00:00.000Z' })]);
+    writeRegistry(ws, [dirA, dirB]);
+
+    const now = new Date('2026-01-01T02:00:00.000Z');
+    const { tasks, stages, errors } = computeWorkspaceStats(ws, now);
+    assert.ok(tasks[`${dirA}::T1`]);
+    assert.ok(tasks[`${dirB}::T1`]);
+    assert.equal(stages.backlog.taskCount, 2);
+    assert.deepEqual(errors, []);
+});
+
+test('computeWorkspaceStats: a registered project with no events.jsonl contributes nothing and no error', () => {
+    const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'meridian-ws-'));
+    const dirA = path.join(ws, 'projA');
+    const dirNoEvents = path.join(ws, 'projNoEvents');
+    fs.mkdirSync(dirA, { recursive: true });
+    fs.mkdirSync(dirNoEvents, { recursive: true });
+    writeEvents(dirA, [JSON.stringify({ task: 'T1', field: 'status', from: null, to: 'backlog', at: '2026-01-01T00:00:00.000Z' })]);
+    writeRegistry(ws, [dirA, dirNoEvents]);
+
+    const { errors } = computeWorkspaceStats(ws, new Date('2026-01-01T02:00:00.000Z'));
+    assert.deepEqual(errors, []);
+});
+
+test('computeWorkspaceStats: an unreadable events.jsonl (a directory) produces one errors entry without failing the request or omitting others', () => {
+    const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'meridian-ws-'));
+    const dirA = path.join(ws, 'projA');
+    const dirBroken = path.join(ws, 'projBroken');
+    fs.mkdirSync(dirA, { recursive: true });
+    writeEvents(dirA, [JSON.stringify({ task: 'T1', field: 'status', from: null, to: 'backlog', at: '2026-01-01T00:00:00.000Z' })]);
+    fs.mkdirSync(path.join(dirBroken, '.meridian', 'events.jsonl'), { recursive: true });
+    writeRegistry(ws, [dirA, dirBroken]);
+
+    const { tasks, errors } = computeWorkspaceStats(ws, new Date('2026-01-01T02:00:00.000Z'));
+    assert.ok(tasks[`${dirA}::T1`]);
+    assert.equal(errors.length, 1);
+});
+
+test('computeWorkspaceStats with an empty/missing projects.json returns empty tasks/stages/errors', () => {
+    const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'meridian-ws-'));
+    const result = computeWorkspaceStats(ws, new Date());
+    assert.deepEqual(result, { tasks: {}, stages: {}, errors: [] });
 });
