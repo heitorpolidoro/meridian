@@ -793,10 +793,12 @@ function showDashboard(pushState = true) {
 }
 
 window.showProjectView = function(projPath, pushState = true) {
+    showBoardTab();
     currentProjectViewPath = projPath;
     activateView('project');
     refreshProjectView();
-    
+    if (tabStatsBtn) tabStatsBtn.classList.remove('hidden');
+
     if (pushState && currentProjectsData.length > 0) {
         const proj = currentProjectsData.find(p => p.path === projPath);
         const relPath = proj ? (proj.relativePath || proj.path.split('/').pop()) : projPath.split('/').pop();
@@ -808,12 +810,14 @@ window.showProjectView = function(projPath, pushState = true) {
 };
 
 window.showGlobalTicketsView = function(pushState = true) {
+    showBoardTab();
     currentProjectViewPath = '__GLOBAL__';
     activateView('global');
     setBreadcrumb('All Tickets');
     document.title = 'All Tickets · Meridian';
     refreshProjectView();
-    
+    if (tabStatsBtn) tabStatsBtn.classList.add('hidden');
+
     if (pushState && window.location.pathname !== '/tickets') {
         history.pushState(null, '', '/tickets');
     }
@@ -1412,3 +1416,154 @@ window.runNextFixAll = function() {
         setTimeout(window.runNextFixAll, 1000);
     });
 };
+
+// --- Stats tab -------------------------------------------------------------
+// Fetches /api/stats fresh on every open of the Stats tab and on every click
+// of its Refresh button. lastStatsData is only ever assigned inside
+// loadStats() from a just-fetched response — sorting only re-renders what the
+// most recent fetch returned, it never substitutes for a fresh fetch.
+const tabBoardBtn = document.getElementById('tab-board-btn');
+const tabStatsBtn = document.getElementById('tab-stats-btn');
+const boardPanel = document.getElementById('board-panel');
+const statsPanel = document.getElementById('stats-panel');
+
+function showBoardTab() {
+    if (!tabBoardBtn || !tabStatsBtn || !boardPanel || !statsPanel) return;
+    tabBoardBtn.classList.add('view-tab--active');
+    tabStatsBtn.classList.remove('view-tab--active');
+    boardPanel.classList.remove('hidden');
+    statsPanel.classList.add('hidden');
+}
+
+function showStatsTab() {
+    if (!tabBoardBtn || !tabStatsBtn || !boardPanel || !statsPanel) return;
+    tabBoardBtn.classList.remove('view-tab--active');
+    tabStatsBtn.classList.add('view-tab--active');
+    boardPanel.classList.add('hidden');
+    statsPanel.classList.remove('hidden');
+    loadStats();
+}
+
+if (tabBoardBtn) tabBoardBtn.addEventListener('click', showBoardTab);
+if (tabStatsBtn) tabStatsBtn.addEventListener('click', showStatsTab);
+
+const statsRefreshBtn = document.getElementById('stats-refresh-btn');
+if (statsRefreshBtn) statsRefreshBtn.addEventListener('click', loadStats);
+
+// Client-side sort state for the already-fetched rows only — never a
+// substitute for re-fetching. Every open of the Stats tab and every click of
+// Refresh calls loadStats(), which replaces lastStatsData wholesale; sorting
+// only ever re-renders what the most recent fetch returned.
+let lastStatsData = null;
+let statsSort = { key: 'ms', dir: 'desc' };
+
+async function loadStats() {
+    if (!currentProjectViewPath || currentProjectViewPath === '__GLOBAL__') return;
+    const loading = document.getElementById('stats-loading');
+    const errorBox = document.getElementById('stats-error');
+    const content = document.getElementById('stats-content');
+    loading.classList.remove('hidden');
+    errorBox.classList.add('hidden');
+    content.classList.add('hidden');
+    lastStatsData = null;
+    try {
+        const res = await fetch(`/api/stats?project=${encodeURIComponent(currentProjectViewPath)}`);
+        const data = await res.json();
+        loading.classList.add('hidden');
+        if (data.errors && data.errors.length > 0) {
+            errorBox.textContent = data.errors.map(e => e.message).join('; ');
+            errorBox.classList.remove('hidden');
+            return;
+        }
+        lastStatsData = data;
+        content.classList.remove('hidden');
+        renderStatsPanel(data);
+    } catch (err) {
+        loading.classList.add('hidden');
+        errorBox.textContent = 'Failed to load stats: ' + err.message;
+        errorBox.classList.remove('hidden');
+    }
+}
+
+function formatDuration(ms) {
+    if (!Number.isFinite(ms) || ms <= 0) return '0m';
+    const mins = Math.floor(ms / 60000);
+    const days = Math.floor(mins / 1440);
+    const hours = Math.floor((mins % 1440) / 60);
+    const minutes = mins % 60;
+    const parts = [];
+    if (days) parts.push(`${days}d`);
+    if (hours) parts.push(`${hours}h`);
+    if (minutes || parts.length === 0) parts.push(`${minutes}m`);
+    return parts.join(' ');
+}
+
+function renderStatsPanel(data) {
+    const stageTbody = document.getElementById('stats-stage-tbody');
+    const stageNames = Object.keys(data.stages).sort();
+    stageTbody.innerHTML = stageNames.map(name => {
+        const s = data.stages[name];
+        return `<tr>
+            <td>${name}</td>
+            <td>${s.taskCount}</td>
+            <td>${formatDuration(s.avgMs)}</td>
+            <td>${formatDuration(s.maxMs)}</td>
+            <td>${Math.round(s.avgTokens).toLocaleString()}</td>
+            <td>${Math.round(s.maxTokens).toLocaleString()}</td>
+        </tr>`;
+    }).join('') || '<tr><td colspan="6">No stage data yet.</td></tr>';
+
+    // Flatten tasks x stages into one row per (task, stage) so outliers sort
+    // to the top regardless of which task or stage they belong to.
+    let rows = [];
+    for (const [taskId, t] of Object.entries(data.tasks)) {
+        const stageNamesForTask = Object.keys(t.stages);
+        if (stageNamesForTask.length === 0) {
+            rows.push({
+                task: taskId, stage: '(no status events)', ms: 0, ongoing: false,
+                dispatches: t.dispatches.count,
+                outputTokens: t.dispatches.totalOutputTokens,
+                maxContextTokens: t.dispatches.maxContextTokens
+            });
+            continue;
+        }
+        for (const stageName of stageNamesForTask) {
+            const s = t.stages[stageName];
+            rows.push({
+                task: taskId, stage: stageName, ms: s.totalMs, ongoing: s.ongoing,
+                dispatches: t.dispatches.count,
+                outputTokens: t.dispatches.totalOutputTokens,
+                maxContextTokens: t.dispatches.maxContextTokens
+            });
+        }
+    }
+
+    const { key, dir } = statsSort;
+    rows.sort((a, b) => {
+        const va = a[key], vb = b[key];
+        const cmp = typeof va === 'string' ? va.localeCompare(vb) : va - vb;
+        return dir === 'asc' ? cmp : -cmp;
+    });
+
+    const taskTbody = document.getElementById('stats-task-tbody');
+    taskTbody.innerHTML = rows.map(r => `<tr>
+        <td>${r.task}</td>
+        <td>${r.stage}${r.ongoing ? ' <span class="stats-ongoing-badge">ongoing</span>' : ''}</td>
+        <td>${formatDuration(r.ms)}</td>
+        <td>${r.dispatches}</td>
+        <td>${r.outputTokens.toLocaleString()}</td>
+        <td>${r.maxContextTokens.toLocaleString()}</td>
+    </tr>`).join('') || '<tr><td colspan="6">No task data yet.</td></tr>';
+}
+
+document.querySelectorAll('#stats-task-table th[data-sort]').forEach(th => {
+    th.addEventListener('click', () => {
+        const key = th.dataset.sort;
+        if (statsSort.key === key) {
+            statsSort.dir = statsSort.dir === 'asc' ? 'desc' : 'asc';
+        } else {
+            statsSort = { key, dir: 'desc' };
+        }
+        if (lastStatsData) renderStatsPanel(lastStatsData);
+    });
+});

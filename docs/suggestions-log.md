@@ -142,3 +142,15 @@
   not blocking, but a one-line addition there would keep the summary in sync
   with the file's own three-job framing.
 
+
+## [MERID-4] Stats panel fed by GET /api/stats — 2026-09-07
+- The `stages['unknown']` bucket (dispatch_tokens events with no matching status interval) never contributes to `stageTimeEntries`, so its `avgMs`/`maxMs`/`topByTime` will always be `0`/`0`/`[]` even though `avgTokens`/`maxTokens`/`topByTokens` are populated. This is intentional and internally consistent, and none of the `expected_results` require otherwise, but a one-line comment in the eventual `lib/stats.js` (not just the spec prose) would save a future reader from mistaking it for a bug.
+- `renderStatsPanel`'s per-(task, stage) row flattening duplicates `dispatches`/`outputTokens`/`maxContextTokens` onto every stage row for a multi-stage task (those numbers are task-level totals, not stage-level). Harmless for the table view described, but if a later task tries to sum the `outputTokens` column for a per-stage total, it will double count. Worth a short note in the board copy ("Dispatches" column is per-task, not per-stage) so this doesn't get miscopied later — not blocking since the spec doesn't claim the column is stage-scoped.
+
+
+## [MERID-4] Stats panel fed by GET /api/stats (code review) — 2026-09-07
+
+- `public/app.js`'s `renderStatsPanel` interpolates `r.task`, `name` (stage name), and other server-supplied strings directly into `innerHTML` template literals without escaping (e.g. `public/app.js` in the `renderStatsPanel` function, both the stage table and task table row builders). Today this is safe: task ids come from the server's own key-generation scheme and stage names are constrained to the fixed `VALID_STATUSES` whitelist enforced in `server.js` (`VALID_STATUSES` check at the task PUT/POST validation), so no attacker-controlled string can reach this template. It's also consistent with the codebase's pre-existing convention — `renderKanbanBoard`/`task.title`/`running-ticket-title` etc. in the same file already interpolate task titles into `innerHTML` unescaped with no `escapeHtml` helper anywhere in the file. Not a regression introduced by this diff and not blocking, but if an `escapeHtml` helper is ever added for the board view, the stats view should adopt it too for defense-in-depth (e.g. if `events.jsonl` is ever hand-edited or a future event producer stops going through the validated API).
+
+- Minor duplication: the "sum output_tokens / max context_tokens across a list of dispatches" loop in `lib/stats.js` is written three times (once for the per-task-with-status-events branch, once for the per-task-without-status-events branch, and implicitly again as `stageTokenAcc` bookkeeping in the first branch). A small local helper (`function summarizeDispatches(dispatches)`) would remove the duplication between the two `for (const [taskId, dispatches] of dispatchByTask)`-adjacent blocks. Purely cosmetic — the current code is correct, readable, and thoroughly tested, and the task's own spec explicitly hands over this exact implementation, so this is not something to block on.
+

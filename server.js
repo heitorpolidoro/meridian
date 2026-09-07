@@ -5,6 +5,7 @@ const { deriveKey, nextTaskId, getTasks, saveTasks, stampNewTask, stampTaskUpdat
 const { ensureMeridianIgnored } = require('./lib/gitignore');
 const { registerProject } = require('./lib/projects');
 const { appendEvent } = require('./lib/events');
+const { computeProjectStats } = require('./lib/stats');
 
 const app = express();
 const PORT = process.env.PORT || 3333;
@@ -438,6 +439,26 @@ app.get('/api/status', (req, res) => {
         workable: req.query.workable === '1' || undefined,
         limit: Number.isInteger(limit) && limit > 0 ? limit : undefined
     }));
+});
+
+// REST API: on-demand stats aggregated from events.jsonl. Never cached —
+// every request re-reads and re-aggregates the file from scratch.
+app.get('/api/stats', (req, res) => {
+    const projectPath = req.query.project;
+    if (typeof projectPath !== 'string' || !projectPath.trim()) {
+        return res.status(400).json({ error: 'project is required' });
+    }
+    if (!isRegisteredProject(projectPath)) {
+        return res.json({
+            project: projectPath,
+            generatedAt: new Date().toISOString(),
+            tasks: {},
+            stages: {},
+            errors: [{ file: 'System', message: `Project not registered with Meridian: ${projectPath}` }]
+        });
+    }
+    const { tasks, stages } = computeProjectStats(projectPath);
+    res.json({ project: projectPath, generatedAt: new Date().toISOString(), tasks, stages, errors: [] });
 });
 
 // REST API to list subdirectories in RUNNING_DIR

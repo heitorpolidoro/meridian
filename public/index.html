@@ -6,7 +6,7 @@
     <title>Meridian Dashboard</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
-    <link rel="stylesheet" href="styles.css?v=24">
+    <link rel="stylesheet" href="styles.css?v=25">
 </head>
 <body>
     <div id="flash-message-container" class="flash-message-container"></div>
@@ -74,17 +74,54 @@
                 </form>
             </div>
 
-            <div id="running-tickets-section" class="running-tickets-section hidden">
-                <div class="running-tickets-header">
-                    <span class="running-pulse-dot"></span>
-                    <span class="running-tickets-title">Running</span>
-                    <span id="running-tickets-count" class="running-tickets-count">0</span>
-                </div>
-                <div id="running-tickets-list" class="running-tickets-list"></div>
+            <div class="view-tabs" id="project-view-tabs">
+                <button type="button" id="tab-board-btn" class="view-tab view-tab--active" data-tab="board">Board</button>
+                <button type="button" id="tab-stats-btn" class="view-tab" data-tab="stats">Stats 📊</button>
             </div>
 
-            <div class="kanban-board" id="kanban-board">
-                <!-- Kanban columns will be injected here -->
+            <div id="board-panel">
+                <div id="running-tickets-section" class="running-tickets-section hidden">
+                    <div class="running-tickets-header">
+                        <span class="running-pulse-dot"></span>
+                        <span class="running-tickets-title">Running</span>
+                        <span id="running-tickets-count" class="running-tickets-count">0</span>
+                    </div>
+                    <div id="running-tickets-list" class="running-tickets-list"></div>
+                </div>
+
+                <div class="kanban-board" id="kanban-board">
+                    <!-- Kanban columns will be injected here -->
+                </div>
+            </div>
+
+            <div id="stats-panel" class="stats-panel hidden">
+                <div class="stats-toolbar">
+                    <h3>Task Stats</h3>
+                    <button type="button" id="stats-refresh-btn" class="secondary-btn">Refresh</button>
+                </div>
+                <div id="stats-loading" class="stats-loading hidden">Loading stats…</div>
+                <div id="stats-error" class="stats-error hidden"></div>
+                <div id="stats-content" class="hidden">
+                    <table class="stats-table" id="stats-stage-table">
+                        <thead>
+                            <tr><th>Stage</th><th>Tasks</th><th>Avg time</th><th>Max time</th><th>Avg tokens</th><th>Max tokens</th></tr>
+                        </thead>
+                        <tbody id="stats-stage-tbody"></tbody>
+                    </table>
+                    <table class="stats-table" id="stats-task-table">
+                        <thead>
+                            <tr>
+                                <th data-sort="task">Task</th>
+                                <th data-sort="stage">Stage</th>
+                                <th data-sort="ms">Time in stage</th>
+                                <th data-sort="dispatches">Dispatches</th>
+                                <th data-sort="outputTokens">Output tokens</th>
+                                <th data-sort="maxContextTokens">Max context tokens</th>
+                            </tr>
+                        </thead>
+                        <tbody id="stats-task-tbody"></tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -169,6 +206,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=36"></script>
+    <script src="app.js?v=37"></script>
 </body>
 </html>
