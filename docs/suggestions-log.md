@@ -223,3 +223,9 @@
 
 ## [MERID-10] Spec diet, findings-only re-review, short path (QA) — 2026-09-08
 - The `npm test` full-suite flake (port 3659 startup timeout in `test/api-tasks.test.js`) is pre-existing and unrelated to this change, but worth tracking separately since it could cause spurious CI failures on unrelated PRs.
+
+## [MERID-11] Stats: untimed statuses (QA) — 2026-09-08
+
+- The `formatDurationCell` helper in `public/app.js` infers "untimed" purely from `!Number.isFinite(ms)`, which is a clean data-driven approach, but it means any future stage whose `ms` is legitimately `0` (a genuine zero-duration timed visit) would still render `0m`/`0m` correctly since `0` is finite — no actual bug, just noting the boundary was exercised (FIX-1's in_progress `0m` cell rendered correctly, not as a placeholder) and behaves as intended.
+- No functional issues found; the implementation, tests, and rendering are all consistent with the task's data-model comment (`UNTIMED_STATUSES`) and match observed behavior exactly.
+

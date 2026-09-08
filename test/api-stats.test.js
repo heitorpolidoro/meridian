@@ -242,9 +242,114 @@ test('GET /api/stats reflects real status-change events from a seeded task', asy
         assert.ok(stats, 'stats for seeded task present');
         assert.ok(stats.stages.backlog);
         assert.ok(stats.stages.in_progress);
-        assert.ok(stats.stages.backlog.totalMs >= 0);
+        assert.equal(stats.stages.backlog.totalMs, undefined);
+        assert.equal(stats.stages.backlog.ongoing, undefined);
         assert.ok(stats.stages.in_progress.totalMs >= 0);
         assert.equal(stats.stages.in_progress.ongoing, true);
+    });
+});
+
+test('GET /api/stats: backlog/done/nope stage aggregates have no avgMs/maxMs/topByTime but do carry taskCount and correct token/agent attribution for a dispatch made while a task sat in that stage', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        // taskBacklog stays in backlog (its seeded status) and dispatches there.
+        const taskBacklog = await seed(base, dir, { status: 'backlog' });
+        await fetch(`${base}/api/projects/events`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                projectPath: dir, task: taskBacklog.id, type: 'dispatch_tokens',
+                agent: 'meridian:spec-generator', output_tokens: 321, context_tokens: 4000
+            })
+        });
+
+        // taskDone moves through in_progress into done, then dispatches while done.
+        const taskDone = await seed(base, dir, { status: 'backlog' });
+        await put(base, dir, taskDone.id, { status: 'in_progress' });
+        await put(base, dir, taskDone.id, { status: 'done' });
+        await fetch(`${base}/api/projects/events`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                projectPath: dir, task: taskDone.id, type: 'dispatch_tokens',
+                agent: 'meridian:qa', output_tokens: 111, context_tokens: 2000
+            })
+        });
+
+        // taskNope moves straight to nope with zero dispatch_tokens events —
+        // this is the "no events attributed" case the fix must not drop.
+        const taskNope = await seed(base, dir, { status: 'backlog' });
+        await put(base, dir, taskNope.id, { status: 'nope' });
+
+        const res = await fetch(`${base}/api/stats?project=${encodeURIComponent(dir)}`);
+        assert.equal(res.status, 200);
+        const body = await res.json();
+
+        for (const stage of ['backlog', 'done', 'nope']) {
+            assert.ok(body.stages[stage], `stages.${stage} present`);
+            assert.ok(!('avgMs' in body.stages[stage]), `stages.${stage}.avgMs absent`);
+            assert.ok(!('maxMs' in body.stages[stage]), `stages.${stage}.maxMs absent`);
+            assert.ok(!('topByTime' in body.stages[stage]), `stages.${stage}.topByTime absent`);
+            assert.ok('taskCount' in body.stages[stage]);
+            assert.ok('avgTokens' in body.stages[stage]);
+            assert.ok('maxTokens' in body.stages[stage]);
+            assert.ok('topByTokens' in body.stages[stage]);
+            assert.ok('agents' in body.stages[stage]);
+        }
+
+        assert.equal(body.stages.backlog.taskCount, 3);
+        assert.equal(body.stages.done.taskCount, 1);
+        assert.equal(body.stages.nope.taskCount, 1);
+
+        assert.deepEqual(body.stages.backlog.agents, [
+            { agent: 'meridian:spec-generator', totalOutputTokens: 321, dispatches: 1 }
+        ]);
+        assert.equal(body.stages.backlog.avgTokens, 321);
+        assert.equal(body.stages.backlog.maxTokens, 321);
+
+        assert.deepEqual(body.stages.done.agents, [
+            { agent: 'meridian:qa', totalOutputTokens: 111, dispatches: 1 }
+        ]);
+        assert.equal(body.stages.done.avgTokens, 111);
+
+        assert.deepEqual(body.stages.nope.agents, []);
+        assert.equal(body.stages.nope.avgTokens, 0);
+    });
+});
+
+test('GET /api/stats (workspace-wide, no project param): backlog/done/nope stage aggregates have no avgMs/maxMs/topByTime but do carry taskCount and token/agent attribution', async () => {
+    const { ws, dirs } = workspaceWithProjects(['Project A']);
+    await withServer(ws, async (base) => {
+        const taskDone = await seed(base, dirs[0], { status: 'backlog' });
+        await put(base, dirs[0], taskDone.id, { status: 'done' });
+        await fetch(`${base}/api/projects/events`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                projectPath: dirs[0], task: taskDone.id, type: 'dispatch_tokens',
+                agent: 'meridian:qa', output_tokens: 77, context_tokens: 900
+            })
+        });
+        const taskNope = await seed(base, dirs[0], { status: 'backlog' });
+        await put(base, dirs[0], taskNope.id, { status: 'nope' });
+
+        const res = await fetch(`${base}/api/stats`);
+        assert.equal(res.status, 200);
+        const body = await res.json();
+
+        for (const stage of ['backlog', 'done', 'nope']) {
+            assert.ok(body.stages[stage], `stages.${stage} present`);
+            assert.ok(!('avgMs' in body.stages[stage]));
+            assert.ok(!('maxMs' in body.stages[stage]));
+            assert.ok(!('topByTime' in body.stages[stage]));
+            assert.ok('taskCount' in body.stages[stage]);
+        }
+        assert.equal(body.stages.done.taskCount, 1);
+        assert.equal(body.stages.nope.taskCount, 1);
+        assert.deepEqual(body.stages.done.agents, [
+            { agent: 'meridian:qa', totalOutputTokens: 77, dispatches: 1 }
+        ]);
+        assert.deepEqual(body.stages.nope.agents, []);
     });
 });
 
@@ -299,6 +404,21 @@ test('GET /app.js contains formatStageAgentCell and stats-agent-placeholder', as
         const body = await res.text();
         assert.match(body, /formatStageAgentCell/);
         assert.match(body, /stats-agent-placeholder/);
+    });
+});
+
+test('GET /app.js renders — for absent stage/task durations via formatDurationCell instead of calling formatDuration directly on avgMs/maxMs/r.ms', async () => {
+    const { ws } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        const res = await fetch(`${base}/app.js`);
+        const body = await res.text();
+        assert.match(body, /formatDurationCell/);
+        // The stage-table and per-task cells route through the untimed-safe
+        // helper, not the raw formatter, so an absent avgMs/maxMs/ms never
+        // hits formatDuration's own "0m for non-finite" fallback.
+        assert.doesNotMatch(body, /formatDuration\(s\.avgMs\)/);
+        assert.doesNotMatch(body, /formatDuration\(s\.maxMs\)/);
+        assert.doesNotMatch(body, /formatDuration\(r\.ms\)/);
     });
 });
 

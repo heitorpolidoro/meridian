@@ -1484,6 +1484,20 @@ function formatDuration(ms) {
     return parts.join(' ');
 }
 
+// A duration-bearing cell (stage avgMs/maxMs, or a per-task "time in stage")
+// renders the neutral placeholder instead of calling formatDuration when the
+// value is absent — an untimed stage (backlog/done/nope, per MERID-11) never
+// carries a duration at all, and "undefined ms" must not be mistaken for
+// "0m". Detected from the data itself (an absent/non-finite value), never
+// from a hardcoded stage-name list — the frontend has no access to the
+// backend's UNTIMED_STATUSES constant.
+function formatDurationCell(ms) {
+    if (!Number.isFinite(ms)) {
+        return '<span class="stats-agent-placeholder">—</span>';
+    }
+    return formatDuration(ms);
+}
+
 // Agent names come from event data (posted via POST /api/projects/events)
 // and are untrusted — escape before interpolating into innerHTML, both in
 // the visible cell text and in the title attribute.
@@ -1534,8 +1548,8 @@ function renderStatsPanel(data) {
         return `<tr>
             <td>${name}</td>
             <td>${formatStageAgentCell(s.agents)}</td>
-            <td>${formatDuration(s.avgMs)}</td>
-            <td>${formatDuration(s.maxMs)}</td>
+            <td>${formatDurationCell(s.avgMs)}</td>
+            <td>${formatDurationCell(s.maxMs)}</td>
             <td>${Math.round(s.avgTokens).toLocaleString()}</td>
             <td>${Math.round(s.maxTokens).toLocaleString()}</td>
         </tr>`;
@@ -1573,7 +1587,11 @@ function renderStatsPanel(data) {
     const { key: sortKey, dir } = statsSort;
     rows.sort((a, b) => {
         const va = a[sortKey], vb = b[sortKey];
-        const cmp = typeof va === 'string' ? va.localeCompare(vb) : va - vb;
+        // An absent `ms` (untimed stage, per MERID-11) sorts as the lowest
+        // value rather than producing NaN from `undefined - undefined`.
+        const cmp = typeof va === 'string'
+            ? va.localeCompare(vb)
+            : (va ?? -Infinity) - (vb ?? -Infinity);
         return dir === 'asc' ? cmp : -cmp;
     });
 
@@ -1582,7 +1600,7 @@ function renderStatsPanel(data) {
         <td>${r.task}</td>
         <td class="stats-col-project">${r.project}</td>
         <td>${r.stage}${r.ongoing ? ' <span class="stats-ongoing-badge">ongoing</span>' : ''}</td>
-        <td>${formatDuration(r.ms)}</td>
+        <td>${formatDurationCell(r.ms)}</td>
         <td>${r.dispatches}</td>
         <td>${r.outputTokens.toLocaleString()}</td>
         <td>${r.maxContextTokens.toLocaleString()}</td>

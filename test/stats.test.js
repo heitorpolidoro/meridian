@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const {
-    aggregateStats, readEventLines, TOP_N,
+    aggregateStats, readEventLines, TOP_N, UNTIMED_STATUSES,
     listRegisteredProjects, aggregateWorkspaceStats, computeWorkspaceStats
 } = require('../lib/stats');
 
@@ -17,7 +17,7 @@ test('a single task entering backlog then in_progress produces correct stage dur
         { task: 'X', field: 'status', from: 'backlog', to: 'in_progress', at: t1.toISOString() }
     ];
     const { tasks } = aggregateStats(events, t2);
-    assert.deepEqual(tasks['X'].stages.backlog, { totalMs: t1 - t0, visits: 1, ongoing: false });
+    assert.deepEqual(tasks['X'].stages.backlog, { visits: 1 });
     assert.deepEqual(tasks['X'].stages.in_progress, { totalMs: t2 - t1, visits: 1, ongoing: true });
 });
 
@@ -35,9 +35,69 @@ test('two separate visits to the same stage sum into one totalMs with visits:2',
     ];
     const { tasks } = aggregateStats(events, now);
     assert.equal(tasks['X'].stages.backlog.visits, 2);
-    assert.equal(tasks['X'].stages.backlog.totalMs, (t1 - t0) + (t3 - t2));
-    assert.equal(tasks['X'].stages.backlog.ongoing, false);
-    assert.equal(tasks['X'].stages.done.ongoing, true);
+    assert.equal(tasks['X'].stages.backlog.totalMs, undefined);
+    assert.equal(tasks['X'].stages.backlog.ongoing, undefined);
+    assert.equal(tasks['X'].stages.done.totalMs, undefined);
+    assert.equal(tasks['X'].stages.done.ongoing, undefined);
+});
+
+// --- MERID-11: untimed stages (backlog, done, nope) --------------------------
+
+test('UNTIMED_STATUSES is exactly backlog, done, nope', () => {
+    assert.deepEqual([...UNTIMED_STATUSES].sort(), ['backlog', 'done', 'nope']);
+});
+
+for (const untimed of ['backlog', 'done', 'nope']) {
+    test(`a task's per-task stage entry for ${untimed} has no totalMs and is never ongoing, even as the last open interval`, () => {
+        const t0 = new Date('2026-01-01T00:00:00.000Z');
+        const now = new Date('2026-01-01T05:00:00.000Z');
+        const events = [
+            { task: 'X', field: 'status', from: null, to: untimed, at: t0.toISOString() }
+        ];
+        const { tasks } = aggregateStats(events, now);
+        assert.equal(tasks['X'].stages[untimed].totalMs, undefined);
+        assert.equal(tasks['X'].stages[untimed].ongoing, undefined);
+        assert.equal(tasks['X'].stages[untimed].visits, 1);
+    });
+
+    test(`stages.${untimed} has no avgMs/maxMs/topByTime but correct taskCount and token/agent attribution for a dispatch made while a task sat in ${untimed}`, () => {
+        const t0 = new Date('2026-01-01T00:00:00.000Z');
+        const now = new Date('2026-01-01T02:00:00.000Z');
+        const events = [
+            { task: 'X', field: 'status', from: null, to: untimed, at: t0.toISOString() },
+            {
+                task: 'X', type: 'dispatch_tokens', agent: 'meridian:spec-generator',
+                output_tokens: 250, context_tokens: 3000, at: '2026-01-01T00:30:00.000Z'
+            }
+        ];
+        const { stages } = aggregateStats(events, now);
+        assert.ok(stages[untimed], `stages.${untimed} present`);
+        assert.ok(!('avgMs' in stages[untimed]));
+        assert.ok(!('maxMs' in stages[untimed]));
+        assert.ok(!('topByTime' in stages[untimed]));
+        assert.equal(stages[untimed].taskCount, 1);
+        assert.equal(stages[untimed].avgTokens, 250);
+        assert.equal(stages[untimed].maxTokens, 250);
+        assert.deepEqual(stages[untimed].topByTokens, [
+            { task: 'X', tokens: 250, maxContextTokens: 3000 }
+        ]);
+        assert.deepEqual(stages[untimed].agents, [
+            { agent: 'meridian:spec-generator', totalOutputTokens: 250, dispatches: 1 }
+        ]);
+    });
+}
+
+test('a work stage (in_progress) is unaffected: still produces totalMs/ongoing and avgMs/maxMs/topByTime', () => {
+    const t0 = new Date('2026-01-01T00:00:00.000Z');
+    const now = new Date('2026-01-01T02:00:00.000Z');
+    const events = [
+        { task: 'X', field: 'status', from: null, to: 'in_progress', at: t0.toISOString() }
+    ];
+    const { tasks, stages } = aggregateStats(events, now);
+    assert.deepEqual(tasks['X'].stages.in_progress, { totalMs: now - t0, visits: 1, ongoing: true });
+    assert.equal(stages.in_progress.avgMs, now - t0);
+    assert.equal(stages.in_progress.maxMs, now - t0);
+    assert.equal(stages.in_progress.topByTime.length, 1);
 });
 
 test('dispatch_tokens events sum into count/totalOutputTokens, maxContextTokens is max not sum', () => {
@@ -85,23 +145,23 @@ test('dispatch_tokens for a task with no status events still appears in tasks wi
 test('board-wide stage avgMs/maxMs/topByTime computed correctly across multiple tasks; topByTime capped at TOP_N', () => {
     const now = new Date('2026-01-01T10:00:00.000Z');
     const events = [];
-    // 7 tasks all entering backlog at t0 with increasing durations
+    // 7 tasks all entering in_progress (a timed/work stage) at t0 with increasing durations
     const durationsHours = [1, 2, 3, 4, 5, 6, 7];
     durationsHours.forEach((h, i) => {
         const taskId = `T${i}`;
         const t0 = new Date('2026-01-01T00:00:00.000Z');
         const t1 = new Date(t0.getTime() + h * 3600 * 1000);
-        events.push({ task: taskId, field: 'status', from: null, to: 'backlog', at: t0.toISOString() });
-        events.push({ task: taskId, field: 'status', from: 'backlog', to: 'done', at: t1.toISOString() });
+        events.push({ task: taskId, field: 'status', from: null, to: 'in_progress', at: t0.toISOString() });
+        events.push({ task: taskId, field: 'status', from: 'in_progress', to: 'done', at: t1.toISOString() });
     });
     const { stages } = aggregateStats(events, now);
-    assert.equal(stages.backlog.taskCount, 7);
+    assert.equal(stages.in_progress.taskCount, 7);
     const expectedAvgMs = durationsHours.reduce((s, h) => s + h * 3600 * 1000, 0) / 7;
-    assert.equal(stages.backlog.avgMs, expectedAvgMs);
-    assert.equal(stages.backlog.maxMs, 7 * 3600 * 1000);
-    assert.equal(stages.backlog.topByTime.length, TOP_N);
-    assert.equal(stages.backlog.topByTime[0].task, 'T6');
-    assert.equal(stages.backlog.topByTime[0].ms, 7 * 3600 * 1000);
+    assert.equal(stages.in_progress.avgMs, expectedAvgMs);
+    assert.equal(stages.in_progress.maxMs, 7 * 3600 * 1000);
+    assert.equal(stages.in_progress.topByTime.length, TOP_N);
+    assert.equal(stages.in_progress.topByTime[0].task, 'T6');
+    assert.equal(stages.in_progress.topByTime[0].ms, 7 * 3600 * 1000);
 });
 
 test('malformed events (missing task, unparseable at, status with no to, non-numeric output_tokens) are skipped silently without throwing or corrupting surrounding events', () => {
