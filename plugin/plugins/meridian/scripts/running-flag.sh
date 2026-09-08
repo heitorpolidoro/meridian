@@ -31,6 +31,10 @@ BASE="${MERIDIAN_URL:-http://localhost:3333}"
 # Field names differ by harness: Claude Code sends session_id, Antigravity sends
 # conversationId. Same for the project path below. Try Claude's first, then
 # Antigravity's — the marker grep that gates everything is field-agnostic.
+is_antigravity() {
+  printf '%s' "$INPUT" | grep -q '"conversationId"'
+}
+
 session_id() {
   local sid
   sid=$(printf '%s' "$INPUT" | grep -o '"session_id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
@@ -161,6 +165,12 @@ case "$MODE" in
       put_running "$ID" "$CWD" true
       printf '%s\t%s\n' "$ID" "$CWD" >> "$LEDGER"
     else
+      if is_antigravity; then
+        # In Antigravity, invoke_subagent launches the specialist in the background.
+        # The tool dispatch returns immediately while the specialist continues working.
+        # Do not clear running:false here — the orchestrator agent clears it when the specialist returns.
+        exit 0
+      fi
       LEDGER_MTIME=""
       [ -f "$LEDGER" ] && LEDGER_MTIME="$(mtime_of "$LEDGER")"
       put_running "$ID" "$CWD" false
@@ -175,6 +185,20 @@ case "$MODE" in
     # Fast path: nothing recorded, nothing dangling. The common case for every
     # turn of every session that never dispatched a Meridian specialist.
     [ -s "$LEDGER" ] || { rm -f "$LEDGER"; exit 0; }
+
+    if is_antigravity; then
+      # In Antigravity, 'Stop' fires at the end of every conversation turn.
+      # If background tasks are running (fullyIdle is false) or the model simply stopped
+      # generating to await subagent response/user input (model_stop), do not treat as an interruption.
+      if printf '%s' "$INPUT" | grep -q '"fullyIdle"[[:space:]]*:[[:space:]]*false'; then
+        exit 0
+      fi
+      reason=$(printf '%s' "$INPUT" | grep -o '"terminationReason"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
+      if [ "$reason" = "model_stop" ] || [ -z "$reason" ]; then
+        exit 0
+      fi
+    fi
+
     while IFS="$(printf '\t')" read -r ID CWD; do
       [ -n "$ID" ] && [ -n "$CWD" ] || continue
       # Leave a resume note alongside the cleared flag. A shell hook cannot

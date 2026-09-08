@@ -2,7 +2,7 @@
   "meridian-running-flag": {
     "PreToolUse": [
       {
-        "matcher": ".*",
+        "matcher": "invoke_subagent",
         "hooks": [
           {
             "type": "command",
@@ -10,11 +10,21 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "run_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/workspace/meridian/plugin/plugins/meridian/scripts/allow-meridian.sh",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "PostToolUse": [
       {
-        "matcher": ".*",
+        "matcher": "invoke_subagent",
         "hooks": [
           {
             "type": "command",

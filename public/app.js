@@ -1093,7 +1093,6 @@ window.railKeydown = function(event, statusId) {
 
 function renderKanbanBoard(tasks) {
     const board = document.getElementById('kanban-board');
-    const summaryBar = document.getElementById('status-summary-bar');
     const isGlobal = currentProjectViewPath === '__GLOBAL__';
 
     const doneWindowSelect = document.getElementById('done-window');
@@ -1108,8 +1107,7 @@ function renderKanbanBoard(tasks) {
 
     renderRunningTickets(tasks);
 
-    // Rails are decided on the total per status — the same number the summary
-    // card shows — never on the done/nope windowed count.
+    // Rails are decided on the total per status — never on the done/nope windowed count.
     const collapsed = collapsedColumns(
         KANBAN_STATUSES.map(s => ({ id: s.id, count: tasks.filter(t => t.status === s.id).length })),
         expandedRails
@@ -1117,9 +1115,6 @@ function renderKanbanBoard(tasks) {
 
     const boardState = captureBoardState(board);
     board.innerHTML = '';
-    if (summaryBar) summaryBar.innerHTML = '';
-    
-    let summaryHtml = '';
 
     KANBAN_STATUSES.forEach(statusCol => {
         let colTasks = tasks.filter(t => t.status === statusCol.id);
@@ -1131,23 +1126,6 @@ function renderKanbanBoard(tasks) {
             colTasks = sortColumnTasks(colTasks);
         }
         if (isGlobal) colTasks = interleavedByProject(colTasks);
-        const firstTask = colTasks[0];
-        const firstTaskIdDisplay = (firstTask && firstTask.id) ? `[${firstTask.id}] ` : '';
-        const firstTaskFullTitle = firstTask ? `${firstTaskIdDisplay}${firstTask.title}` : '';
-        
-        if (colTasks.length > 0) {
-            summaryHtml += `
-                <div class="summary-card status-${statusCol.id}" onclick="scrollToKanbanColumn('${statusCol.id}')" title="Click to jump to ${statusCol.label}">
-                    <div class="summary-card-top">
-                        <span class="summary-status-label">${statusCol.label}</span>
-                        <span class="summary-status-count active">${colTasks.length}</span>
-                    </div>
-                    <div class="summary-first-task" title="${firstTaskFullTitle.replace(/"/g, '&quot;')}">
-                        <span class="summary-task-icon">📌</span> <span class="task-id-code">${firstTaskIdDisplay}</span>${firstTask ? firstTask.title : ''}
-                    </div>
-                </div>
-            `;
-        }
 
         if (collapsed.has(statusCol.id)) {
             board.insertAdjacentHTML('beforeend', `
@@ -1196,10 +1174,6 @@ function renderKanbanBoard(tasks) {
 
         board.insertAdjacentHTML('beforeend', colHtml);
     });
-
-    if (summaryBar) {
-        summaryBar.innerHTML = summaryHtml;
-    }
 
     restoreBoardState(board, boardState);
 }
