@@ -196,3 +196,30 @@
 
 - `formatStageAgentCell`'s visible label/suffix text is interpolated straight into `innerHTML` with no HTML-escaping (only the `title` attribute is escaped via `escapeHtml`). An agent name containing `<`/`>`/`&` would be parsed as markup rather than shown literally. This mirrors an existing, pre-existing convention elsewhere in `renderStatsPanel` (stage name, task id, project name are all interpolated the same unescaped way), so it's not a regression introduced by this change, and dispatch_tokens' `agent` field already goes through server-side validation as a string with no character restrictions. Worth closing across all of these fields together in a follow-up rather than one-off in this task.
 - No unit test exercises `escapeHtml`/`formatAgentName`/`formatStageAgentCell` directly (only end-to-end via the served app.js content checks and manual/Playwright verification here). A small pure-function test for these would be cheap insurance given this codebase already unit-tests other pure helpers in `lib/stats.js`.
+
+## [MERID-10] Spec diet, findings-only re-review, short path — 2026-09-08
+
+- In spec-reviewer.md's new round-2+ paragraph, consider making explicit that
+  the "consistency pass" compares the changed sections *against the rest of
+  the spec* (not just within themselves) — the current phrasing is
+  unambiguous in ordinary reading but would tighten cleanly with one extra
+  clause.
+- Consider one clause in the same new section noting explicitly that
+  `NEEDS_SPLIT` remains available in round 2+ (per the untouched, unscoped
+  "When to Return NEEDS_SPLIT Instead of NEEDS_REVISION" section) — purely
+  to preempt a reader wondering whether the "verdict shape is unchanged
+  either way" sentence (which names only `APPROVED`/`NEEDS_REVISION`) was
+  meant to exclude it.
+
+## [MERID-10] Spec diet, findings-only re-review, short path (code review) — 2026-09-08
+
+- `spec-generator.md`'s "## Format" section's fenced template still shows
+  the full `## Scope`/`## Approach`/`## Expected Results` skeleton
+  unconditionally; a one-line pointer to "## When a Spec Can Be One
+  Paragraph" right above the fenced block could save a future reader from
+  wondering whether the short path is still an option after reading the
+  template. Non-blocking — the spec didn't ask for this and the short-path
+  section already exists and is discoverable.
+
+## [MERID-10] Spec diet, findings-only re-review, short path (QA) — 2026-09-08
+- The `npm test` full-suite flake (port 3659 startup timeout in `test/api-tasks.test.js`) is pre-existing and unrelated to this change, but worth tracking separately since it could cause spurious CI failures on unrelated PRs.

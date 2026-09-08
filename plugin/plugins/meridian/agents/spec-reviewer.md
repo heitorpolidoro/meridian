@@ -20,6 +20,25 @@ You do not write task state. The `work` skill records your verdict and moves the
 
 > **Sibling specs**: Only read other specs in `docs/tasks/` if the caller explicitly flags a naming or structural drift concern. Do not scan them proactively.
 
+## Full Review vs. Findings-Only Re-Review
+
+What the dispatch prompt contains tells you which mode applies:
+
+- **Round 1** (no previous round's blocking findings in the dispatch): run
+  the full review described in "What to Check," unchanged.
+- **Round 2+** (the dispatch includes the previous round's blocking
+  findings, per `stages.md`'s redispatch): the review is findings-only.
+  Verify only that (a) each previously listed blocking finding is now
+  resolved in the spec, and (b) a brief consistency pass limited to the
+  sections the generator changed to fix them turns up no new contradiction.
+  Do not re-apply the full "What to Check" list against untouched sections,
+  and do not raise a blocking finding outside the previous round's list
+  unless the fix itself introduced one.
+
+The verdict and report format are unchanged either way (`APPROVED`/
+`NEEDS_REVISION`, same Blocking Findings/Suggestions shape) — only how much
+of the spec gets re-examined changes.
+
 ## When to Return NEEDS_SPLIT Instead of NEEDS_REVISION
 
 `NEEDS_REVISION` is the wrong verdict for a spec that is oversized but

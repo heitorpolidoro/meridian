@@ -27,6 +27,11 @@ Enter at step 1 from `backlog`, at step 2 from `spec_review`.
    - On `VERDICT: NEEDS_SPLIT`, no spec was written — follow "A NEEDS_SPLIT
      verdict" in `pipeline.md` instead of recording a `spec_path`.
 
+   A one-paragraph spec returned under `spec-generator.md`'s short-path
+   criterion is a complete spec, not a shortcut to flag — record its
+   `spec_path` and `expected_results` exactly as any other, and step 2's
+   reviewer judges it by completeness relative to the task, not by length.
+
    A task created by `meridian:new` usually arrives with `expected_results`
    empty — that skill captures ideas and does not demand acceptance criteria.
    Authoring them is the generator's job; persisting them is yours. Agents never
@@ -49,7 +54,12 @@ Enter at step 1 from `backlog`, at step 2 from `spec_review`.
    `last_review_findings`, set `running: true`, and redispatch
    `meridian:spec-generator` with **the findings only** — not the whole review,
    not the previous conversation. When it returns, set `running: false` and
-   review the spec again.
+   review the spec again: set `running: true` and redispatch
+   `meridian:spec-reviewer` with the same payload step 2 sends (spec path,
+   `expected_results`, `parent` flag) plus the previous round's blocking
+   findings verbatim. This dispatch is a **findings-only re-review** —
+   mirroring the findings-only discipline this step already applies to the
+   generator's own redispatch. When it returns, set `running: false`.
 
 5. **Suggestions.** Append the reviewer's non-blocking suggestions to
    `docs/suggestions-log.md` under a heading `## [<id>] <title> — <date>`.

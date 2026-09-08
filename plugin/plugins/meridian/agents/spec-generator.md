@@ -65,6 +65,26 @@ report.
 - **One deliverable**: PR-sized unit. When it plainly is not, return `NEEDS_SPLIT` (see below) instead of writing a spec for several deliverables at once.
 - **Concrete, checkable Expected Results**: Every result must be mechanically verifiable (HTTP status, DB constraint, test outcome, UI interaction).
 - **Explicit scope boundaries**: State what the task does NOT include.
+- **Size discipline**: Prose exceeding roughly one page per subsystem touched is a smell — that belongs in `NEEDS_SPLIT` territory (see "When the Task Needs Splitting Instead of a Spec"), not in a longer spec.
+
+## What a Spec Contains
+
+A spec describes only three things: BEHAVIOR (what must be true once the task
+is done), FILES TOUCHED (the changed paths, one line each naming what changes
+in that file), and TEST CRITERIA (what proves the behavior). It never
+contains ready-made code, diffs, or full function bodies — writing those is
+the developer's job. The `expected_results` are the contract; the spec is the
+map.
+
+## When a Spec Can Be One Paragraph
+
+When a task arrives with (a) concrete, mechanically verifiable
+`expected_results` and (b) a diagnosed root cause or equivalently complete
+justification already on the task, write a one-paragraph spec instead:
+behavior, files touched and test criteria condensed into a few sentences, in
+place of the full `## Scope`/`## Approach`/`## Expected Results` template —
+still saved to the same `spec_path`. This does not relax the duty to author
+and return `expected_results` in the report.
 
 ## Format
 
@@ -77,7 +97,7 @@ Write to `docs/tasks/<id>-spec.md` (or `docs/plans/implementation-plan.md` for t
 What this task covers, and explicitly what it does not cover.
 
 ## Approach
-Concrete implementation approach — modules, schemas, functions, endpoints, or UI components.
+Behavior, files touched, and test criteria — see "What a Spec Contains" above. Not modules, schemas, functions, endpoints, or code.
 
 ## Expected Results
 - [ ] Checkable outcome 1
