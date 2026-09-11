@@ -83,10 +83,16 @@ Todo o conhecimento da divisão fica neste módulo. `server.js` continua tratand
   caminho do board e de `GET /api/status`. `backfillTasks` continua aplicado.
 - **`getTask(projPath, id)`** — a linha correspondente mesclada com
   `tasks/<id>.json`. Retorna `null` quando o id não existe.
-- **`saveTasks(projPath, tasksData)`** — para cada task com `expected_results`
-  não-vazio, grava `tasks/<id>.json` via tmp+rename; apaga o arquivo quando o
-  campo ficou vazio; depois serializa as linhas **sem** o campo e grava
-  `tasks.jsonl` via tmp+rename.
+- **`saveTasks(projPath, tasksData)`** — grava `tasks/<id>.json` via tmp+rename
+  e depois as linhas **sem** o campo, também via tmp+rename. A regra por task
+  distingue ausência de vazio, e isso é a invariante mais importante do módulo:
+  - `expected_results === undefined` → **não toca** no arquivo de detalhe;
+  - array não-vazio → grava o arquivo;
+  - array vazio → apaga o arquivo.
+
+  Sem essa distinção, um round-trip `getTasks` → `saveTasks` (que é o que toda
+  rota de escrita faz) leria tasks sem o campo e apagaria os detalhes de todas
+  elas no primeiro save.
 - **`deleteTask(projPath, id)`** — remove a linha e o `tasks/<id>.json`.
 
 **Ordem de escrita: detalhe primeiro, linha depois.** Um crash no intervalo
