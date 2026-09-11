@@ -188,7 +188,7 @@ function renderProjects(data) {
         projectsContainer.innerHTML = `<div class="empty-state" style="grid-column: 1 / -1; font-size: 1.2rem;">No projects found in the current directory.</div>`;
     } else {
         projectsContainer.innerHTML = currentProjectsData.map(proj => {
-            const needsFix = proj.missingAgentsMd || proj.missingMeridianRules || proj.outdatedMeridianRules || proj.missingClaudeAgents || proj.outdatedClaudeAgents || proj.missingAgyAgents || proj.outdatedAgyAgents || proj.missingStack || proj.missingDescription;
+            const needsFix = proj.missingAgentsMd || proj.missingMeridianRules || proj.outdatedMeridianRules || proj.missingStack || proj.missingDescription;
             if (needsFix) hasAnyIssues = true;
 
             // Convert legacy stack string to array if needed
@@ -207,14 +207,10 @@ function renderProjects(data) {
                         ${proj.missingAgentsMd ? '<span class="missing-agents-badge" title="Missing AGENTS.md in project root">⚠️ Missing AGENTS.md</span>' : ''}
                         ${proj.missingMeridianRules && !proj.missingAgentsMd ? '<span class="outdated-agents-badge" title="Missing Meridian Instructions block">⚠️ Missing Meridian Rules</span>' : ''}
                         ${proj.outdatedMeridianRules && !proj.missingAgentsMd ? '<span class="outdated-agents-badge" title="Meridian Instructions block is outdated">⚠️ Outdated Meridian Rules</span>' : ''}
-                        ${proj.missingClaudeAgents ? '<span class="outdated-agents-badge" title="Missing Claude Agents (.claude/agents/)">⚠️ Missing Claude Agents</span>' : ''}
-                        ${proj.outdatedClaudeAgents && !proj.missingClaudeAgents ? '<span class="outdated-agents-badge" title="Outdated Claude Agents (.claude/agents/)">⚠️ Outdated Claude Agents</span>' : ''}
-                        ${proj.missingAgyAgents ? '<span class="outdated-agents-badge" title="Missing Agy Agents (.agents/agents/)">⚠️ Missing Agy Agents</span>' : ''}
-                        ${proj.outdatedAgyAgents && !proj.missingAgyAgents ? '<span class="outdated-agents-badge" title="Outdated Agy Agents (.agents/agents/)">⚠️ Outdated Agy Agents</span>' : ''}
                         ${proj.missingStack ? '<span class="missing-stack-badge" title="Missing Stack">⚠️ Missing Stack</span>' : ''}
                         ${proj.missingDescription ? '<span class="missing-desc-badge" title="Missing Description">⚠️ Missing Description</span>' : ''}
                         ${needsFix 
-                            ? `<button class="fix-ai-btn" onclick="openFixModal('${proj.path.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}', '${proj.name.replace(/'/g, "\\'")}', this, ${proj.missingAgentsMd}, ${proj.missingStack}, ${proj.missingDescription}, ${proj.missingMeridianRules}, ${proj.outdatedMeridianRules}, ${proj.missingClaudeAgents}, ${proj.outdatedClaudeAgents}, ${proj.missingAgyAgents}, ${proj.outdatedAgyAgents}); event.stopPropagation();">Fix 🪄</button>` 
+                            ? `<button class="fix-ai-btn" onclick="openFixModal('${proj.path.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}', '${proj.name.replace(/'/g, "\\'")}', this, ${proj.missingAgentsMd}, ${proj.missingStack}, ${proj.missingDescription}, ${proj.missingMeridianRules}, ${proj.outdatedMeridianRules}); event.stopPropagation();">Fix 🪄</button>`
                             : ''}
                     </div>
                     <p class="project-purpose">${proj.description}</p>
@@ -495,7 +491,7 @@ const fixCheckboxesContainer = document.getElementById('fix-checkboxes-container
 const fixSubmitBtn = document.getElementById('fix-submit-btn');
 const fixProgressContainer = document.getElementById('fix-status-area');
 
-window.openFixModal = function(path, projName, btnEl, missingAgents, missingStack, missingDesc, missingMeridianRules, outdatedMeridianRules, missingClaudeAgents, outdatedClaudeAgents, missingAgyAgents, outdatedAgyAgents) {
+window.openFixModal = function(path, projName, btnEl, missingAgents, missingStack, missingDesc, missingMeridianRules, outdatedMeridianRules) {
     if (document.getElementById('fix-proj-path')) document.getElementById('fix-proj-path').value = path;
     const titleEl = document.getElementById('fix-modal-title') || document.getElementById('fix-title');
     if (titleEl) titleEl.textContent = 'Fixing ' + projName;
@@ -520,26 +516,6 @@ window.openFixModal = function(path, projName, btnEl, missingAgents, missingStac
         fixCheckboxesContainer.innerHTML += `
             <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
                 <input type="checkbox" name="fixes" value="meridian-rules" checked>
-                ${labelText}
-            </label>
-        `;
-    }
-
-    if ((missingClaudeAgents || outdatedClaudeAgents) && fixCheckboxesContainer) {
-        const labelText = outdatedClaudeAgents ? "Update Claude Meridian Agents (.claude/agents/)" : "Inject Claude Meridian Agents (.claude/agents/)";
-        fixCheckboxesContainer.innerHTML += `
-            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                <input type="checkbox" name="fixes" value="claude-agents" checked>
-                ${labelText}
-            </label>
-        `;
-    }
-
-    if ((missingAgyAgents || outdatedAgyAgents) && fixCheckboxesContainer) {
-        const labelText = outdatedAgyAgents ? "Update Agy Meridian Agents (.agents/agents/)" : "Inject Agy Meridian Agents (.agents/agents/)";
-        fixCheckboxesContainer.innerHTML += `
-            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                <input type="checkbox" name="fixes" value="agy-agents" checked>
                 ${labelText}
             </label>
         `;
@@ -1281,7 +1257,7 @@ window.fixAllQueue = [];
 const fixAllBtn = document.getElementById('fix-all-btn');
 if (fixAllBtn) {
     fixAllBtn.addEventListener('click', () => {
-        const projectsWithIssues = currentProjectsData.filter(p => p.missingAgentsMd || p.missingMeridianRules || p.outdatedMeridianRules || p.missingClaudeAgents || p.outdatedClaudeAgents || p.missingAgyAgents || p.outdatedAgyAgents || p.missingStack || p.missingDescription);
+        const projectsWithIssues = currentProjectsData.filter(p => p.missingAgentsMd || p.missingMeridianRules || p.outdatedMeridianRules || p.missingStack || p.missingDescription);
         if (projectsWithIssues.length === 0) return;
         
         window.isFixAllMode = true;
@@ -1308,18 +1284,6 @@ if (fixAllBtn) {
                 const labelText = proj.outdatedMeridianRules ? "Update Meridian Rules" : "Inject Meridian Rules";
                 html += `<label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.85rem;">
                     <input type="checkbox" name="fixes_${idx}" value="meridian-rules" checked> ${labelText}
-                </label>`;
-            }
-            if (proj.missingClaudeAgents || proj.outdatedClaudeAgents) {
-                const labelText = proj.outdatedClaudeAgents ? "Update Claude Agents (.claude/agents/)" : "Inject Claude Agents (.claude/agents/)";
-                html += `<label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.85rem;">
-                    <input type="checkbox" name="fixes_${idx}" value="claude-agents" checked> ${labelText}
-                </label>`;
-            }
-            if (proj.missingAgyAgents || proj.outdatedAgyAgents) {
-                const labelText = proj.outdatedAgyAgents ? "Update Agy Agents (.agents/agents/)" : "Inject Agy Agents (.agents/agents/)";
-                html += `<label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.85rem;">
-                    <input type="checkbox" name="fixes_${idx}" value="agy-agents" checked> ${labelText}
                 </label>`;
             }
             if (proj.missingStack) {

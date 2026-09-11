@@ -28,67 +28,12 @@ function getBoilerplate() {
     return fs.readFileSync(path.join(__dirname, 'prompts', 'boilerplate.txt'), 'utf8');
 }
 
-function getAgentTemplates() {
-    const agentsDir = path.join(__dirname, 'agents');
-    const agentNames = ['pm', 'developer', 'qa', 'code-reviewer', 'spec-generator', 'spec-reviewer'];
-    const templates = {};
-    for (const name of agentNames) {
-        const filePath = path.join(agentsDir, `${name}.md`);
-        if (fs.existsSync(filePath)) {
-            templates[name] = fs.readFileSync(filePath, 'utf8');
-        }
-    }
-    return templates;
-}
-
-function generateClaudeAgentContent(agentName, bodyContent) {
-    const descriptions = {
-        'pm': 'Orchestrates the Meridian task pipeline across statuses in .meridian/tasks.jsonl',
-        'developer': 'Implements Meridian tasks using strict TDD workflow',
-        'code-reviewer': 'Independently reviews code changes for architecture, patterns, security, and unit test quality before QA',
-        'qa': 'Independently verifies completed Meridian tasks against expected results',
-        'spec-generator': 'Writes and revises implementation specs for Meridian tasks',
-        'spec-reviewer': 'Independently reviews task implementation specs for completeness and clarity'
-    };
-    const fullName = `meridian-${agentName}`;
-    const desc = descriptions[agentName] || `Meridian ${agentName} agent`;
-    const frontmatter = `---
-name: ${fullName}
-description: ${desc}
-tools: Read, Write, Edit, Bash, Grep, Glob
----
-
-`;
-    return frontmatter + bodyContent.trim() + '\n';
-}
-
-function generateAgyAgentContent(agentName, bodyContent) {
-    const descriptions = {
-        'pm': 'Orchestrates the Meridian task pipeline across statuses in .meridian/tasks.jsonl',
-        'developer': 'Implements Meridian tasks using strict TDD workflow',
-        'code-reviewer': 'Independently reviews code changes for architecture, patterns, security, and unit test quality before QA',
-        'qa': 'Independently verifies completed Meridian tasks against expected results',
-        'spec-generator': 'Writes and revises implementation specs for Meridian tasks',
-        'spec-reviewer': 'Independently reviews task implementation specs for completeness and clarity'
-    };
-    const fullName = `meridian-${agentName}`;
-    const desc = descriptions[agentName] || `Meridian ${agentName} agent`;
-    const frontmatter = `---
-name: ${fullName}
-description: '${desc}'
-tools:
-    - view_file
-    - replace_file_content
-    - write_to_file
-    - run_command
-    - grep_search
-    - list_dir
-inheritMcp: true
----
-
-`;
-    return frontmatter + bodyContent.trim() + '\n';
-}
+// Os agentes do pipeline (pm, developer, qa, spec-generator, spec-reviewer,
+// code-reviewer) são entregues pelo plugin Meridian, e só por ele. O servidor
+// já gerou cópias deles em cada projeto a partir de templates locais; essa
+// entrega foi aposentada porque duas fontes para o mesmo agente divergem — a
+// do plugin dizia que o pm nunca despacha subagentes enquanto a gerada dizia
+// que ele orquestra o pipeline. Quem orquestra é a skill `meridian:work`.
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
@@ -357,52 +302,6 @@ function getStatusData(options = {}) {
                 
                 const stackArray = Array.isArray(info.stack) ? info.stack : (info.stack ? info.stack.split(',').map(s => s.trim()).filter(Boolean) : []);
                 
-                // Agent Validations for Claude and Agy
-                const agentNames = ['pm', 'developer', 'qa', 'code-reviewer', 'spec-generator', 'spec-reviewer'];
-                const templates = getAgentTemplates();
-                
-                // Claude Agents check (.claude/agents/meridian-*.md)
-                let missingClaudeAgents = false;
-                let outdatedClaudeAgents = false;
-                const claudeDir = path.join(projPath, '.claude', 'agents');
-                for (const name of agentNames) {
-                    const filePath = path.join(claudeDir, `meridian-${name}.md`);
-                    if (!fs.existsSync(filePath)) {
-                        missingClaudeAgents = true;
-                    } else {
-                        try {
-                            const content = fs.readFileSync(filePath, 'utf8');
-                            const expected = generateClaudeAgentContent(name, templates[name] || '');
-                            if (content.trim() !== expected.trim()) {
-                                outdatedClaudeAgents = true;
-                            }
-                        } catch (e) {
-                            outdatedClaudeAgents = true;
-                        }
-                    }
-                }
-
-                // Agy Agents check (.agents/agents/meridian-*.md)
-                let missingAgyAgents = false;
-                let outdatedAgyAgents = false;
-                const agyDir = path.join(projPath, '.agents', 'agents');
-                for (const name of agentNames) {
-                    const filePath = path.join(agyDir, `meridian-${name}.md`);
-                    if (!fs.existsSync(filePath)) {
-                        missingAgyAgents = true;
-                    } else {
-                        try {
-                            const content = fs.readFileSync(filePath, 'utf8');
-                            const expected = generateAgyAgentContent(name, templates[name] || '');
-                            if (content.trim() !== expected.trim()) {
-                                outdatedAgyAgents = true;
-                            }
-                        } catch (e) {
-                            outdatedAgyAgents = true;
-                        }
-                    }
-                }
-
                 const relPath = path.relative(WORKSPACE_DIR, projPath) || path.basename(projPath);
 
                 data.projects.push({
@@ -419,10 +318,6 @@ function getStatusData(options = {}) {
                     missingAgentsMd: !hasAgentsMd,
                     missingMeridianRules: missingMeridianRules,
                     outdatedMeridianRules: outdatedMeridianRules,
-                    missingClaudeAgents: missingClaudeAgents,
-                    outdatedClaudeAgents: outdatedClaudeAgents,
-                    missingAgyAgents: missingAgyAgents,
-                    outdatedAgyAgents: outdatedAgyAgents,
                     missingStack: stackArray.length === 0,
                     missingDescription: !info.description || info.description.trim() === ''
                 });
@@ -920,44 +815,6 @@ app.post('/api/fix-with-ai', (req, res) => {
                     } catch (e) {
                         return reject(new Error('Failed to update Meridian Rules: ' + e.message));
                     }
-                } else if (fixName === 'claude-agents') {
-                    sendProgress('Updating Claude Meridian Agents (.claude/agents/)...', percent);
-                    try {
-                        const claudeDir = path.join(projectPath, '.claude', 'agents');
-                        if (!fs.existsSync(claudeDir)) {
-                            fs.mkdirSync(claudeDir, { recursive: true });
-                        }
-                        const templates = getAgentTemplates();
-                        const agentNames = ['pm', 'developer', 'qa', 'code-reviewer', 'spec-generator', 'spec-reviewer'];
-                        for (const name of agentNames) {
-                            const filePath = path.join(claudeDir, `meridian-${name}.md`);
-                            const content = generateClaudeAgentContent(name, templates[name] || '');
-                            fs.writeFileSync(filePath, content, 'utf8');
-                        }
-                        sendProgress('Claude Meridian Agents injected successfully! 🤖\n', percent, 'log');
-                        return resolve();
-                    } catch (e) {
-                        return reject(new Error('Failed to update Claude Agents: ' + e.message));
-                    }
-                } else if (fixName === 'agy-agents') {
-                    sendProgress('Updating Agy Meridian Agents (.agents/agents/)...', percent);
-                    try {
-                        const agyDir = path.join(projectPath, '.agents', 'agents');
-                        if (!fs.existsSync(agyDir)) {
-                            fs.mkdirSync(agyDir, { recursive: true });
-                        }
-                        const templates = getAgentTemplates();
-                        const agentNames = ['pm', 'developer', 'qa', 'code-reviewer', 'spec-generator', 'spec-reviewer'];
-                        for (const name of agentNames) {
-                            const filePath = path.join(agyDir, `meridian-${name}.md`);
-                            const content = generateAgyAgentContent(name, templates[name] || '');
-                            fs.writeFileSync(filePath, content, 'utf8');
-                        }
-                        sendProgress('Agy Meridian Agents injected successfully! 🪄\n', percent, 'log');
-                        return resolve();
-                    } catch (e) {
-                        return reject(new Error('Failed to update Agy Agents: ' + e.message));
-                    }
                 } else if (fixName === 'agents') {
                     sendProgress('Generating AGENTS.md...', percent);
                     promptTemplatePath = path.join(__dirname, 'prompts', 'agents.txt');
@@ -1126,12 +983,6 @@ function setupWatchers() {
                 
                 const agentsMdPath = path.join(proj.path, 'AGENTS.md');
                 watchPath(agentsMdPath);
-
-                const claudeAgentsDir = path.join(proj.path, '.claude', 'agents');
-                watchPath(claudeAgentsDir, true);
-
-                const agyAgentsDir = path.join(proj.path, '.agents', 'agents');
-                watchPath(agyAgentsDir, true);
             });
         }
     } catch (err) {
