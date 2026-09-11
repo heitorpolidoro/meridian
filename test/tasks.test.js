@@ -95,6 +95,12 @@ test('getTasks: a legacy tasks.json without tasks.jsonl demands the migration', 
     });
 });
 
+test('getTasks: an empty tasks.jsonl throws rather than reading as no tasks', () => {
+    const dir = tmpProject(undefined);
+    fs.writeFileSync(path.join(dir, '.meridian', 'tasks.jsonl'), '');
+    assert.throws(() => getTasks(dir), MalformedTasksError);
+});
+
 test('saveTasks: writes one compact line per task with a trailing newline', () => {
     const dir = tmpProject(undefined);
     saveTasks(dir, { tasks: [{ id: 'A-1', title: 'um' }, { id: 'A-2', title: 'dois' }] });
