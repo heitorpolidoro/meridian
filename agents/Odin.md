@@ -23,31 +23,21 @@ Upon starting, read the `.meridian/projects.json` file at the root of the worksp
 
 ## Task Protocol
 
-Each managed project MUST have a `tasks.jsonl` file at its root. The standard schema is:
+Each managed project MUST have a `.meridian/tasks.jsonl` file: one compact JSON
+object per line, with the `expected_results` of each task living beside it in
+`.meridian/tasks/<id>.json`.
 
-```json
-{
-  "tasks": [
-    {
-      "id": "TASK-1",
-      "title": "Task title",
-      "description": "Short description of the task",
-      "status": "in_progress", 
-      "priority": "high", 
-      "assignee": "subagent:react-expert",
-      "blockedReason": null,
-      "completedAt": null
-    }
-  ]
-}
-```
+The task schema — fields, the nine allowed statuses, the priority values, the
+timestamp rules — is defined in `plugin/plugins/meridian/references/schema.md`.
+That file is the single source of truth: read it before writing task state, and
+if any prose here or elsewhere disagrees with it, it wins.
 
 ### Task Management Rules
-- Valid `status` values: `"todo"`, `"in_progress"`, `"blocked"`, `"done"`.
-- Valid `priority` values: `"critical"`, `"high"`, `"medium"`, `"low"`.
-- When delegating to a subagent, set `assignee` to `"subagent:<name>"`.
-- If blocked, provide the reason in `blockedReason`.
-- Upon completing a task, set `status` to `"done"` and fill in `completedAt` with the date.
+- Never hand-edit the files while the Meridian server is up: it owns the
+  timestamps, so every write goes through its REST API.
+- While a task is being actively worked, its `running` flag is `true`; clear it
+  when the work is finished or handed off.
+- Never delete a task — move it to `nope` instead.
 
 ## Subagent Protocol
 

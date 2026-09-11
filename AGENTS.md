@@ -4,7 +4,7 @@ Meridian is a **workspace status dashboard** for a developer (referred to intern
 
 It has two audiences:
 1. **The human user**, who gets a live, auto-refreshing web dashboard listing every tracked project, its declared tech stack, description, and task backlog.
-2. **AI agents**, specifically an orchestrator persona named **Odin** ("Chief of Staff"), who reads the same underlying data files (`.meridian/projects.json`, per-project `.meridian/project-info.json`, and per-project `tasks.json`) to coordinate work, delegate to specialist subagents, and produce executive briefings across all managed projects.
+2. **AI agents**, specifically an orchestrator persona named **Odin** ("Chief of Staff"), who reads the same underlying data files (`.meridian/projects.json`, per-project `.meridian/project-info.json`, and per-project `.meridian/tasks.jsonl`) to coordinate work, delegate to specialist subagents, and produce executive briefings across all managed projects.
 
 Meridian itself does not implement project work — it is meta-tooling: a registry, dashboard, and light automation layer sitting above a workspace of unrelated projects.
 
@@ -15,7 +15,7 @@ Meridian is a small single-process Node.js application with three cooperating pa
 - **Backend (`server.js`)** — An Express app that:
   - Aggregates status data by reading a global project registry plus each tracked project's local metadata and task files (no database; the filesystem is the data layer).
   - Serves a REST API for managing the project registry (add/edit projects, list candidate directories).
-  - Pushes live updates to the browser over **Server-Sent Events** (`/api/stream`), triggered by `fs.watch` watchers on `projects.json` and every tracked project's `tasks.json`.
+  - Pushes live updates to the browser over **Server-Sent Events** (`/api/stream`), triggered by `fs.watch` watchers on `projects.json` and every tracked project's `.meridian/` directory.
   - Implements a "Fix with AI" feature: on request, it spawns an external AI CLI (`claude` or `agy`) as a child process inside the target project's directory, feeding it a canned prompt (from `prompts/`) to auto-generate a missing `AGENTS.md`, infer the tech `stack`, or write a `description`. Progress/log output is streamed back to the browser via the same SSE channel.
   - Performs a one-time startup migration from an older centralized `projects.json` schema (which embedded `name`/`stack`/`purpose` per entry) to the current **decentralized** schema, where the global file only stores project `path`s and each project owns its own metadata in `.meridian/project-info.json`.
 
@@ -28,7 +28,8 @@ Meridian is a small single-process Node.js application with three cooperating pa
 - **Data layer** — Entirely file-based, no database:
   - `<RUNNING_DIR>/.meridian/projects.json` — global registry, one entry per tracked project (`{ path }`).
   - `<project>/.meridian/project-info.json` — per-project metadata: `name`, `description`, `stack` (array of technologies).
-  - `<project>/tasks.json` — per-project task backlog (see Domain Concepts).
+  - `<project>/.meridian/tasks.jsonl` — per-project task backlog, one compact JSON object per line (see Domain Concepts).
+  - `<project>/.meridian/tasks/<id>.json` — the `expected_results` of one task, kept out of the line so the board payload stays small.
   - `<project>/AGENTS.md` — per-project knowledge base for AI agents; its mere presence/absence is tracked and surfaced as a dashboard warning.
 
 - **Agent layer (`agents/`, `prompts/`)** — Not executable code, but consumed by AI coding tools:
@@ -73,7 +74,8 @@ meridian/
 Data owned by *tracked* projects (not part of this repo, but read/written by it at runtime):
 ```
 <tracked-project>/.meridian/project-info.json   # name, description, stack[]
-<tracked-project>/tasks.json                     # task backlog (see Domain Concepts)
+<tracked-project>/.meridian/tasks.jsonl          # task backlog, one JSON object per line
+<tracked-project>/.meridian/tasks/<id>.json      # per-task expected_results
 <tracked-project>/AGENTS.md                       # presence is tracked as a health signal
 ```
 
@@ -82,12 +84,12 @@ Data owned by *tracked* projects (not part of this repo, but read/written by it 
 - **Project (registry entry)** — A workspace subdirectory that has been registered with Meridian. The global registry only stores its filesystem `path`; all descriptive metadata lives inside the project itself.
 - **Decentralized architecture** — The current data model where each project owns its own `.meridian/project-info.json`, as opposed to the legacy model where the global `projects.json` embedded every project's `name`, `stack`, and `purpose` directly. `server.js` auto-migrates old-format entries on startup.
 - **`project-info.json`** — Per-project metadata file: `name`, `description`, `stack` (array of technology strings).
-- **`tasks.json`** — Per-project task backlog file with a `lastUpdated` timestamp and a `tasks` array. Each task has `id`, `title`, `description`, `status` (`todo` | `in_progress` | `blocked` | `done`), `priority` (`critical` | `high` | `medium` | `low`), `assignee` (convention: `subagent:<name>`), `blockedReason`, and `completedAt`. This schema is defined and enforced by the Odin agent protocol, not by application code.
+- **`tasks.jsonl`** — Per-project task backlog: one compact JSON object per line, no wrapping array and no `tasks` key. Each task's `expected_results` lives beside it in `.meridian/tasks/<id>.json`, so the board can be served without them; `GET /api/projects/tasks/:taskId` serves a task with the field hydrated. The canonical field list, the nine statuses and the timestamp rules are defined in `plugin/plugins/meridian/references/schema.md`, which is the single source of truth.
 - **Health signals / "missing" badges** — The dashboard flags a project as missing `AGENTS.md`, missing `stack`, or missing `description`, computed by `getStatusData()` in `server.js` on every aggregation pass.
 - **Fix with AI** — A dashboard action that shells out to an AI coding CLI (`claude` or `agy`) inside a specific tracked project's directory, using one of the `prompts/*.txt` templates, to auto-remediate a missing-metadata health signal. Output streams back to the UI live over SSE.
 - **Odin / Chief of Staff** — An AI orchestrator persona (defined in `agents/Odin.md`, synced elsewhere via `meridian_sync`) that consumes Meridian's data files to track tasks, delegate to specialist subagents, identify blocked work, and produce executive "CTO briefings" summarizing the state of all managed projects. Odin does not modify production code directly — it only delegates and records.
 - **CTO** — The human operator of the workspace; the audience for Odin's briefings and the user of the Meridian dashboard.
-- **Subagent** — A specialist AI agent (e.g. a "react-expert") that Odin delegates individual tasks to; referenced in `tasks.json` via the `assignee` field as `subagent:<name>`.
+- **Subagent** — A specialist AI agent (e.g. a "react-expert") that Odin delegates individual tasks to; dispatched by the Meridian skills against a single task at a time.
 - **`RUNNING_DIR`** — The directory Meridian treats as the workspace root when locating the global `.meridian/projects.json`; defaults to the current working directory but is overridable via the `MERIDIAN_RUNNING_DIR` environment variable.
 
 

@@ -43,7 +43,7 @@ function getAgentTemplates() {
 
 function generateClaudeAgentContent(agentName, bodyContent) {
     const descriptions = {
-        'pm': 'Orchestrates the Meridian task pipeline across statuses in .meridian/tasks.json',
+        'pm': 'Orchestrates the Meridian task pipeline across statuses in .meridian/tasks.jsonl',
         'developer': 'Implements Meridian tasks using strict TDD workflow',
         'code-reviewer': 'Independently reviews code changes for architecture, patterns, security, and unit test quality before QA',
         'qa': 'Independently verifies completed Meridian tasks against expected results',
@@ -64,7 +64,7 @@ tools: Read, Write, Edit, Bash, Grep, Glob
 
 function generateAgyAgentContent(agentName, bodyContent) {
     const descriptions = {
-        'pm': 'Orchestrates the Meridian task pipeline across statuses in .meridian/tasks.json',
+        'pm': 'Orchestrates the Meridian task pipeline across statuses in .meridian/tasks.jsonl',
         'developer': 'Implements Meridian tasks using strict TDD workflow',
         'code-reviewer': 'Independently reviews code changes for architecture, patterns, security, and unit test quality before QA',
         'qa': 'Independently verifies completed Meridian tasks against expected results',
