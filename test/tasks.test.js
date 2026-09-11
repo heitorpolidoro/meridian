@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { deriveKey, nextTaskId, getTasks, saveTasks, MalformedTasksError } = require('../lib/tasks');
+const { deriveKey, nextTaskId, getTasks, saveTasks, MalformedTasksError, LegacyTasksFileError } = require('../lib/tasks');
 
 test('deriveKey: single word takes the first five letters', () => {
     assert.equal(deriveKey('Meridian'), 'MERID');
@@ -33,26 +33,35 @@ test('nextTaskId: ignores ids from other keys and malformed ids', () => {
     assert.equal(nextTaskId(tasks, 'MERID'), 'MERID-3');
 });
 
-function tmpProject(contents) {
+function tmpProject(lines) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'meridian-test-'));
     fs.mkdirSync(path.join(dir, '.meridian'), { recursive: true });
-    if (contents !== undefined) {
+    if (lines !== undefined) {
         fs.writeFileSync(
-            path.join(dir, '.meridian', 'tasks.json'),
-            JSON.stringify(contents, null, 2)
+            path.join(dir, '.meridian', 'tasks.jsonl'),
+            lines.map(t => JSON.stringify(t)).join('\n') + '\n'
         );
     }
     return dir;
 }
 
-test('getTasks: reads the wrapped object shape', () => {
-    const dir = tmpProject({ lastUpdated: '2026-01-01T00:00:00.000Z', tasks: [{ id: 'A-1' }] });
-    assert.deepEqual(getTasks(dir).tasks, [{ id: 'A-1', priority: 'medium' }]);
+test('getTasks: reads one task per line', () => {
+    const dir = tmpProject([{ id: 'A-1' }, { id: 'A-2' }]);
+    assert.deepEqual(getTasks(dir).tasks.map(t => t.id), ['A-1', 'A-2']);
 });
 
-test('getTasks: reads the bare array shape', () => {
+test('getTasks: applies the read-path defaults', () => {
     const dir = tmpProject([{ id: 'A-1' }]);
-    assert.deepEqual(getTasks(dir).tasks, [{ id: 'A-1', priority: 'medium' }]);
+    assert.equal(getTasks(dir).tasks[0].priority, 'medium');
+});
+
+test('getTasks: blank lines are skipped, not parsed', () => {
+    const dir = tmpProject(undefined);
+    fs.writeFileSync(
+        path.join(dir, '.meridian', 'tasks.jsonl'),
+        '{"id":"A-1"}\n\n{"id":"A-2"}\n'
+    );
+    assert.deepEqual(getTasks(dir).tasks.map(t => t.id), ['A-1', 'A-2']);
 });
 
 test('getTasks: missing file yields an empty list', () => {
@@ -60,54 +69,44 @@ test('getTasks: missing file yields an empty list', () => {
     assert.deepEqual(getTasks(dir).tasks, []);
 });
 
-test('getTasks: malformed JSON throws instead of reading as an empty list', () => {
+test('getTasks: an unparseable line names its line number and aborts the read', () => {
     const dir = tmpProject(undefined);
-    fs.writeFileSync(path.join(dir, '.meridian', 'tasks.json'), '{not json');
-    assert.throws(() => getTasks(dir), MalformedTasksError);
+    fs.writeFileSync(
+        path.join(dir, '.meridian', 'tasks.jsonl'),
+        '{"id":"A-1"}\n{not json\n{"id":"A-3"}\n'
+    );
+    assert.throws(() => getTasks(dir), (err) => {
+        assert.ok(err instanceof MalformedTasksError);
+        assert.match(err.message, /line 2/);
+        return true;
+    });
 });
 
-test('getTasks: a truncated file throws rather than losing the backlog', () => {
+test('getTasks: a legacy tasks.json without tasks.jsonl demands the migration', () => {
     const dir = tmpProject(undefined);
-    const file = path.join(dir, '.meridian', 'tasks.json');
-    const whole = JSON.stringify([{ id: 'A-1' }, { id: 'A-2' }], null, 2);
-    fs.writeFileSync(file, whole.slice(0, whole.length - 20));
-    assert.throws(() => getTasks(dir), MalformedTasksError);
-    // The corrupt bytes must still be on disk, untouched, for hand repair.
-    assert.equal(fs.readFileSync(file, 'utf8'), whole.slice(0, whole.length - 20));
+    fs.writeFileSync(
+        path.join(dir, '.meridian', 'tasks.json'),
+        JSON.stringify([{ id: 'A-1' }])
+    );
+    assert.throws(() => getTasks(dir), (err) => {
+        assert.ok(err instanceof LegacyTasksFileError);
+        assert.match(err.message, /migrate-tasks-jsonl/);
+        return true;
+    });
 });
 
-test('getTasks: valid JSON of the wrong shape throws', () => {
-    const dir = tmpProject(42);
-    assert.throws(() => getTasks(dir), MalformedTasksError);
-});
-
-test('getTasks: an empty file throws rather than reading as no tasks', () => {
+test('saveTasks: writes one compact line per task with a trailing newline', () => {
     const dir = tmpProject(undefined);
-    fs.writeFileSync(path.join(dir, '.meridian', 'tasks.json'), '');
-    assert.throws(() => getTasks(dir), MalformedTasksError);
+    saveTasks(dir, { tasks: [{ id: 'A-1', title: 'um' }, { id: 'A-2', title: 'dois' }] });
+    const raw = fs.readFileSync(path.join(dir, '.meridian', 'tasks.jsonl'), 'utf8');
+    assert.equal(raw, '{"id":"A-1","title":"um"}\n{"id":"A-2","title":"dois"}\n');
 });
 
-test('saveTasks: leaves no temp file behind and lands the file atomically', () => {
-    const dir = tmpProject([{ id: 'A-1' }]);
-    saveTasks(dir, { tasks: [{ id: 'A-1' }, { id: 'A-2' }] });
-    const entries = fs.readdirSync(path.join(dir, '.meridian'));
-    assert.deepEqual(entries.filter(f => f.endsWith('.tmp')), []);
-    assert.deepEqual(entries, ['tasks.json']);
-    assert.equal(getTasks(dir).tasks.length, 2);
-});
-
-test('saveTasks: creates .meridian when absent and round-trips', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'meridian-test-'));
-    saveTasks(dir, { tasks: [{ id: 'A-1', title: 'x' }] });
-    assert.deepEqual(getTasks(dir).tasks, [{ id: 'A-1', title: 'x', priority: 'medium' }]);
-});
-
-test('saveTasks: writes a bare array with no lastUpdated wrapper', () => {
-    const dir = tmpProject({ lastUpdated: 'old', tasks: [{ id: 'A-1' }] });
+test('saveTasks: leaves no temp file behind', () => {
+    const dir = tmpProject(undefined);
     saveTasks(dir, { tasks: [{ id: 'A-1' }] });
-    const raw = JSON.parse(fs.readFileSync(path.join(dir, '.meridian', 'tasks.json'), 'utf8'));
-    assert.ok(Array.isArray(raw), 'file should be a bare array');
-    assert.deepEqual(raw, [{ id: 'A-1' }]);
+    const entries = fs.readdirSync(path.join(dir, '.meridian'));
+    assert.deepEqual(entries, ['tasks.jsonl']);
 });
 
 test('getTasks: backfills completed_at from updated_at for done tasks', () => {
