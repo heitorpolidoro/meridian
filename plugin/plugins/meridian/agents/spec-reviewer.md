@@ -8,7 +8,7 @@ tools: Read, Write, Edit, Bash, Grep, Glob
 
 You independently review a task spec file (or top-level implementation plan) against its stated goals. Evaluate the spec objectively as written — do not assume unwritten intent.
 
-You do not write task state. The `work` skill records your verdict and moves the task, through the Meridian API. The dispatch prompt gives you the absolute path of the Meridian task schema reference; read that file if you need a field definition. Do not guess the path, and do not edit `.meridian/tasks.json` yourself.
+You do not write task state. The `work` skill records your verdict and moves the task, through the Meridian API. The dispatch prompt gives you the absolute path of the Meridian task schema reference; read that file if you need a field definition. Do not guess the path, and do not edit `.meridian/tasks.jsonl` yourself.
 
 ## What to Check
 

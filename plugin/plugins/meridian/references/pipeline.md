@@ -26,15 +26,15 @@ the beginning.
 |---|---|---|---|
 | `backlog` | `meridian:spec-generator` | title is non-empty | ask the operator for one |
 | `spec_review` | `meridian:spec-reviewer` | `spec_path` is set **and the file exists** | the spec was never written — go back to `backlog` |
-| `ready_todo` | `meridian:developer` | spec file exists; `expected_results` non-empty; every `blockedBy` id is `done` | missing spec or results → back to `backlog`. Unmet dependency → move to `blocked` |
+| `ready_todo` | `meridian:developer` | spec file exists; `expected_results` non-empty (fetch it from `GET /api/projects/tasks/:taskId` — the board fetch doesn't carry it); every `blockedBy` id is `done` | missing spec or results → back to `backlog`. Unmet dependency → move to `blocked` |
 | `in_progress` | `meridian:developer` (re-dispatch) | same as `ready_todo` | same as `ready_todo`, plus the resumption briefing |
 | `code_review` | `meridian:code-reviewer` | there is something to review (`git diff --stat` against the task's base is non-empty) | the developer never ran — go back to `ready_todo` |
-| `qa_review` | `meridian:qa` | `expected_results` non-empty | QA receives only these; go back to `backlog` |
+| `qa_review` | `meridian:qa` | `expected_results` non-empty (same hydrated fetch as `ready_todo`) | QA receives only these; go back to `backlog` |
 | `blocked` | Not runnable. See **Unblocking**. | the `blockedBy` ids are genuinely still open | all `done` → unblock it instead of reporting |
 | `done`, `nope` | Nothing to do. | — | refuse |
 
 **Never trust the status alone.** A status can be set by hand — through the
-API, or by editing `tasks.json` — so a task can arrive at any stage without the
+API, or by editing `tasks.jsonl` — so a task can arrive at any stage without the
 previous stage ever having run. Each row's check is what the stage before it was
 supposed to leave behind. Verify, do not assume.
 
@@ -57,7 +57,7 @@ holds that rule. No other status gets one.
 
 ## A board read expires on use
 
-The board's only store is `tasks.json`, behind the API. What a fetch put into
+The board's only store is `tasks.jsonl`, behind the API. What a fetch put into
 your context is **history, not state**: another session — another harness,
 even — may have moved tasks the moment after you read them, and a copy in
 context never hears about it. Context is the one cache this system cannot
@@ -255,10 +255,11 @@ one thing that differs from an ordinary specialist failure — **do not dispatch
 - Set `running: false`. **Do not increment** `spec_iterations`,
   `code_review_iterations` or `qa_iterations` — a split replaces the round
   rather than spending one.
-- Dispatch `meridian:pm` with: the task id, its title, its `expected_results`,
-  its `spec_path` if it has one, and the specialist's proposed decomposition
-  verbatim. Pass the resolved `schema.md` path, exactly as any other dispatch
-  in "Dispatching a specialist" above requires.
+- Dispatch `meridian:pm` with: the task id, its title, its `expected_results`
+  (fetched from `GET /api/projects/tasks/:taskId` — the board fetch doesn't
+  carry them), its `spec_path` if it has one, and the specialist's proposed
+  decomposition verbatim. Pass the resolved `schema.md` path, exactly as any
+  other dispatch in "Dispatching a specialist" above requires.
 - `meridian:pm` creates the children and reconfigures this task through the
   API itself — see its split procedure in `agents/pm.md`. This file only says
   what happens around that dispatch, not what `pm` does inside it.

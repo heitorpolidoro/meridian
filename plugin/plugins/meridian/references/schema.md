@@ -6,22 +6,28 @@ prose disagrees with it, this file wins.
 
 ## Where tasks live
 
-Tasks for a project live in `<project>/.meridian/tasks.json`.
+Tasks for a project live in `<project>/.meridian/tasks.jsonl`: one compact JSON
+object per line, no indentation, no wrapping array or `tasks` key.
 
-That file is a **bare JSON array** of task objects:
-
-```json
-[
-  { "id": "MERID-1", "title": "..." },
-  { "id": "MERID-2", "title": "..." }
-]
+```
+{"id":"MERID-1","title":"..."}
+{"id":"MERID-2","title":"..."}
 ```
 
-It is **not** an object with a `tasks` key. `{"tasks": [...]}` is a legacy shape
-the server still tolerates on read, but everything written today is a plain
-array. Never write the wrapped form.
+A blank line is skipped on read. Any line that fails to parse aborts the whole
+read with an error naming the line number — never a partial list, which would
+otherwise get written back over the unreadable line and lose it for good. A
+0-byte file is an error too, not an empty board: `saveTasks` never produces
+0 bytes (an empty list still serializes as a single trailing newline), so
+0 bytes means truncation.
 
-`.meridian/` is gitignored, so a clobbered `tasks.json` is unrecoverable. Never
+`expected_results` does not travel on the line. It lives in
+`<project>/.meridian/tasks/<id>.json`, holding exactly
+`{"expected_results": ["...", "..."]}`. That file exists only when the array
+is non-empty — a task with no results has no detail file, and reads back as
+`expected_results: []`.
+
+`.meridian/` is gitignored, so a clobbered `tasks.jsonl` is unrecoverable. Never
 truncate the file, and never write it from an empty in-memory list.
 
 ## Task fields
@@ -33,7 +39,7 @@ truncate the file, and never write it from an empty in-memory list.
 | `status` | string, one of the nine below | agent |
 | `priority` | string, one of the four below | agent (defaults to `medium`) |
 | `justification` | string — why the task is blocked, or why it exists | agent |
-| `expected_results` | array of strings — concrete, mechanically verifiable outcomes | agent |
+| `expected_results` | array of strings — concrete, mechanically verifiable outcomes | agent — detail file, not present in `GET /api/status` |
 | `blockedBy` | array of task ids that must reach `done` first | agent |
 | `parent` | string, id of another task on the same board, optional | agent |
 | `spec_path` | string, e.g. `docs/tasks/MERID-1-spec.md` | agent |
@@ -193,11 +199,26 @@ only the fields you are changing; omitted fields are left alone. Update accepts
 absent from a freshly created task until the first update sets them; treat an
 absent counter as `0` and an absent `last_review_findings` as `[]`.
 
-**Read** — `GET $BASE/api/status?project=<absolute project path>`
+**Read (board)** — `GET $BASE/api/status?project=<absolute project path>`
 
-Reading `tasks.json` directly is fine when you only need to look.
+Returns the board's tasks without `expected_results` — it was 89% of the
+payload and no consumer of this route read it. Use it to see statuses,
+priorities, dependencies and everything else on the line.
 
-**Hand-editing `tasks.json` is the fallback of last resort**, permitted only
-when the server cannot be started at all, and only after telling the operator
-the server is down. A hand-edit must reproduce the timestamp rules above
-exactly.
+**Read (one task, hydrated)** — `GET $BASE/api/projects/tasks/:taskId?project=<absolute project path>`
+
+Returns `{ "task": { ... } }` with `expected_results` hydrated from its detail
+file. This is the route a developer or QA dispatch uses to get a task's
+expected results — `/api/status` no longer carries them. `400` when `project`
+is missing, `404` when the id doesn't exist on that board.
+
+Reading `tasks.jsonl` directly is fine when you only need to look, and so is
+reading `tasks/<id>.json` for a task's `expected_results`.
+
+**Hand-editing `tasks.jsonl` (and, when it's the results you're after,
+`tasks/<id>.json`) is the fallback of last resort**, permitted only when the
+server cannot be started at all, and only after telling the operator the
+server is down. A hand-edit must reproduce the timestamp rules above exactly,
+and if it touches both files, write the detail file first and the line
+second — the line is what makes a task exist, and a detail file that arrived
+early is merely inert, while one left behind stale would not be.

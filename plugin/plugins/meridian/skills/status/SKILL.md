@@ -51,8 +51,8 @@ that inherits nothing runs with `BASE` empty and requests a relative URL.
 If the operator declines registration, stop — there is no board to report.
 
 If the server cannot be started, the preamble's read-only fallback applies:
-read `./.meridian/tasks.json` directly. It is a bare JSON array in file order,
-so you must apply the ordering of section 2 yourself in that case (specifically:
+read `./.meridian/tasks.jsonl` directly. It is one JSON object per line, in file
+order, so you must apply the ordering of section 2 yourself in that case (specifically:
 sort by `priority` then oldest `created_at`, or for `done` sort by `completed_at` descending,
 and take **AT MOST 5 tasks** per status), and say that you are reporting from the file
 because the server is down.
@@ -79,7 +79,7 @@ before `medium` before `low`, an absent priority read as `medium` — then by
 oldest `created_at`. **`done` is ranked differently**, by `completed_at`
 descending, so you get the five most recently finished, which is the useful
 five. Take the table from this, in this order. Do not re-sort it and do not
-rebuild it from `tasks.json`: the ordering and the `medium` default are the
+rebuild it from `tasks.jsonl`: the ordering and the `medium` default are the
 server's, and reimplementing them here is how the two drift apart. (Reading the
 file is the section 1 fallback for a server that will not start, and only then.)
 
@@ -97,7 +97,7 @@ file is the section 1 fallback for a server that will not start, and only then.)
 The response shape is `{ "projects": [ ... ], "errors": [ ... ] }`. With
 `project=` set, `projects` holds at most one entry. If `projects` is empty, this
 directory is not in the workspace registry — say so rather than reporting an
-empty board. If `errors` is non-empty, show it: a malformed `tasks.json` or a
+empty board. If `errors` is non-empty, show it: a malformed `tasks.jsonl` or a
 missing project path is reported there, and a silent empty board would otherwise
 look like a clean one.
 

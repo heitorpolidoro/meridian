@@ -62,7 +62,7 @@ what comes back: the ordering is the server's, and reimplementing it here is how
 the two drift apart. The rule is still spelled out below because you must be
 able to *explain* the pick, not because you apply it.
 
-If `errors` is non-empty, show it before selecting. A malformed `tasks.json`
+If `errors` is non-empty, show it before selecting. A malformed `tasks.jsonl`
 means the board you are choosing from is not the whole board.
 
 ## 3. Select right-to-left along the pipeline

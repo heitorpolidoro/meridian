@@ -45,7 +45,7 @@ that inherits nothing runs with `BASE` empty and requests a relative URL.
 
 If the preamble stops — the operator declined registration, or the server
 could not be reached — stop too. There is no fallback path for creating a task:
-a create is a write, and hand-editing `tasks.json` cannot assign an id.
+a create is a write, and hand-editing `tasks.jsonl` cannot assign an id.
 
 ## 2. Get the title
 

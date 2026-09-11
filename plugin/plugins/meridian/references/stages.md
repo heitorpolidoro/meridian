@@ -17,10 +17,12 @@ descriptive, not a script: you enter wherever the task already is.
 
 Enter at step 1 from `backlog`, at step 2 from `spec_review`.
 
-1. **Generate the spec.** Set `running: true`. Dispatch `meridian:spec-generator`
-   with the task title, its `expected_results`, the `spec_path` of every task in
-   `blockedBy`, a pointer to `AGENTS.md`, and whether this task carries a
-   `parent` (so it knows `NEEDS_SPLIT` isn't open to it). It writes
+1. **Generate the spec.** Set `running: true`. Fetch the task's `expected_results`
+   from `GET /api/projects/tasks/:taskId` — `GET /api/status` no longer carries
+   them — and dispatch `meridian:spec-generator` with the task title, those
+   `expected_results`, the `spec_path` of every task in `blockedBy`, a pointer
+   to `AGENTS.md`, and whether this task carries a `parent` (so it knows
+   `NEEDS_SPLIT` isn't open to it). It writes
    `docs/tasks/<id>-spec.md` and returns an `EXPECTED_RESULTS:` block. When it
    returns, set `running: false` and record **both** `spec_path` and the
    returned `expected_results`, in one `PUT`.
@@ -38,7 +40,8 @@ Enter at step 1 from `backlog`, at step 2 from `spec_review`.
    write task state.
 
 2. **Review the spec.** Move the task to `spec_review`. Set `running: true`.
-   Dispatch `meridian:spec-reviewer` with **only** the spec path, the task's
+   Fetch the task's `expected_results` from `GET /api/projects/tasks/:taskId`
+   and dispatch `meridian:spec-reviewer` with **only** the spec path, those
    `expected_results`, and whether this task carries a `parent` — nothing
    about how the spec was produced. When it returns, set `running: false`.
    - On `VERDICT: NEEDS_SPLIT`, follow "A NEEDS_SPLIT verdict" in
@@ -85,9 +88,11 @@ Enter at step 1 from `backlog`, at step 2 from `spec_review`.
 Enter at step 1 from `ready_todo` or `in_progress`, at step 2 from `code_review`,
 at step 3 from `qa_review`.
 
-1. **Implement.** Move the task to `in_progress`. Set `running: true`. Dispatch
-   `meridian:developer` with the `spec_path`, the task's `expected_results`,
-   and whether this task carries a `parent`. It works TDD and stages its
+1. **Implement.** Move the task to `in_progress`. Set `running: true`. Fetch the
+   task's `expected_results` from `GET /api/projects/tasks/:taskId` — again,
+   `GET /api/status` doesn't have them — and dispatch `meridian:developer` with
+   the `spec_path`, those `expected_results`, and whether this task carries a
+   `parent`. It works TDD and stages its
    changes with `git add` without committing. When it returns, set
    `running: false`.
    - On `NEEDS_SPLIT`, do not continue to step 2 (code review) — follow "A
@@ -108,8 +113,9 @@ at step 3 from `qa_review`.
      `running: true`, and redispatch `meridian:developer` with the findings only.
      When it returns, set `running: false` and repeat step 2.
 
-3. **QA.** Move the task to `qa_review`. Set `running: true`. Dispatch
-   `meridian:qa` with **only** the task's `expected_results` plus pointers to the
+3. **QA.** Move the task to `qa_review`. Set `running: true`. Fetch the task's
+   `expected_results` from `GET /api/projects/tasks/:taskId` and dispatch
+   `meridian:qa` with **only** those `expected_results` plus pointers to the
    running system. Never pass it the developer's reasoning, the developer's
    report, or the code reviewer's verdict — its independence is the point. When
    it returns, set `running: false`.

@@ -85,7 +85,7 @@ rank and to run the unblocking sweep later.
 is not proof of an empty board, and this skill is the one that acts on that
 belief:
 
-- If `errors` is non-empty, **stop and show it**. A malformed `tasks.json` does
+- If `errors` is non-empty, **stop and show it**. A malformed `tasks.jsonl` does
   not fail this request — the server records the parse error in `errors` and
   hands back `tasks: []`. Treating that as "no tasks" would send
   `meridian:pm` to decompose a plan onto a board whose backlog is merely
@@ -100,7 +100,7 @@ Only once both checks pass does an empty `tasks` array mean an empty board.
   than guess across stages. If you want the across-stage choice made for you,
   that is `meridian:next`.
 - **The id is not on the board.** Say so and stop. Do not create it.
-- **`tasks.json` is empty** — no tasks at all. There is nothing to work.
+- **`tasks.jsonl` is empty** — no tasks at all. There is nothing to work.
   Dispatch `meridian:pm` to decompose `docs/plans/implementation-plan.md`, or a
   feature description the operator gives you, into tasks first. `pm` creates the
   tasks and stops; it never runs them. Come back and work one once it has.
@@ -110,7 +110,7 @@ Only once both checks pass does an empty `tasks` array mean an empty board.
 The task's `status` is the entry point. Nothing restarts from the beginning.
 
 **But never trust the status alone.** A status can be set by hand — through the
-API, or by editing `tasks.json` — so a task can sit at a stage whose
+API, or by editing `tasks.jsonl` — so a task can sit at a stage whose
 prerequisites were never produced. `references/pipeline.md`'s entry table gives
 the check each stage must run first and where to send the task when it fails.
 Run that check before dispatching anything. A failed check reroutes the task to
@@ -207,8 +207,8 @@ curl -sS -X PUT "$BASE/api/projects/tasks/<task id>" \
 
 `projectPath` goes in the body; the id goes in the URL. Send only the fields
 you are changing. Never send `id`, `created_at`, `updated_at`, `moved_at` or
-`completed_at` — the server owns all five. Never edit `.meridian/tasks.json` by
-hand.
+`completed_at` — the server owns all five. Never edit `.meridian/tasks.jsonl` or
+`.meridian/tasks/<id>.json` by hand.
 
 `running` is part of this, not an afterthought: `true` before every dispatch,
 `false` when that specialist returns whatever its verdict, and `false` on

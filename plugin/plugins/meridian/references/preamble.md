@@ -133,9 +133,10 @@ curl -sS -f "$BASE/api/status" >/dev/null && echo up || echo "still down"
 ```
 
 **If it still cannot start**, say so and fall back to reading
-`./.meridian/tasks.json` directly for anything read-only. Never *write* by hand
-without telling the operator the server is down — the server owns the
-timestamps, and a hand-written task loses them.
+`./.meridian/tasks.jsonl` directly for anything read-only, and
+`./.meridian/tasks/<id>.json` when it's a task's `expected_results` you need.
+Never *write* by hand without telling the operator the server is down — the
+server owns the timestamps, and a hand-written task loses them.
 
 ## 3. Register the project
 
@@ -178,7 +179,7 @@ is registered complete rather than as an empty entry:
 instead of inferring it**, and reuse its `stack` and `description` when it has
 them. The server derives the task `key` from `name` and rewrites
 `project-info.json`, so a different name yields a different key — and the ids
-already in `./.meridian/tasks.json` would no longer match the key new tasks are
+already in `./.meridian/tasks.jsonl` would no longer match the key new tasks are
 given.
 
 Then register it:

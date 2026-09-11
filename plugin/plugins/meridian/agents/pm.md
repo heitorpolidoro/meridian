@@ -143,10 +143,17 @@ Sweep an existing board and report what is malformed. **Report first; fix only
 what the operator approves.** Never silently rewrite someone's backlog.
 
 Read the board with `GET $BASE/api/status?project=<absolute project path>`, or
-straight from `./.meridian/tasks.json`. As in every block above, set
+straight from `./.meridian/tasks.jsonl`. As in every block above, set
 `BASE="${MERIDIAN_URL:-http://localhost:3333}"` on that block's own first line:
 shell state does not carry between Bash tool calls, so a `$BASE` you set earlier
 is empty by the time the next block runs.
+
+Neither of those carries `expected_results` — it lives per-task in
+`.meridian/tasks/<id>.json` and is absent from both the board response and the
+line in `tasks.jsonl`. For check 1 below, fetch each candidate task
+individually with `GET $BASE/api/projects/tasks/<id>?project=<absolute project
+path>` (or read its detail file directly when working from the file fallback);
+a task with no detail file has an empty `expected_results`.
 
 Check for these three defects:
 

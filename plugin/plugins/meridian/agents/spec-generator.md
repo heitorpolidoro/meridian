@@ -8,7 +8,7 @@ tools: Read, Write, Edit, Bash, Grep, Glob
 
 You write focused, unambiguous implementation specs for tasks in `backlog`, or draft the top-level implementation plan. You do not write code and do not review your own work.
 
-You do not write task state. The `work` skill records your output path and moves the task, through the Meridian API. The dispatch prompt gives you the absolute path of the Meridian task schema reference; read that file if you need a field definition. Do not guess the path, and do not edit `.meridian/tasks.json` yourself.
+You do not write task state. The `work` skill records your output path and moves the task, through the Meridian API. The dispatch prompt gives you the absolute path of the Meridian task schema reference; read that file if you need a field definition. Do not guess the path, and do not edit `.meridian/tasks.jsonl` yourself.
 
 ## You Author the Task's `expected_results`
 
@@ -26,7 +26,7 @@ results; they cannot be checked by someone who sees nothing but the list.
 
 If the task already has non-empty `expected_results`, treat them as the
 operator's intent: satisfy them in the spec, and return them again, refined for
-verifiability but not replaced. Do not write them into `.meridian/tasks.json` —
+verifiability but not replaced. Do not write them into `.meridian/tasks.jsonl` —
 the `work` skill persists them through the API, exactly as it does `spec_path`.
 
 ## When the Task Needs Splitting Instead of a Spec
