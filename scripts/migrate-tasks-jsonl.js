@@ -47,16 +47,51 @@ function sameTask(before, after) {
         === JSON.stringify(Object.keys(a).sort().map(k => [k, b[k]]));
 }
 
+// getTasks prefers tasks.jsonl the instant it exists (lib/tasks.js), so any
+// path that leaves one on disk without finishing the migration makes the
+// board start serving it — a dry-run "just to check" or an aborted
+// verification would migrate the project for real, silently. Every non-final
+// return past saveTasks must undo exactly what this run wrote: the jsonl
+// line file and the detail files for the ids it touched. tasks.json and its
+// .bak are never part of this cleanup — they stay untouched throughout.
+function cleanupPartialOutput(meridianDir, tasks) {
+    fs.rmSync(path.join(meridianDir, 'tasks.jsonl'), { force: true });
+    const tasksDir = path.join(meridianDir, 'tasks');
+    for (const task of tasks) {
+        if (task && task.id !== undefined) {
+            fs.rmSync(path.join(tasksDir, `${task.id}.json`), { force: true });
+        }
+    }
+    // Only remove the directory if it is now empty: a project pre-migration
+    // never has one (detail files are a new-format artifact), but blindly
+    // rmdir -rf'ing it would risk taking detail files that aren't ours on a
+    // rerun after a manual partial repair.
+    try {
+        fs.rmdirSync(tasksDir);
+    } catch (err) { /* not empty, or never existed */ }
+}
+
 function migrateProject(projPath, options) {
     const dryRun = Boolean(options && options.dryRun);
     const id = path.basename(projPath);
     const meridianDir = path.join(projPath, '.meridian');
     const legacyPath = path.join(meridianDir, 'tasks.json');
+    const jsonlPath = path.join(meridianDir, 'tasks.jsonl');
 
-    if (fs.existsSync(path.join(meridianDir, 'tasks.jsonl'))) {
+    const jsonlExists = fs.existsSync(jsonlPath);
+    const legacyExists = fs.existsSync(legacyPath);
+    if (jsonlExists && legacyExists) {
+        // getTasks is already serving tasks.jsonl here, but tasks.json was
+        // never retired — the signature of an interrupted prior run. Treating
+        // this as "already migrated" would report ok without re-verifying
+        // anything and the operator would never learn tasks.json survived.
+        // Neither file is ours to pick between blindly: this needs a human.
+        return { id, ok: false, reason: 'partially migrated: both tasks.jsonl and tasks.json exist — needs manual inspection' };
+    }
+    if (jsonlExists) {
         return { id, ok: true, reason: 'already on tasks.jsonl' };
     }
-    if (!fs.existsSync(legacyPath)) {
+    if (!legacyExists) {
         return { id, ok: true, reason: 'no tasks.json to migrate' };
     }
 
@@ -77,28 +112,39 @@ function migrateProject(projPath, options) {
     try {
         saveTasks(projPath, { tasks: original.map(t => ({ ...t })) });
     } catch (err) {
-        return { id, ok: false, reason: `write failed: ${err.message}` };
+        cleanupPartialOutput(meridianDir, original);
+        return { id, ok: false, reason: `write failed, partial output removed: ${err.message}` };
     }
 
     let roundTrip;
     try {
         roundTrip = readMigrated(meridianDir);
     } catch (err) {
-        return { id, ok: false, reason: `verification failed to re-read: ${err.message}` };
+        cleanupPartialOutput(meridianDir, original);
+        return { id, ok: false, reason: `verification failed to re-read, partial output removed: ${err.message}` };
     }
     if (roundTrip.length !== original.length) {
-        return { id, ok: false, reason: `verification mismatch: ${original.length} tasks in, ${roundTrip.length} out` };
+        cleanupPartialOutput(meridianDir, original);
+        return { id, ok: false, reason: `verification mismatch: ${original.length} tasks in, ${roundTrip.length} out — partial output removed` };
     }
     for (let i = 0; i < original.length; i++) {
         if (!sameTask(original[i], roundTrip[i])) {
-            return { id, ok: false, reason: `verification mismatch on ${original[i].id}` };
+            cleanupPartialOutput(meridianDir, original);
+            return { id, ok: false, reason: `verification mismatch on ${original[i].id} — partial output removed` };
         }
     }
 
-    if (!dryRun) {
-        fs.renameSync(legacyPath, path.join(meridianDir, 'tasks.json.migrated'));
+    if (dryRun) {
+        // Verification passed, but a dry-run promises to leave the project
+        // exactly as it found it — undo the same output a real run would
+        // have kept, so tasks.jsonl never exists without the migration
+        // actually having committed to it.
+        cleanupPartialOutput(meridianDir, original);
+        return { id, ok: true, reason: `dry-run verified ${original.length} tasks, no trace left` };
     }
-    return { id, ok: true, reason: dryRun ? 'dry-run verified' : `migrated ${original.length} tasks` };
+
+    fs.renameSync(legacyPath, path.join(meridianDir, 'tasks.json.migrated'));
+    return { id, ok: true, reason: `migrated ${original.length} tasks` };
 }
 
 function main() {
