@@ -201,8 +201,8 @@ absent counter as `0` and an absent `last_review_findings` as `[]`.
 
 **Read (board)** — `GET $BASE/api/status?project=<absolute project path>`
 
-Returns the board's tasks without `expected_results` — it was 89% of the
-payload and no consumer of this route read it. Use it to see statuses,
+Returns the board's tasks without `expected_results` — the field dominated
+the board payload and no consumer of this route read it. Use it to see statuses,
 priorities, dependencies and everything else on the line.
 
 **Read (one task, hydrated)** — `GET $BASE/api/projects/tasks/:taskId?project=<absolute project path>`
