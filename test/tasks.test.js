@@ -299,3 +299,60 @@ test('stampTaskUpdate: done to done does not restamp completed_at', () => {
     const t = stampTaskUpdate({ id: 'A-1', status: 'done', completed_at: '2026-08-01T00:00:00.000Z' }, 'done');
     assert.equal(t.completed_at, '2026-08-01T00:00:00.000Z');
 });
+
+const { detailPathFor } = require('../lib/tasks');
+
+test('getTasks: a line that is not an object names its line number', () => {
+    // backfillTasks writes defaults onto every parsed value. A line holding
+    // `42` or `null` is valid JSON, so it survives the parse and only blows up
+    // later as a raw TypeError — the caller deserves the named error.
+    for (const bad of ['null', '42', '"a string"', '[1,2]', 'true']) {
+        const dir = tmpProject(undefined);
+        fs.writeFileSync(
+            path.join(dir, '.meridian', 'tasks.jsonl'),
+            '{"id":"A-1"}\n' + bad + '\n'
+        );
+        assert.throws(() => getTasks(dir), (err) => {
+            assert.ok(err instanceof MalformedTasksError, bad + ' threw ' + err.name);
+            assert.match(err.message, /line 2/);
+            return true;
+        });
+    }
+});
+
+test('getTask: a detail file that is not an object names the path', () => {
+    const dir = tmpProject([{ id: 'A-1' }]);
+    const detail = detailPathFor(dir, 'A-1');
+    fs.mkdirSync(path.dirname(detail), { recursive: true });
+    fs.writeFileSync(detail, 'null');
+    assert.throws(() => getTask(dir, 'A-1'), (err) => {
+        assert.ok(err instanceof MalformedTasksError, 'threw ' + err.name);
+        assert.match(err.message, /A-1\.json/);
+        return true;
+    });
+});
+
+test('detailPathFor: refuses an id that would escape the tasks directory', () => {
+    const dir = tmpProject(undefined);
+    for (const bad of ['../escaped', '../../../etc/passwd', 'a/b', '.', '..', '', 'weird id']) {
+        assert.throws(() => detailPathFor(dir, bad), /invalid task id/i, 'accepted ' + JSON.stringify(bad));
+    }
+    for (const bad of [undefined, null, 42, {}]) {
+        assert.throws(() => detailPathFor(dir, bad), /invalid task id/i, 'accepted ' + JSON.stringify(bad));
+    }
+});
+
+test('detailPathFor: accepts the ids Meridian actually mints', () => {
+    const dir = tmpProject(undefined);
+    assert.equal(detailPathFor(dir, 'MERID-12'), path.join(dir, '.meridian', 'tasks', 'MERID-12.json'));
+    assert.equal(detailPathFor(dir, 'a_b.c-1'), path.join(dir, '.meridian', 'tasks', 'a_b.c-1.json'));
+});
+
+test('saveTasks: a task whose id escapes the tasks directory is refused, not written', () => {
+    const dir = tmpProject(undefined);
+    assert.throws(
+        () => saveTasks(dir, { tasks: [{ id: '../escaped', expected_results: ['r1'] }] }),
+        /invalid task id/i
+    );
+    assert.equal(fs.existsSync(path.join(dir, '.meridian', 'escaped.json')), false);
+});
