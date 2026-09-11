@@ -877,3 +877,123 @@ test('DELETE removes both the line and the detail file', async () => {
         assert.ok(!raw.includes(created.task.id));
     });
 });
+
+// --- non-array collection fields are rejected, never coerced -----------------
+
+test('PUT /api/projects/tasks/:id refuses a non-array expected_results', async () => {
+    // `{"expected_results": null}` is a plausible way for an agent to mean "no
+    // change". Coercing it to [] made saveTasks unlink the detail file: the
+    // results were gone, and the response said success.
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        const created = await fetch(`${base}/api/projects/tasks`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectPath: dir, title: 'T', expected_results: ['keep me'] })
+        });
+        const { task } = await created.json();
+
+        for (const bad of [null, 'a string', { a: 1 }, 42]) {
+            const res = await fetch(`${base}/api/projects/tasks/${task.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ projectPath: dir, expected_results: bad })
+            });
+            assert.equal(res.status, 400, `accepted ${JSON.stringify(bad)}`);
+            const body = await res.json();
+            assert.match(body.error, /expected_results/);
+        }
+
+        const detail = path.join(dir, '.meridian', 'tasks', `${task.id}.json`);
+        assert.deepEqual(
+            JSON.parse(fs.readFileSync(detail, 'utf8')),
+            { expected_results: ['keep me'] }
+        );
+    });
+});
+
+test('POST /api/projects/tasks refuses a non-array expected_results', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        const res = await fetch(`${base}/api/projects/tasks`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectPath: dir, title: 'T', expected_results: 'not an array' })
+        });
+        assert.equal(res.status, 400);
+        assert.match((await res.json()).error, /expected_results/);
+        assert.equal(fs.existsSync(path.join(dir, '.meridian', 'tasks.jsonl')), false);
+    });
+});
+
+test('PUT /api/projects/tasks/:id still accepts an empty expected_results as "delete them"', async () => {
+    // The absent/empty/non-empty distinction is the whole contract — rejecting
+    // non-arrays must not take the empty array with it.
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        const created = await fetch(`${base}/api/projects/tasks`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectPath: dir, title: 'T', expected_results: ['bye'] })
+        });
+        const { task } = await created.json();
+        const res = await fetch(`${base}/api/projects/tasks/${task.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectPath: dir, expected_results: [] })
+        });
+        assert.equal(res.status, 200);
+        assert.equal(fs.existsSync(path.join(dir, '.meridian', 'tasks', `${task.id}.json`)), false);
+    });
+});
+
+// --- malformed tasks.jsonl: the response tells the operator what to do -------
+
+test('a malformed tasks.jsonl answers 500 with the hands-off instruction', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    fs.writeFileSync(path.join(dir, '.meridian', 'tasks.jsonl'), '{not json\n');
+    await withServer(ws, async (base) => {
+        const res = await fetch(`${base}/api/projects/tasks/TST-1`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectPath: dir, title: 'x' })
+        });
+        assert.equal(res.status, 500);
+        const body = await res.json();
+        assert.match(body.error, /refusing to write; fix the file by hand/);
+    });
+});
+
+// --- DELETE: an orphan detail file is not the caller's problem ---------------
+
+test('DELETE succeeds even when the detail file cannot be removed', async () => {
+    // The line is already gone by then — reporting 500 would tell the caller a
+    // delete that actually happened had failed. The orphan is inert on read and
+    // is overwritten the next time that id is reused.
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        const created = await fetch(`${base}/api/projects/tasks`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectPath: dir, title: 'T', expected_results: ['r1'] })
+        });
+        const { task } = await created.json();
+
+        // A non-empty directory where the detail file should be: unlink fails
+        // with something other than ENOENT.
+        const detail = path.join(dir, '.meridian', 'tasks', `${task.id}.json`);
+        fs.rmSync(detail, { force: true });
+        fs.mkdirSync(detail, { recursive: true });
+        fs.writeFileSync(path.join(detail, 'blocker'), 'x');
+
+        const res = await fetch(`${base}/api/projects/tasks/${task.id}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectPath: dir })
+        });
+        assert.equal(res.status, 200);
+        assert.equal((await res.json()).success, true);
+        const raw = fs.readFileSync(path.join(dir, '.meridian', 'tasks.jsonl'), 'utf8');
+        assert.equal(raw.includes(task.id), false);
+    });
+});

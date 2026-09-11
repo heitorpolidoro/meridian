@@ -166,6 +166,14 @@ function validateTaskFields(body) {
     if (body.priority !== undefined && !PRIORITY_ORDER.includes(body.priority)) {
         return `Invalid priority '${body.priority}'. Allowed: ${PRIORITY_ORDER.join(', ')}`;
     }
+    // Coercing a non-array to [] is not a harmless normalization here: an empty
+    // expected_results means "delete the detail file", so `{"expected_results":
+    // null}` — a plausible way for an agent to mean "leave it alone" — silently
+    // destroyed the results. Absent still means absent; only a present value of
+    // the wrong type is refused.
+    if (body.expected_results !== undefined && !Array.isArray(body.expected_results)) {
+        return `Invalid expected_results: expected an array, got ${body.expected_results === null ? 'null' : typeof body.expected_results}. Omit the field to leave it unchanged.`;
+    }
     return null;
 }
 
@@ -190,11 +198,14 @@ function validateParentField(parentId, tasks, taskId) {
     return null;
 }
 
-// Turns a malformed tasks.json into a 500 rather than letting the caller
-// read-modify-write an empty list over the user's backlog.
+// Turns an unreadable tasks.jsonl into a 500 rather than letting the caller
+// read-modify-write an empty list over the user's backlog. This is the one
+// error whose whole purpose is to stop a human from making it worse, so the
+// response carries the instruction and the server keeps its own record.
 function handleTaskReadError(err, res) {
     if (err instanceof MalformedTasksError || err instanceof LegacyTasksFileError) {
-        res.status(500).json({ error: err.message });
+        console.error(err.message);
+        res.status(500).json({ error: `${err.message} — refusing to write; fix the file by hand.` });
         return true;
     }
     return false;
@@ -709,7 +720,9 @@ app.put('/api/projects/tasks/:taskId', (req, res) => {
             task.blockedBy = Array.isArray(req.body.blockedBy) ? req.body.blockedBy : [];
         }
         if (req.body.expected_results !== undefined) {
-            task.expected_results = Array.isArray(req.body.expected_results) ? req.body.expected_results : [];
+            // validateTaskFields already refused a non-array: an empty one here
+            // is a deliberate "delete the detail file", not a coercion accident.
+            task.expected_results = req.body.expected_results;
         }
         if (req.body.last_review_findings !== undefined) {
             task.last_review_findings = Array.isArray(req.body.last_review_findings) ? req.body.last_review_findings : [];
@@ -768,7 +781,15 @@ app.delete('/api/projects/tasks/:taskId', (req, res) => {
         }
         
         saveTasks(projectPath, tasksData);
-        deleteTaskDetail(projectPath, taskId);
+        // The line is already gone: the delete succeeded. An orphan detail file
+        // is inert on read and gets overwritten the next time that id is reused
+        // (POST always writes expected_results), so it is not worth turning a
+        // successful delete into a 500 — it is worth a line on stderr.
+        try {
+            deleteTaskDetail(projectPath, taskId);
+        } catch (err) {
+            console.error(`Task ${taskId} deleted, but its detail file could not be removed: ${err.message}`);
+        }
 
         res.json({ success: true });
     } catch (err) {
