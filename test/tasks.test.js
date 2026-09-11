@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { deriveKey, nextTaskId, getTasks, saveTasks, MalformedTasksError, LegacyTasksFileError } = require('../lib/tasks');
+const { deriveKey, nextTaskId, getTasks, saveTasks, getTask, deleteTaskDetail, MalformedTasksError, LegacyTasksFileError } = require('../lib/tasks');
 
 test('deriveKey: single word takes the first five letters', () => {
     assert.equal(deriveKey('Meridian'), 'MERID');
@@ -113,6 +113,98 @@ test('saveTasks: leaves no temp file behind', () => {
     saveTasks(dir, { tasks: [{ id: 'A-1' }] });
     const entries = fs.readdirSync(path.join(dir, '.meridian'));
     assert.deepEqual(entries, ['tasks.jsonl']);
+});
+
+const detail = (dir, id) => path.join(dir, '.meridian', 'tasks', `${id}.json`);
+
+test('saveTasks: expected_results goes to the detail file, not the line', () => {
+    const dir = tmpProject(undefined);
+    saveTasks(dir, { tasks: [{ id: 'A-1', title: 'um', expected_results: ['r1', 'r2'] }] });
+    const line = fs.readFileSync(path.join(dir, '.meridian', 'tasks.jsonl'), 'utf8');
+    assert.ok(!line.includes('expected_results'), 'a linha não carrega o campo pesado');
+    assert.deepEqual(
+        JSON.parse(fs.readFileSync(detail(dir, 'A-1'), 'utf8')),
+        { expected_results: ['r1', 'r2'] }
+    );
+});
+
+test('saveTasks: an empty expected_results writes no detail file', () => {
+    const dir = tmpProject(undefined);
+    saveTasks(dir, { tasks: [{ id: 'A-1', expected_results: [] }] });
+    assert.equal(fs.existsSync(detail(dir, 'A-1')), false);
+});
+
+test('saveTasks: emptying expected_results deletes the detail file', () => {
+    const dir = tmpProject(undefined);
+    saveTasks(dir, { tasks: [{ id: 'A-1', expected_results: ['r1'] }] });
+    saveTasks(dir, { tasks: [{ id: 'A-1', expected_results: [] }] });
+    assert.equal(fs.existsSync(detail(dir, 'A-1')), false);
+});
+
+test('saveTasks: an absent expected_results leaves the detail file untouched', () => {
+    const dir = tmpProject(undefined);
+    saveTasks(dir, { tasks: [{ id: 'A-1', expected_results: ['r1'] }] });
+    // É exatamente o round-trip que toda rota de escrita faz: getTasks devolve
+    // a task sem o campo, e o save seguinte não pode apagar os resultados.
+    const light = getTasks(dir);
+    light.tasks[0].status = 'done';
+    saveTasks(dir, light);
+    assert.deepEqual(
+        JSON.parse(fs.readFileSync(detail(dir, 'A-1'), 'utf8')),
+        { expected_results: ['r1'] }
+    );
+});
+
+test('getTasks: does not hydrate expected_results', () => {
+    const dir = tmpProject(undefined);
+    saveTasks(dir, { tasks: [{ id: 'A-1', expected_results: ['r1'] }] });
+    assert.equal(getTasks(dir).tasks[0].expected_results, undefined);
+});
+
+test('getTask: merges the line with its detail file', () => {
+    const dir = tmpProject(undefined);
+    saveTasks(dir, { tasks: [{ id: 'A-1', title: 'um', expected_results: ['r1'] }] });
+    const task = getTask(dir, 'A-1');
+    assert.equal(task.title, 'um');
+    assert.deepEqual(task.expected_results, ['r1']);
+});
+
+test('getTask: a task with no detail file reads expected_results as empty', () => {
+    const dir = tmpProject([{ id: 'A-1' }]);
+    assert.deepEqual(getTask(dir, 'A-1').expected_results, []);
+});
+
+test('getTask: an unknown id is null', () => {
+    const dir = tmpProject([{ id: 'A-1' }]);
+    assert.equal(getTask(dir, 'A-9'), null);
+});
+
+test('getTasks: an orphan detail file is inert', () => {
+    const dir = tmpProject([{ id: 'A-1' }]);
+    fs.mkdirSync(path.join(dir, '.meridian', 'tasks'), { recursive: true });
+    fs.writeFileSync(detail(dir, 'A-ORPHAN'), JSON.stringify({ expected_results: ['x'] }));
+    assert.deepEqual(getTasks(dir).tasks.map(t => t.id), ['A-1']);
+});
+
+test('deleteTaskDetail: removes the file and tolerates its absence', () => {
+    const dir = tmpProject(undefined);
+    saveTasks(dir, { tasks: [{ id: 'A-1', expected_results: ['r1'] }] });
+    deleteTaskDetail(dir, 'A-1');
+    assert.equal(fs.existsSync(detail(dir, 'A-1')), false);
+    deleteTaskDetail(dir, 'A-1');
+});
+
+test('saveTasks: the detail file lands before the line', () => {
+    const dir = tmpProject(undefined);
+    const order = [];
+    const realRename = fs.renameSync;
+    fs.renameSync = (from, to) => { order.push(path.basename(to)); return realRename(from, to); };
+    try {
+        saveTasks(dir, { tasks: [{ id: 'A-1', expected_results: ['r1'] }] });
+    } finally {
+        fs.renameSync = realRename;
+    }
+    assert.deepEqual(order, ['A-1.json', 'tasks.jsonl']);
 });
 
 test('getTasks: backfills completed_at from updated_at for done tasks', () => {
