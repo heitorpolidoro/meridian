@@ -266,3 +266,17 @@ test('main: --registry points the run at a fixture workspace', () => {
     assert.equal(fs.existsSync(path.join(proj, '.meridian', 'tasks.json')), true);
     assert.equal(fs.existsSync(path.join(proj, '.meridian', 'tasks.jsonl')), false);
 });
+
+test('main: a pid file that cannot be read aborts rather than assuming no server', () => {
+    // "Cannot tell whether the server is up" is not permission to migrate.
+    const proj = legacyProject(TASKS);
+    const before = fs.readFileSync(path.join(proj, '.meridian', 'tasks.json'), 'utf8');
+    // A directory where the pid file should be: readFileSync fails with EISDIR.
+    const pidPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'meridian-pid-')), 'server.pid');
+    fs.mkdirSync(pidPath);
+
+    const code = main(['--registry', fixtureRegistry([proj])], { pidPath });
+    assert.notEqual(code, 0);
+    assert.equal(fs.readFileSync(path.join(proj, '.meridian', 'tasks.json'), 'utf8'), before);
+    assert.deepEqual(fs.readdirSync(path.join(proj, '.meridian')), ['tasks.json']);
+});

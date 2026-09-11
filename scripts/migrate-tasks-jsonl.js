@@ -55,7 +55,10 @@ function runningServerPid(pidPath) {
     try {
         raw = fs.readFileSync(pidPath, 'utf8').trim();
     } catch (err) {
-        return null; // sem pid file: nada a checar
+        if (err.code === 'ENOENT') return null; // sem pid file: nada a checar
+        // Ilegível por outro motivo é "não dá para saber se o servidor está de
+        // pé", e não dá para saber não é permissão para migrar.
+        throw new Error(`cannot read ${pidPath}: ${err.message}`);
     }
     const pid = Number(raw);
     if (!Number.isInteger(pid) || pid <= 0) return null;
@@ -234,7 +237,13 @@ function main(argv, env) {
         return 2;
     }
 
-    const pid = runningServerPid(pidPath);
+    let pid;
+    try {
+        pid = runningServerPid(pidPath);
+    } catch (err) {
+        console.error(`${err.message} — refusing to migrate without knowing whether the server is running.`);
+        return 1;
+    }
     if (pid !== null) {
         console.error(`Meridian server is running (pid ${pid}). Stop it before migrating — a live server holds pre-migration code and its writes would be renamed away silently.`);
         return 1;
