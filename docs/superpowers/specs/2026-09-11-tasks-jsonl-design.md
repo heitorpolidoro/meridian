@@ -93,7 +93,10 @@ Todo o conhecimento da divisão fica neste módulo. `server.js` continua tratand
   Sem essa distinção, um round-trip `getTasks` → `saveTasks` (que é o que toda
   rota de escrita faz) leria tasks sem o campo e apagaria os detalhes de todas
   elas no primeiro save.
-- **`deleteTask(projPath, id)`** — remove a linha e o `tasks/<id>.json`.
+- **`deleteTaskDetail(projPath, id)`** — apaga o `tasks/<id>.json`, tolerando
+  ausência. A rota `DELETE` continua filtrando a lista e chamando `saveTasks`
+  como hoje, e chama isto em seguida: como a task já saiu da lista, `saveTasks`
+  nunca veria o campo para decidir apagar o detalhe.
 
 **Ordem de escrita: detalhe primeiro, linha depois.** Um crash no intervalo
 deixa um detalhe adiantado, que é inerte — a linha é o que faz a task existir.
