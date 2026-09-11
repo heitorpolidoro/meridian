@@ -11,6 +11,7 @@
 
 const fs   = require('fs');
 const path = require('path');
+const { detailPathFor } = require('../lib/tasks');
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -36,6 +37,25 @@ function writeJSON(filePath, data) {
     fs.writeFileSync(filePath, JSON.stringify(data, null, 2) + '\n', 'utf8');
 }
 
+// Duas fases porque o idMap pode conter ciclos de reuso (renumerar [A-2, A-1]
+// produz {A-2: A-1, A-1: A-2}) e fs.renameSync sobrescreve o destino em
+// silêncio. Encostar todas as origens num nome temporário antes de assentar
+// qualquer destino garante que nenhum destino seja uma origem ainda viva.
+function renameTaskDetails(projPath, idMap) {
+    const staged = [];
+    for (const [oldId, newId] of Object.entries(idMap)) {
+        if (oldId === newId) continue;
+        const from = detailPathFor(projPath, oldId);
+        if (!fs.existsSync(from)) continue;
+        const tmp = `${from}.rename.${process.pid}.tmp`;
+        fs.renameSync(from, tmp);
+        staged.push([tmp, detailPathFor(projPath, newId)]);
+    }
+    for (const [tmp, to] of staged) {
+        fs.renameSync(tmp, to);
+    }
+}
+
 // ─── Migration per project ────────────────────────────────────────────────────
 
 function migrateProject(projPath, key) {
@@ -58,6 +78,11 @@ function migrateProject(projPath, key) {
         idMap[oldId] = newId;
         counter++;
     }
+
+    // Rename detail files before rewriting task IDs. The two-phase approach
+    // prevents data loss when the idMap contains cycles (renumering [A-2, A-1]
+    // produces {A-2: A-1, A-1: A-2}).
+    renameTaskDetails(projPath, idMap);
 
     // Apply new IDs and remap blockedBy
     const updated = tasks.map(task => {
@@ -120,3 +145,5 @@ function main() {
 }
 
 main();
+
+module.exports = { renameTaskDetails };

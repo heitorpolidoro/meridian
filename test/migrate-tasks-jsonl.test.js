@@ -103,3 +103,54 @@ test('migrateProject: a project already on jsonl is skipped', () => {
     assert.equal(result.ok, true);
     assert.match(result.reason, /already/i);
 });
+
+const { renameTaskDetails } = require('../scripts/migrate-task-ids');
+
+test('renameTaskDetails: simple rename moves the detail file with content intact', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'meridian-ids-'));
+    const tasksDir = path.join(dir, '.meridian', 'tasks');
+    fs.mkdirSync(tasksDir, { recursive: true });
+    fs.writeFileSync(path.join(tasksDir, 'OLD-1.json'), JSON.stringify({ expected_results: ['r1'] }));
+
+    renameTaskDetails(dir, { 'OLD-1': 'NEW-1' });
+    assert.equal(fs.existsSync(path.join(tasksDir, 'OLD-1.json')), false);
+    assert.deepEqual(
+        JSON.parse(fs.readFileSync(path.join(tasksDir, 'NEW-1.json'), 'utf8')),
+        { expected_results: ['r1'] }
+    );
+});
+
+test('renameTaskDetails: missing file is tolerated', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'meridian-ids-'));
+    const tasksDir = path.join(dir, '.meridian', 'tasks');
+    fs.mkdirSync(tasksDir, { recursive: true });
+
+    renameTaskDetails(dir, { 'MISSING-1': 'NEW-2' });
+    // Should not throw
+});
+
+test('renameTaskDetails: cycle remap preserves all content without corruption', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'meridian-ids-'));
+    const tasksDir = path.join(dir, '.meridian', 'tasks');
+    fs.mkdirSync(tasksDir, { recursive: true });
+
+    const content1 = { expected_results: ['from-A-2'] };
+    const content2 = { expected_results: ['from-A-1'] };
+    fs.writeFileSync(path.join(tasksDir, 'A-2.json'), JSON.stringify(content1));
+    fs.writeFileSync(path.join(tasksDir, 'A-1.json'), JSON.stringify(content2));
+
+    // Cycle: A-2 → A-1, A-1 → A-2. Without two-phase rename, one overwrites the other.
+    renameTaskDetails(dir, { 'A-2': 'A-1', 'A-1': 'A-2' });
+
+    assert.deepEqual(
+        JSON.parse(fs.readFileSync(path.join(tasksDir, 'A-1.json'), 'utf8')),
+        content1
+    );
+    assert.deepEqual(
+        JSON.parse(fs.readFileSync(path.join(tasksDir, 'A-2.json'), 'utf8')),
+        content2
+    );
+    // No temp files should remain
+    const files = fs.readdirSync(tasksDir);
+    assert.ok(!files.some(f => f.endsWith('.tmp')));
+});
