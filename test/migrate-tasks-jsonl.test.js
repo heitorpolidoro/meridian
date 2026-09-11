@@ -154,3 +154,115 @@ test('renameTaskDetails: cycle remap preserves all content without corruption', 
     const files = fs.readdirSync(tasksDir);
     assert.ok(!files.some(f => f.endsWith('.tmp')));
 });
+
+const { parseArgs, runningServerPid, main } = require('../scripts/migrate-tasks-jsonl');
+
+test('migrateProject: a task without an id is refused before the backup', () => {
+    // saveTasks would write this one as tasks/undefined.json — unreachable
+    // forever, since getTask matches on id. Nothing may be written at all.
+    const dir = legacyProject([{ title: 'sem id', expected_results: ['r1'] }]);
+    const before = fs.readFileSync(path.join(dir, '.meridian', 'tasks.json'), 'utf8');
+    const result = migrateProject(dir, { dryRun: false });
+    assert.equal(result.ok, false);
+    assert.match(result.reason, /id/i);
+    assert.equal(fs.readFileSync(path.join(dir, '.meridian', 'tasks.json'), 'utf8'), before);
+    assert.deepEqual(fs.readdirSync(path.join(dir, '.meridian')), ['tasks.json']);
+});
+
+test('migrateProject: an id that escapes the tasks directory is refused before the backup', () => {
+    const dir = legacyProject([{ id: '../escaped', expected_results: ['r1'] }]);
+    const result = migrateProject(dir, { dryRun: false });
+    assert.equal(result.ok, false);
+    assert.match(result.reason, /escaped/);
+    assert.equal(fs.existsSync(path.join(dir, '.meridian', 'escaped.json')), false);
+    assert.deepEqual(fs.readdirSync(path.join(dir, '.meridian')), ['tasks.json']);
+});
+
+test('migrateProject: an id-less task leaves no tasks/ directory behind', () => {
+    // Two id-less tasks used to reach verification, fail it, and leave
+    // tasks/undefined.json plus a tasks/ directory that did not exist before.
+    const dir = legacyProject([{ id: undefined, title: 'a' }, { title: 'b' }]);
+    const result = migrateProject(dir, { dryRun: false });
+    assert.equal(result.ok, false);
+    assert.equal(fs.existsSync(path.join(dir, '.meridian', 'tasks')), false);
+    assert.equal(fs.existsSync(path.join(dir, '.meridian', 'tasks.jsonl')), false);
+});
+
+test('parseArgs: --dry-run and --registry are understood', () => {
+    assert.equal(parseArgs([]).dryRun, false);
+    assert.equal(parseArgs(['--dry-run']).dryRun, true);
+    assert.equal(parseArgs(['--registry', '/tmp/x.json']).registry, '/tmp/x.json');
+    assert.equal(parseArgs(['--dry-run', '--registry', '/tmp/x.json']).dryRun, true);
+});
+
+test('parseArgs: anything else is a hard error, not a silent real run', () => {
+    for (const argv of [['--dryrun'], ['--dry_run'], ['--dry-run=true'], ['-n'], ['whatever'], ['--registry']]) {
+        assert.throws(() => parseArgs(argv), /unknown argument|requires a path/i, 'accepted ' + JSON.stringify(argv));
+    }
+});
+
+test('runningServerPid: a live pid is reported, a stale or absent one is not', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'meridian-pid-'));
+    const live = path.join(dir, 'live.pid');
+    fs.writeFileSync(live, String(process.pid) + '\n');
+    assert.equal(runningServerPid(live), process.pid);
+
+    const stale = path.join(dir, 'stale.pid');
+    // A pid that cannot exist: kill(pid, 0) raises ESRCH, which is "stale".
+    fs.writeFileSync(stale, '4194303');
+    assert.equal(runningServerPid(stale), null);
+
+    assert.equal(runningServerPid(path.join(dir, 'absent.pid')), null);
+    fs.writeFileSync(path.join(dir, 'junk.pid'), 'not a pid');
+    assert.equal(runningServerPid(path.join(dir, 'junk.pid')), null);
+});
+
+function fixtureRegistry(projectDirs) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'meridian-reg-'));
+    const registryPath = path.join(dir, 'projects.json');
+    fs.writeFileSync(registryPath, JSON.stringify({ projects: projectDirs.map(p => ({ path: p })) }));
+    return registryPath;
+}
+
+test('main: a running server aborts the whole run before any project is touched', () => {
+    const proj = legacyProject(TASKS);
+    const before = fs.readFileSync(path.join(proj, '.meridian', 'tasks.json'), 'utf8');
+    const pidPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'meridian-pid-')), 'server.pid');
+    fs.writeFileSync(pidPath, String(process.pid));
+
+    const code = main(['--registry', fixtureRegistry([proj])], { pidPath });
+    assert.notEqual(code, 0);
+    assert.equal(fs.readFileSync(path.join(proj, '.meridian', 'tasks.json'), 'utf8'), before);
+    assert.deepEqual(fs.readdirSync(path.join(proj, '.meridian')), ['tasks.json']);
+});
+
+test('main: a stale pid file does not block the run', () => {
+    const proj = legacyProject(TASKS);
+    const pidPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'meridian-pid-')), 'server.pid');
+    fs.writeFileSync(pidPath, '4194303');
+
+    const code = main(['--registry', fixtureRegistry([proj])], { pidPath });
+    assert.equal(code, 0);
+    assert.equal(fs.existsSync(path.join(proj, '.meridian', 'tasks.jsonl')), true);
+    assert.equal(fs.existsSync(path.join(proj, '.meridian', 'tasks.json.migrated')), true);
+});
+
+test('main: an unrecognized flag exits non-zero without touching anything', () => {
+    const proj = legacyProject(TASKS);
+    const before = fs.readFileSync(path.join(proj, '.meridian', 'tasks.json'), 'utf8');
+    const pidPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'meridian-pid-')), 'server.pid');
+
+    const code = main(['--dryrun', '--registry', fixtureRegistry([proj])], { pidPath });
+    assert.notEqual(code, 0);
+    assert.equal(fs.readFileSync(path.join(proj, '.meridian', 'tasks.json'), 'utf8'), before);
+    assert.deepEqual(fs.readdirSync(path.join(proj, '.meridian')), ['tasks.json']);
+});
+
+test('main: --registry points the run at a fixture workspace', () => {
+    const proj = legacyProject(TASKS);
+    const pidPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'meridian-pid-')), 'server.pid');
+    const code = main(['--dry-run', '--registry', fixtureRegistry([proj])], { pidPath });
+    assert.equal(code, 0);
+    assert.equal(fs.existsSync(path.join(proj, '.meridian', 'tasks.json')), true);
+    assert.equal(fs.existsSync(path.join(proj, '.meridian', 'tasks.jsonl')), false);
+});

@@ -9,15 +9,65 @@
  * .meridian/ é gitignored: um erro aqui é irrecuperável, por isso o backup vem
  * antes de qualquer escrita e a verificação vem antes de aposentar o original.
  *
- * Rodar com o servidor parado. `--dry-run` faz tudo menos aposentar o original.
+ * Rodar com o servidor parado — o script recusa rodar se o pid em
+ * meridian-server.pid ainda existe. `--dry-run` faz tudo menos aposentar o
+ * original; `--registry <caminho>` aponta a run para outro projects.json.
  */
 'use strict';
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { saveTasks } = require('../lib/tasks');
+const { saveTasks, assertSafeId } = require('../lib/tasks');
 
 const PROJECTS_JSON_PATH = path.join(__dirname, '..', '..', '.meridian', 'projects.json');
+const PID_FILE_PATH = path.join(__dirname, '..', 'meridian-server.pid');
+
+// Um argv desconhecido não pode cair no caminho destrutivo: `--dryrun` ou
+// `--dry-run=true` são jeitos plausíveis de escrever "não escreva nada", e um
+// includes('--dry-run') os trata como uma migração de verdade.
+function parseArgs(argv) {
+    const options = { dryRun: false, registry: PROJECTS_JSON_PATH };
+    for (let i = 0; i < argv.length; i++) {
+        const arg = argv[i];
+        if (arg === '--dry-run') {
+            options.dryRun = true;
+        } else if (arg === '--registry') {
+            const value = argv[i + 1];
+            if (value === undefined || value.startsWith('--')) {
+                throw new Error('--registry requires a path to a projects.json');
+            }
+            options.registry = value;
+            i++;
+        } else {
+            throw new Error(`unknown argument '${arg}'. Usage: migrate-tasks-jsonl.js [--dry-run] [--registry <path>]`);
+        }
+    }
+    return options;
+}
+
+// O pid do servidor, se ele ainda estiver de pé. Um servidor vivo carrega o
+// código antigo: qualquer escrita dele entre a leitura do original e o rename
+// de tasks.json cai no arquivo que a migração aposenta logo depois, e some sem
+// falhar verificação nenhuma — a verificação compara com o que foi lido antes.
+// Um pid file obsoleto (processo inexistente) não bloqueia nada.
+function runningServerPid(pidPath) {
+    let raw;
+    try {
+        raw = fs.readFileSync(pidPath, 'utf8').trim();
+    } catch (err) {
+        return null; // sem pid file: nada a checar
+    }
+    const pid = Number(raw);
+    if (!Number.isInteger(pid) || pid <= 0) return null;
+    try {
+        process.kill(pid, 0);
+        return pid;
+    } catch (err) {
+        // ESRCH: não existe, pid file obsoleto. EPERM: existe, é de outro
+        // usuário — está rodando, e é exatamente o caso que precisa barrar.
+        return err.code === 'EPERM' ? pid : null;
+    }
+}
 
 function readLegacy(tasksPath) {
     const parsed = JSON.parse(fs.readFileSync(tasksPath, 'utf8'));
@@ -58,9 +108,17 @@ function cleanupPartialOutput(meridianDir, tasks) {
     fs.rmSync(path.join(meridianDir, 'tasks.jsonl'), { force: true });
     const tasksDir = path.join(meridianDir, 'tasks');
     for (const task of tasks) {
-        if (task && task.id !== undefined) {
-            fs.rmSync(path.join(tasksDir, `${task.id}.json`), { force: true });
+        if (!task) continue;
+        // Só ids que detailPathFor aceitaria podem ter virado arquivo —
+        // saveTasks lança nos outros antes de escrever qualquer coisa. Filtrar
+        // pela mesma regra mantém a limpeza honesta: nada a mais, nada a menos.
+        let name;
+        try {
+            name = `${assertSafeId(task.id)}.json`;
+        } catch (err) {
+            continue;
         }
+        fs.rmSync(path.join(tasksDir, name), { force: true });
     }
     // Only remove the directory if it is now empty: a project pre-migration
     // never has one (detail files are a new-format artifact), but blindly
@@ -100,6 +158,22 @@ function migrateProject(projPath, options) {
         original = readLegacy(legacyPath);
     } catch (err) {
         return { id, ok: false, reason: `unreadable tasks.json: ${err.message}` };
+    }
+
+    // Antes do backup, porque nada deve ser escrito: uma task sem id vira
+    // tasks/undefined.json, que getTask nunca alcança (ele casa por id), e um
+    // id com separador escreve fora de .meridian/tasks/. Board assim precisa
+    // de conserto manual, não de migração.
+    for (let i = 0; i < original.length; i++) {
+        const task = original[i];
+        if (!task || typeof task !== 'object' || Array.isArray(task)) {
+            return { id, ok: false, reason: `entry #${i + 1} is not a task object — nothing written` };
+        }
+        try {
+            assertSafeId(task.id);
+        } catch (err) {
+            return { id, ok: false, reason: `${err.message} (entry #${i + 1}) — nothing written` };
+        }
     }
 
     const backup = path.join(meridianDir, `tasks.json.bak.${Date.now()}`);
@@ -147,21 +221,39 @@ function migrateProject(projPath, options) {
     return { id, ok: true, reason: `migrated ${original.length} tasks` };
 }
 
-function main() {
-    const dryRun = process.argv.includes('--dry-run');
-    const registry = JSON.parse(fs.readFileSync(PROJECTS_JSON_PATH, 'utf8'));
+// Devolve o exit code em vez de mexer em process.exitCode: assim dá para
+// exercitar a run inteira contra um registry de fixture, que é o que faltava
+// para main() ter teste.
+function main(argv, env) {
+    const pidPath = (env && env.pidPath) || PID_FILE_PATH;
+    let options;
+    try {
+        options = parseArgs(argv || process.argv.slice(2));
+    } catch (err) {
+        console.error(err.message);
+        return 2;
+    }
+
+    const pid = runningServerPid(pidPath);
+    if (pid !== null) {
+        console.error(`Meridian server is running (pid ${pid}). Stop it before migrating — a live server holds pre-migration code and its writes would be renamed away silently.`);
+        return 1;
+    }
+
+    const registry = JSON.parse(fs.readFileSync(options.registry, 'utf8'));
     let failed = 0;
     for (const proj of registry.projects || []) {
-        const result = migrateProject(proj.path, { dryRun });
+        const result = migrateProject(proj.path, { dryRun: options.dryRun });
         if (!result.ok) failed++;
         console.log(`${result.ok ? 'ok  ' : 'FAIL'} ${result.id}: ${result.reason}`);
     }
     if (failed > 0) {
         console.error(`\n${failed} project(s) failed. The .bak copy and tasks.json are intact for those.`);
-        process.exitCode = 1;
+        return 1;
     }
+    return 0;
 }
 
-if (require.main === module) main();
+if (require.main === module) process.exitCode = main();
 
-module.exports = { migrateProject };
+module.exports = { migrateProject, parseArgs, runningServerPid, main };
