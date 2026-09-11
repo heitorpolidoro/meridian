@@ -1,7 +1,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { deriveKey, nextTaskId, getTasks, saveTasks, stampNewTask, stampTaskUpdate, normalizeStatus, MalformedTasksError } = require('./lib/tasks');
+const { deriveKey, nextTaskId, getTasks, getTask, saveTasks, deleteTaskDetail, stampNewTask, stampTaskUpdate, normalizeStatus, MalformedTasksError, LegacyTasksFileError } = require('./lib/tasks');
 const { ensureMeridianIgnored } = require('./lib/gitignore');
 const { registerProject } = require('./lib/projects');
 const { appendEvent } = require('./lib/events');
@@ -193,9 +193,8 @@ function validateParentField(parentId, tasks, taskId) {
 // Turns a malformed tasks.json into a 500 rather than letting the caller
 // read-modify-write an empty list over the user's backlog.
 function handleTaskReadError(err, res) {
-    if (err instanceof MalformedTasksError) {
-        console.error(err.message);
-        res.status(500).json({ error: err.message + ' — refusing to write; fix the file by hand.' });
+    if (err instanceof MalformedTasksError || err instanceof LegacyTasksFileError) {
+        res.status(500).json({ error: err.message });
         return true;
     }
     return false;
@@ -565,6 +564,31 @@ app.put('/api/projects', (req, res) => {
     }
 });
 
+// O irmão hidratado de /api/status. O board não precisa de expected_results e
+// não os recebe; quem despacha developer ou QA pega uma task por aqui.
+app.get('/api/projects/tasks/:taskId', (req, res) => {
+    try {
+        const projectPath = req.query.project;
+        if (!projectPath) {
+            return res.status(400).json({ error: 'project is required' });
+        }
+        let task;
+        try {
+            task = getTask(projectPath, req.params.taskId);
+        } catch (err) {
+            if (handleTaskReadError(err, res)) return;
+            throw err;
+        }
+        if (!task) {
+            return res.status(404).json({ error: 'Task not found' });
+        }
+        res.json({ task });
+    } catch (err) {
+        console.error('Error reading task:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // REST API to add a task
 app.post('/api/projects/tasks', (req, res) => {
     try {
@@ -744,6 +768,7 @@ app.delete('/api/projects/tasks/:taskId', (req, res) => {
         }
         
         saveTasks(projectPath, tasksData);
+        deleteTaskDetail(projectPath, taskId);
 
         res.json({ success: true });
     } catch (err) {

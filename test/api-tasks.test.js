@@ -309,10 +309,10 @@ test('GET /api/status?limit= never lets an unknown priority out-rank critical', 
         await seed(base, dir, { title: 'critical', priority: 'critical' });
         await seed(base, dir, { title: 'unknown priority' });
         // The API refuses an unknown priority, so plant one the way a hand-edit would.
-        const file = path.join(dir, '.meridian', 'tasks.json');
-        const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
-        raw.find(t => t.id === 'TST-2').priority = 'urgent';
-        fs.writeFileSync(file, JSON.stringify(raw, null, 2));
+        const file = path.join(dir, '.meridian', 'tasks.jsonl');
+        const lines = fs.readFileSync(file, 'utf8').trim().split('\n').map(l => JSON.parse(l));
+        lines.find(t => t.id === 'TST-2').priority = 'urgent';
+        fs.writeFileSync(file, lines.map(t => JSON.stringify(t)).join('\n') + '\n');
 
         const res = await (await fetch(`${base}/api/status?limit=1`)).json();
         assert.deepEqual(res.projects[0].tasks.map(t => t.id), ['TST-1'],
@@ -336,7 +336,7 @@ test('POST refuses to write over a malformed tasks.json', async () => {
     await withServer(ws, async (base) => {
         await seed(base, dir, { title: 'first' });
         await seed(base, dir, { title: 'second' });
-        const file = path.join(dir, '.meridian', 'tasks.json');
+        const file = path.join(dir, '.meridian', 'tasks.jsonl');
         const whole = fs.readFileSync(file, 'utf8');
         const truncated = whole.slice(0, whole.length - 30);
         fs.writeFileSync(file, truncated);
@@ -357,7 +357,7 @@ test('PUT refuses to write over a malformed tasks.json', async () => {
     const { ws, dir } = workspaceWith('Test Project');
     await withServer(ws, async (base) => {
         await seed(base, dir);
-        const file = path.join(dir, '.meridian', 'tasks.json');
+        const file = path.join(dir, '.meridian', 'tasks.jsonl');
         fs.writeFileSync(file, '{not json');
         const res = await fetch(`${base}/api/projects/tasks/TST-1`, {
             method: 'PUT',
@@ -373,7 +373,7 @@ test('GET /api/status reports a malformed tasks.json instead of showing no tasks
     const { ws, dir } = workspaceWith('Test Project');
     await withServer(ws, async (base) => {
         await seed(base, dir);
-        fs.writeFileSync(path.join(dir, '.meridian', 'tasks.json'), '{not json');
+        fs.writeFileSync(path.join(dir, '.meridian', 'tasks.jsonl'), '{not json');
         const res = await (await fetch(`${base}/api/status`)).json();
         assert.equal(res.projects.length, 1);
         assert.deepEqual(res.projects[0].tasks, []);
@@ -565,10 +565,10 @@ test('legacy names already on disk read back as snake_case', async () => {
     await withServer(ws, async (base) => {
         await seed(base, dir);
         const fsMod = require('node:fs'); const p = require('node:path');
-        const tp = p.join(dir, '.meridian', 'tasks.json');
-        const tasks = JSON.parse(fsMod.readFileSync(tp, 'utf8'));
+        const tp = p.join(dir, '.meridian', 'tasks.jsonl');
+        const tasks = fsMod.readFileSync(tp, 'utf8').trim().split('\n').map(l => JSON.parse(l));
         tasks[0].status = 'in' + 'progress'; // sed-proof, see above
-        fsMod.writeFileSync(tp, JSON.stringify(tasks));
+        fsMod.writeFileSync(tp, tasks.map(t => JSON.stringify(t)).join('\n') + '\n');
         const res = await (await fetch(`${base}/api/status?project=${encodeURIComponent(dir)}`)).json();
         assert.equal(res.projects[0].tasks[0].status, 'in_progress');
     });
@@ -748,11 +748,11 @@ test('PUT accepts a valid parent, persists it with no subtasks/children key anyw
         const updated = await put(base, dir, c.id, { parent: p.id });
         assert.equal(updated.parent, p.id);
 
-        const file = path.join(dir, '.meridian', 'tasks.json');
+        const file = path.join(dir, '.meridian', 'tasks.jsonl');
         const raw = fs.readFileSync(file, 'utf8');
         assert.doesNotMatch(raw, /"subtasks"/);
         assert.doesNotMatch(raw, /"children"/);
-        const tasks = JSON.parse(raw);
+        const tasks = raw.trim().split('\n').map(l => JSON.parse(l));
         const childOnDisk = tasks.find(t => t.id === c.id);
         assert.equal(childOnDisk.parent, p.id);
         const parentOnDisk = tasks.find(t => t.id === p.id);
@@ -765,7 +765,7 @@ test('a malformed-parent request does not write anything', async () => {
     const { ws, dir } = workspaceWith('Test Project');
     await withServer(ws, async (base) => {
         const t = await seed(base, dir, { title: 'lonely' });
-        const file = path.join(dir, '.meridian', 'tasks.json');
+        const file = path.join(dir, '.meridian', 'tasks.jsonl');
         const before = fs.readFileSync(file, 'utf8');
 
         const res = await fetch(`${base}/api/projects/tasks/${t.id}`, {
@@ -776,5 +776,104 @@ test('a malformed-parent request does not write anything', async () => {
         assert.equal(res.status, 400);
         assert.equal(fs.readFileSync(file, 'utf8'), before,
             'a rejected parent must not leave a partial write');
+    });
+});
+
+test('GET /api/status omits expected_results', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        await fetch(`${base}/api/projects/tasks`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectPath: dir, title: 'T', expected_results: ['r1'] })
+        });
+        const data = await (await fetch(`${base}/api/status`)).json();
+        const task = data.projects[0].tasks.find(t => t.title === 'T');
+        assert.equal(task.expected_results, undefined);
+    });
+});
+
+test('GET /api/projects/tasks/:taskId returns the hydrated task', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        const created = await (await fetch(`${base}/api/projects/tasks`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectPath: dir, title: 'T', expected_results: ['r1', 'r2'] })
+        })).json();
+        const url = `${base}/api/projects/tasks/${created.task.id}?project=${encodeURIComponent(dir)}`;
+        const res = await fetch(url);
+        assert.equal(res.status, 200);
+        const body = await res.json();
+        assert.deepEqual(body.task.expected_results, ['r1', 'r2']);
+        assert.equal(body.task.title, 'T');
+    });
+});
+
+test('GET /api/projects/tasks/:taskId is 400 without project and 404 for an unknown id', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        assert.equal((await fetch(`${base}/api/projects/tasks/TST-1`)).status, 400);
+        const url = `${base}/api/projects/tasks/TST-99?project=${encodeURIComponent(dir)}`;
+        assert.equal((await fetch(url)).status, 404);
+    });
+});
+
+test('POST and PUT return the task with expected_results and persist it to the detail file', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        const created = await (await fetch(`${base}/api/projects/tasks`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectPath: dir, title: 'T', expected_results: ['r1'] })
+        })).json();
+        assert.deepEqual(created.task.expected_results, ['r1']);
+        const detail = path.join(dir, '.meridian', 'tasks', `${created.task.id}.json`);
+        assert.deepEqual(JSON.parse(fs.readFileSync(detail, 'utf8')), { expected_results: ['r1'] });
+
+        const updated = await (await fetch(`${base}/api/projects/tasks/${created.task.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectPath: dir, expected_results: ['r1', 'r2'] })
+        })).json();
+        assert.deepEqual(updated.task.expected_results, ['r1', 'r2']);
+        assert.deepEqual(JSON.parse(fs.readFileSync(detail, 'utf8')), { expected_results: ['r1', 'r2'] });
+    });
+});
+
+test('PUT that does not mention expected_results keeps the detail file', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        const created = await (await fetch(`${base}/api/projects/tasks`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectPath: dir, title: 'T', expected_results: ['r1'] })
+        })).json();
+        await fetch(`${base}/api/projects/tasks/${created.task.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectPath: dir, status: 'done' })
+        });
+        const detail = path.join(dir, '.meridian', 'tasks', `${created.task.id}.json`);
+        assert.deepEqual(JSON.parse(fs.readFileSync(detail, 'utf8')), { expected_results: ['r1'] });
+    });
+});
+
+test('DELETE removes both the line and the detail file', async () => {
+    const { ws, dir } = workspaceWith('Test Project');
+    await withServer(ws, async (base) => {
+        const created = await (await fetch(`${base}/api/projects/tasks`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectPath: dir, title: 'T', expected_results: ['r1'] })
+        })).json();
+        await fetch(`${base}/api/projects/tasks/${created.task.id}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectPath: dir })
+        });
+        assert.equal(fs.existsSync(path.join(dir, '.meridian', 'tasks', `${created.task.id}.json`)), false);
+        const raw = fs.readFileSync(path.join(dir, '.meridian', 'tasks.jsonl'), 'utf8');
+        assert.ok(!raw.includes(created.task.id));
     });
 });
