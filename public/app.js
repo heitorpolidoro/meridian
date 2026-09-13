@@ -982,14 +982,14 @@ function renderTaskCardHtml(task, allTasks) {
     if (task.questions && task.questions.length > 0) {
         const unanswered = task.questions.filter(q => !q.answer || !q.answer.trim()).length;
         if (unanswered > 0) {
-            questionsBadge = `<span class="task-questions-pill" title="${unanswered} pergunta(s) da IA aguardando resposta">❓ ${unanswered}</span>`;
+            questionsBadge = `<span class="task-questions-pill" title="${unanswered} AI question(s) awaiting answer">❓ ${unanswered}</span>`;
         } else {
-            questionsBadge = `<span class="task-questions-pill" style="color: #34d399; background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.35);" title="Perguntas respondidas">💬 ${task.questions.length}</span>`;
+            questionsBadge = `<span class="task-questions-pill" style="color: #34d399; background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.35);" title="All questions answered">💬 ${task.questions.length}</span>`;
         }
     }
 
     const hasMock = Boolean(task.mock_path || task.has_mock);
-    const mockBadge = hasMock ? '<span class="task-mock-pill" title="Possui mockup interativo (HTML)">🖥️ Mock</span>' : '';
+    const mockBadge = hasMock ? '<span class="task-mock-pill" title="Interactive HTML mockup available">🖥️ Mock</span>' : '';
 
     // Terminal cards show when they got there: completed_at for done, moved_at
     // for nope — the same timestamps their columns sort and window by.
@@ -1141,7 +1141,7 @@ function renderKanbanBoard(tasks) {
         }
 
         const hiddenChipHtml = hiddenTasks.length > 0 ? `
-            <div class="done-hidden-chip" onclick="this.nextElementSibling.classList.remove('hidden'); this.remove();">+${hiddenTasks.length} ${statusCol.id === 'nope' ? 'descartadas' : 'concluídas'}</div>
+            <div class="done-hidden-chip" onclick="this.nextElementSibling.classList.remove('hidden'); this.remove();">+${hiddenTasks.length} ${statusCol.id === 'nope' ? 'dismissed' : 'completed'}</div>
             <div class="done-hidden-tasks hidden">
                 ${hiddenTasks.map(task => renderTaskCardHtml(task, tasks)).join('')}
             </div>
@@ -1311,7 +1311,7 @@ window.openTaskModal = async function(taskId, projectPath) {
         }
     }
 
-    currentModalTask = task ? { ...task } : { id: taskId, title: 'Carregando...', status: 'backlog' };
+    currentModalTask = task ? { ...task } : { id: taskId, title: 'Loading...', status: 'backlog' };
     currentModalProjPath = projPath || (task && task.projectPath) || '';
 
     // Update URL with ?task=<id>
@@ -1435,7 +1435,7 @@ function renderTaskModalData(task, specContent, mockPath, hasMock) {
     const specPathEl = document.getElementById('tm-spec-path');
     const specViewerEl = document.getElementById('tm-spec-viewer');
     if (specPathEl) {
-        specPathEl.textContent = task.spec_path || 'Nenhum caminho de spec registrado';
+        specPathEl.textContent = task.spec_path || 'No spec path registered';
     }
 
     if (specViewerEl) {
@@ -1443,10 +1443,10 @@ function renderTaskModalData(task, specContent, mockPath, hasMock) {
             specViewerEl.innerHTML = formatSpecMarkdown(specContent, currentModalProjPath);
             specViewerEl.classList.remove('empty');
         } else if (task.spec_path) {
-            specViewerEl.innerHTML = `<div class="tm-spec-viewer empty">Documento de especificação (${escapeHtml(task.spec_path)}) ainda não encontrado ou vazio.</div>`;
+            specViewerEl.innerHTML = `<div class="tm-spec-viewer empty">Specification document (${escapeHtml(task.spec_path)}) not found or empty.</div>`;
             specViewerEl.classList.add('empty');
         } else {
-            specViewerEl.innerHTML = `<div class="tm-spec-viewer empty">Nenhuma especificação técnica gerada ainda para esta tarefa.</div>`;
+            specViewerEl.innerHTML = `<div class="tm-spec-viewer empty">No specification document generated for this task yet.</div>`;
             specViewerEl.classList.add('empty');
         }
     }
@@ -1493,11 +1493,11 @@ function renderTaskModalData(task, specContent, mockPath, hasMock) {
             tmRequestChangesBtn.classList.remove('hidden');
             tmApproveSpecBtn.classList.remove('hidden');
             if (isApproval) {
-                tmRequestChangesBtn.textContent = 'Pedir Ajuste à IA ↩';
-                tmApproveSpecBtn.textContent = 'Aprovar Spec ✅';
+                tmRequestChangesBtn.textContent = 'Request AI Revision ↩';
+                tmApproveSpecBtn.textContent = 'Approve Spec ✅';
             } else {
-                tmRequestChangesBtn.textContent = 'Ajustar Perguntas';
-                tmApproveSpecBtn.textContent = 'Aprovar Spec Direto ✅';
+                tmRequestChangesBtn.textContent = 'Edit Questions';
+                tmApproveSpecBtn.textContent = 'Direct Approve Spec ✅';
             }
         } else {
             tmRequestChangesBtn.classList.add('hidden');
@@ -1513,7 +1513,7 @@ function renderTaskQuestions(questions) {
     if (!list) return;
 
     if (!questions || questions.length === 0) {
-        list.innerHTML = '<div class="task-question-empty">Nenhuma pergunta da IA registrada para esta tarefa.</div>';
+        list.innerHTML = '<div class="task-question-empty">No AI questions recorded for this task.</div>';
         return;
     }
 
@@ -1525,13 +1525,13 @@ function renderTaskQuestions(questions) {
         return `
             <div class="task-question-card ${hasUnanswered ? 'has-unanswered' : ''}">
                 <div class="task-question-meta">
-                    <span class="task-question-by">De: ${escapeHtml(by)}</span>
+                    <span class="task-question-by">From: ${escapeHtml(by)}</span>
                     <span class="task-question-date">${dateStr}</span>
                 </div>
                 <div class="task-question-text">${escapeHtml(q.question)}</div>
                 <div class="task-answer-area">
-                    <label>Sua resposta / orientação:</label>
-                    <textarea class="task-answer-textarea" data-qid="${escapeHtml(qid)}" placeholder="Digite sua resposta para a IA...">${escapeHtml(q.answer || '')}</textarea>
+                    <label>Your answer / guidance:</label>
+                    <textarea class="task-answer-textarea" data-qid="${escapeHtml(qid)}" placeholder="Type your answer for the AI...">${escapeHtml(q.answer || '')}</textarea>
                 </div>
             </div>
         `;
@@ -1575,7 +1575,7 @@ if (tmSaveAnswersBtn) {
         currentModalTask.questions = updatedQuestions;
         try {
             tmSaveAnswersBtn.disabled = true;
-            tmSaveAnswersBtn.textContent = 'Salvando...';
+            tmSaveAnswersBtn.textContent = 'Saving...';
             const res = await fetch(`/api/projects/tasks/${currentModalTask.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
@@ -1585,18 +1585,18 @@ if (tmSaveAnswersBtn) {
                 })
             });
             if (res.ok) {
-                showFlashMessage('Respostas salvas com sucesso!', 'success');
+                showFlashMessage('Answers saved successfully!', 'success');
                 renderTaskQuestions(updatedQuestions);
                 refreshProjectView();
             } else {
                 const errData = await res.json().catch(() => ({}));
-                showFlashMessage(errData.error || 'Erro ao salvar respostas', 'error');
+                showFlashMessage(errData.error || 'Error saving answers', 'error');
             }
         } catch (err) {
-            showFlashMessage('Erro de rede ao salvar respostas', 'error');
+            showFlashMessage('Network error saving answers', 'error');
         } finally {
             tmSaveAnswersBtn.disabled = false;
-            tmSaveAnswersBtn.textContent = 'Salvar Respostas';
+            tmSaveAnswersBtn.textContent = 'Save Answers';
         }
     });
 }
@@ -1618,15 +1618,15 @@ if (tmRequestChangesBtn) {
                 })
             });
             if (res.ok) {
-                showFlashMessage('Enviado para revisão da IA!', 'success');
+                showFlashMessage('Sent for AI revision!', 'success');
                 closeTaskModal();
                 refreshProjectView();
             } else {
                 const errData = await res.json().catch(() => ({}));
-                showFlashMessage(errData.error || 'Erro ao atualizar tarefa', 'error');
+                showFlashMessage(errData.error || 'Error updating task', 'error');
             }
         } catch (err) {
-            showFlashMessage('Erro de rede ao atualizar status', 'error');
+            showFlashMessage('Network error updating task status', 'error');
         } finally {
             tmRequestChangesBtn.disabled = false;
         }
@@ -1650,15 +1650,15 @@ if (tmApproveSpecBtn) {
                 })
             });
             if (res.ok) {
-                showFlashMessage('Spec aprovada! Tarefa pronta para execução (Ready to Do) 🚀', 'success');
+                showFlashMessage('Spec approved! Ready to Do 🚀', 'success');
                 closeTaskModal();
                 refreshProjectView();
             } else {
                 const errData = await res.json().catch(() => ({}));
-                showFlashMessage(errData.error || 'Erro ao aprovar spec', 'error');
+                showFlashMessage(errData.error || 'Error approving spec', 'error');
             }
         } catch (err) {
-            showFlashMessage('Erro de rede ao aprovar spec', 'error');
+            showFlashMessage('Network error approving spec', 'error');
         } finally {
             tmApproveSpecBtn.disabled = false;
         }
@@ -1693,7 +1693,7 @@ if (tmSaveNewQuestionBtn) {
             id: 'q-' + Date.now(),
             question: text,
             answer: '',
-            by: 'Operador',
+            by: 'Operator',
             created_at: new Date().toISOString()
         };
         currentQuestions.push(newQ);

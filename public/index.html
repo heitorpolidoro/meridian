@@ -222,21 +222,21 @@
             <div class="task-modal-body">
                 <!-- Description / Justification -->
                 <div id="tm-desc-section" class="task-modal-section hidden">
-                    <h4 class="task-modal-section-title">Contexto & Descrição</h4>
+                    <h4 class="task-modal-section-title">Context & Description</h4>
                     <div id="tm-desc" class="task-modal-desc-box"></div>
                 </div>
 
                 <!-- Questions & Answers -->
                 <div id="tm-questions-section" class="task-modal-section">
                     <div class="task-modal-section-header">
-                        <h4 class="task-modal-section-title">Perguntas & Respostas da IA <span id="tm-questions-count" class="tm-count-badge">0</span></h4>
-                        <button type="button" id="tm-add-question-btn" class="secondary-btn tm-small-btn">+ Nova Pergunta</button>
+                        <h4 class="task-modal-section-title">AI Questions & Answers <span id="tm-questions-count" class="tm-count-badge">0</span></h4>
+                        <button type="button" id="tm-add-question-btn" class="secondary-btn tm-small-btn">+ New Question</button>
                     </div>
                     <div id="tm-new-question-box" class="tm-new-question-box hidden">
-                        <textarea id="tm-new-question-input" placeholder="Digite uma nova pergunta ou observação para a IA..." rows="2"></textarea>
+                        <textarea id="tm-new-question-input" placeholder="Type a new question or guidance for AI..." rows="2"></textarea>
                         <div class="tm-new-question-actions">
-                            <button type="button" id="tm-cancel-new-question-btn" class="secondary-btn tm-small-btn">Cancelar</button>
-                            <button type="button" id="tm-save-new-question-btn" class="primary-btn tm-small-btn">Adicionar</button>
+                            <button type="button" id="tm-cancel-new-question-btn" class="secondary-btn tm-small-btn">Cancel</button>
+                            <button type="button" id="tm-save-new-question-btn" class="primary-btn tm-small-btn">Add</button>
                         </div>
                     </div>
                     <div id="tm-questions-list" class="task-questions-list">
@@ -246,7 +246,7 @@
 
                 <!-- Expected Results (if any) -->
                 <div id="tm-results-section" class="task-modal-section hidden">
-                    <h4 class="task-modal-section-title">Critérios de Aceite (Expected Results)</h4>
+                    <h4 class="task-modal-section-title">Acceptance Criteria (Expected Results)</h4>
                     <ul id="tm-results-list" class="task-results-list"></ul>
                 </div>
 
@@ -254,15 +254,15 @@
                 <div id="tm-spec-section" class="task-modal-section">
                     <div class="task-modal-section-header tm-spec-tabs-header">
                         <div class="tm-tabs">
-                            <button type="button" class="tm-tab tm-tab--active" id="tm-tab-spec">📄 Especificação (Texto)</button>
-                            <button type="button" class="tm-tab" id="tm-tab-mock">🖥️ Mockup Interativo (HTML) <span id="tm-mock-badge" class="tm-tab-pill hidden">Disponível</span></button>
+                            <button type="button" class="tm-tab tm-tab--active" id="tm-tab-spec">📄 Specification</button>
+                            <button type="button" class="tm-tab" id="tm-tab-mock">🖥️ Interactive Mockup (HTML) <span id="tm-mock-badge" class="tm-tab-pill hidden">Available</span></button>
                         </div>
                         <span id="tm-spec-path" class="tm-spec-path-label"></span>
                     </div>
 
                     <!-- Tab 1: Spec Markdown Content -->
                     <div id="tm-spec-container">
-                        <div id="tm-spec-loading" class="tm-spec-loading hidden">Carregando documento...</div>
+                        <div id="tm-spec-loading" class="tm-spec-loading hidden">Loading document...</div>
                         <div id="tm-spec-viewer" class="tm-spec-viewer markdown-body">
                             <!-- Rendered spec markdown -->
                         </div>
@@ -272,21 +272,21 @@
                     <div id="tm-mock-container" class="hidden">
                         <div class="tm-mock-toolbar">
                             <div class="tm-viewport-controls">
-                                <span class="tm-toolbar-label">Resolução:</span>
-                                <button type="button" class="tm-viewport-btn tm-viewport-btn--active" data-viewport="desktop" title="Visão Desktop (100%)">🖥️ Desktop</button>
-                                <button type="button" class="tm-viewport-btn" data-viewport="tablet" title="Visão Tablet (768px)">📱 Tablet</button>
-                                <button type="button" class="tm-viewport-btn" data-viewport="mobile" title="Visão Mobile (375px)">📱 Mobile</button>
+                                <span class="tm-toolbar-label">Viewport:</span>
+                                <button type="button" class="tm-viewport-btn tm-viewport-btn--active" data-viewport="desktop" title="Desktop View (100%)">🖥️ Desktop</button>
+                                <button type="button" class="tm-viewport-btn" data-viewport="tablet" title="Tablet View (768px)">📱 Tablet</button>
+                                <button type="button" class="tm-viewport-btn" data-viewport="mobile" title="Mobile View (375px)">📱 Mobile</button>
                             </div>
                             <div class="tm-mock-actions">
-                                <button type="button" id="tm-mock-reload-btn" class="secondary-btn tm-small-btn" title="Recarregar Mock">🔄 Recarregar</button>
-                                <a id="tm-mock-external-link" href="#" target="_blank" class="secondary-btn tm-small-btn" title="Abrir em Nova Aba">Abrir em Nova Aba ↗</a>
+                                <button type="button" id="tm-mock-reload-btn" class="secondary-btn tm-small-btn" title="Reload Mock">🔄 Reload</button>
+                                <a id="tm-mock-external-link" href="#" target="_blank" class="secondary-btn tm-small-btn" title="Open in New Tab">Open in New Tab ↗</a>
                             </div>
                         </div>
                         <div id="tm-mock-frame-wrapper" class="tm-mock-frame-wrapper viewport-desktop">
                             <iframe id="tm-mock-iframe" class="tm-mock-iframe" sandbox="allow-scripts allow-same-origin allow-forms allow-modals"></iframe>
                         </div>
                         <div id="tm-mock-empty" class="tm-spec-viewer empty hidden">
-                            Nenhum mockup interativo (.html) gerado para esta tarefa ainda.
+                            No interactive mockup (.html) generated for this task yet.
                         </div>
                     </div>
                 </div>
@@ -294,18 +294,18 @@
 
             <div class="task-modal-footer">
                 <div class="tm-footer-left">
-                    <button type="button" class="secondary-btn" id="tm-close-footer-btn">Fechar</button>
-                    <button type="button" class="secondary-btn" id="tm-save-answers-btn">Salvar Respostas</button>
+                    <button type="button" class="secondary-btn" id="tm-close-footer-btn">Close</button>
+                    <button type="button" class="secondary-btn" id="tm-save-answers-btn">Save Answers</button>
                 </div>
                 <div class="tm-footer-right">
-                    <button type="button" class="secondary-btn tm-action-btn hidden" id="tm-request-changes-btn" style="border-color: #f59e0b; color: #fbbf24;">Pedir Ajuste à IA ↩</button>
-                    <button type="button" class="primary-btn tm-action-btn hidden" id="tm-approve-spec-btn" style="background: #10b981;">Aprovar Spec ✅</button>
+                    <button type="button" class="secondary-btn tm-action-btn hidden" id="tm-request-changes-btn" style="border-color: #f59e0b; color: #fbbf24;">Request AI Revision ↩</button>
+                    <button type="button" class="primary-btn tm-action-btn hidden" id="tm-approve-spec-btn" style="background: #10b981;">Approve Spec ✅</button>
                 </div>
             </div>
         </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="app.js?v=42"></script>
+    <script src="app.js?v=43"></script>
 </body>
 </html>
