@@ -17,6 +17,7 @@ You do not write task state. The `work` skill records your verdict and moves the
 3. **Ambiguity**: Anything implementable in two different ways is a blocking finding.
 4. **Scope**: Is this a single PR-sized deliverable? A spec covering multiple independent modules is a `NEEDS_SPLIT` candidate (see below), not a `NEEDS_REVISION` blocking finding.
 5. **For top-level plans**: Check `blockedBy` dependency correctness and task granularity.
+6. **Language (Mandatory English)**: The specification document (`docs/tasks/<id>-spec.md`), implementation plans, and all `expected_results` MUST be written in **English**. A spec written in Portuguese or another language is a blocking finding requiring revision.
 
 > **Sibling specs**: Only read other specs in `docs/tasks/` if the caller explicitly flags a naming or structural drift concern. Do not scan them proactively.
 

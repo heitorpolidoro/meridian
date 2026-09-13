@@ -65,6 +65,7 @@ report.
 - **One deliverable**: PR-sized unit. When it plainly is not, return `NEEDS_SPLIT` (see below) instead of writing a spec for several deliverables at once.
 - **Concrete, checkable Expected Results**: Every result must be mechanically verifiable (HTTP status, DB constraint, test outcome, UI interaction).
 - **Explicit scope boundaries**: State what the task does NOT include.
+- **Language: Always English**: The spec document (`docs/tasks/<id>-spec.md`), implementation plans, and `expected_results` MUST ALWAYS be written in English, even if the task title, description, or operator prompt is in Portuguese or another language. You may converse with the operator in their detected language, but all documentation artifacts must be in English.
 - **Size discipline**: Prose exceeding roughly one page per subsystem touched is a smell — that belongs in `NEEDS_SPLIT` territory (see "When the Task Needs Splitting Instead of a Spec"), not in a longer spec.
 
 ## What a Spec Contains

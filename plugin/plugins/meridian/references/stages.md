@@ -23,7 +23,7 @@ Enter at step 1 from `backlog`, at step 2 from `spec_review`.
    `expected_results`, the `spec_path` of every task in `blockedBy`, a pointer
    to `AGENTS.md`, and whether this task carries a `parent` (so it knows
    `NEEDS_SPLIT` isn't open to it). It writes
-   `docs/tasks/<id>-spec.md` (and `docs/tasks/<id>-mock.html` if the task touches UI) and returns an `EXPECTED_RESULTS:` block. When it
+   `docs/tasks/<id>-spec.md` (and `docs/tasks/<id>-mock.html` if the task touches UI) and returns an `EXPECTED_RESULTS:` block. All specs and expected results must be authored in English (communication with the user can be in the detected language). When it
    returns, set `running: false` and record `spec_path`, `expected_results`, and `mock_path` (if produced), in one `PUT`.
    - On `VERDICT: NEEDS_SPLIT`, no spec was written — follow "A NEEDS_SPLIT
      verdict" in `pipeline.md` instead of recording a `spec_path`.
