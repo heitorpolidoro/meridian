@@ -250,15 +250,44 @@
                     <ul id="tm-results-list" class="task-results-list"></ul>
                 </div>
 
-                <!-- Spec Document Reader -->
+                <!-- Spec & Mockup Section -->
                 <div id="tm-spec-section" class="task-modal-section">
-                    <div class="task-modal-section-header">
-                        <h4 class="task-modal-section-title">Documento de Especificação (Spec)</h4>
+                    <div class="task-modal-section-header tm-spec-tabs-header">
+                        <div class="tm-tabs">
+                            <button type="button" class="tm-tab tm-tab--active" id="tm-tab-spec">📄 Especificação (Texto)</button>
+                            <button type="button" class="tm-tab" id="tm-tab-mock">🖥️ Mockup Interativo (HTML) <span id="tm-mock-badge" class="tm-tab-pill hidden">Disponível</span></button>
+                        </div>
                         <span id="tm-spec-path" class="tm-spec-path-label"></span>
                     </div>
-                    <div id="tm-spec-loading" class="tm-spec-loading hidden">Carregando documento...</div>
-                    <div id="tm-spec-viewer" class="tm-spec-viewer markdown-body">
-                        <!-- Rendered spec markdown -->
+
+                    <!-- Tab 1: Spec Markdown Content -->
+                    <div id="tm-spec-container">
+                        <div id="tm-spec-loading" class="tm-spec-loading hidden">Carregando documento...</div>
+                        <div id="tm-spec-viewer" class="tm-spec-viewer markdown-body">
+                            <!-- Rendered spec markdown -->
+                        </div>
+                    </div>
+
+                    <!-- Tab 2: Interactive HTML Mockup -->
+                    <div id="tm-mock-container" class="hidden">
+                        <div class="tm-mock-toolbar">
+                            <div class="tm-viewport-controls">
+                                <span class="tm-toolbar-label">Resolução:</span>
+                                <button type="button" class="tm-viewport-btn tm-viewport-btn--active" data-viewport="desktop" title="Visão Desktop (100%)">🖥️ Desktop</button>
+                                <button type="button" class="tm-viewport-btn" data-viewport="tablet" title="Visão Tablet (768px)">📱 Tablet</button>
+                                <button type="button" class="tm-viewport-btn" data-viewport="mobile" title="Visão Mobile (375px)">📱 Mobile</button>
+                            </div>
+                            <div class="tm-mock-actions">
+                                <button type="button" id="tm-mock-reload-btn" class="secondary-btn tm-small-btn" title="Recarregar Mock">🔄 Recarregar</button>
+                                <a id="tm-mock-external-link" href="#" target="_blank" class="secondary-btn tm-small-btn" title="Abrir em Nova Aba">Abrir em Nova Aba ↗</a>
+                            </div>
+                        </div>
+                        <div id="tm-mock-frame-wrapper" class="tm-mock-frame-wrapper viewport-desktop">
+                            <iframe id="tm-mock-iframe" class="tm-mock-iframe" sandbox="allow-scripts allow-same-origin allow-forms allow-modals"></iframe>
+                        </div>
+                        <div id="tm-mock-empty" class="tm-spec-viewer empty hidden">
+                            Nenhum mockup interativo (.html) gerado para esta tarefa ainda.
+                        </div>
                     </div>
                 </div>
             </div>
@@ -277,6 +306,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="app.js?v=41"></script>
+    <script src="app.js?v=42"></script>
 </body>
 </html>

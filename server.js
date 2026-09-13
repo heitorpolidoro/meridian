@@ -493,9 +493,12 @@ app.get('/api/projects/tasks/:taskId', (req, res) => {
         }
 
         let spec_content = null;
+        let mock_path = task.mock_path || null;
+        let has_mock = false;
+        const resolvedProject = path.resolve(projectPath);
+
         if (task.spec_path) {
             try {
-                const resolvedProject = path.resolve(projectPath);
                 const resolvedSpec = path.isAbsolute(task.spec_path)
                     ? path.resolve(task.spec_path)
                     : path.resolve(resolvedProject, task.spec_path);
@@ -508,7 +511,37 @@ app.get('/api/projects/tasks/:taskId', (req, res) => {
             }
         }
 
-        res.json({ task, spec_content });
+        // Detect mock path
+        if (mock_path) {
+            const resolvedMock = path.isAbsolute(mock_path)
+                ? path.resolve(mock_path)
+                : path.resolve(resolvedProject, mock_path);
+            const rel = path.relative(resolvedProject, resolvedMock);
+            if (!rel.startsWith('..') && !path.isAbsolute(rel) && fs.existsSync(resolvedMock)) {
+                has_mock = true;
+            }
+        } else if (task.spec_path) {
+            const candidates = [
+                task.spec_path.replace(/-spec\.md$/i, '-mock.html'),
+                task.spec_path.replace(/\.md$/i, '-mock.html'),
+                task.spec_path.replace(/\.md$/i, '.html')
+            ];
+            for (const candidate of candidates) {
+                if (candidate !== task.spec_path) {
+                    const resolvedCand = path.isAbsolute(candidate)
+                        ? path.resolve(candidate)
+                        : path.resolve(resolvedProject, candidate);
+                    const rel = path.relative(resolvedProject, resolvedCand);
+                    if (!rel.startsWith('..') && !path.isAbsolute(rel) && fs.existsSync(resolvedCand)) {
+                        mock_path = candidate;
+                        has_mock = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        res.json({ task, spec_content, mock_path, has_mock });
     } catch (err) {
         console.error('Error reading task:', err.message);
         res.status(500).json({ error: err.message });
@@ -537,6 +570,71 @@ app.get('/api/projects/spec', (req, res) => {
         res.json({ content, path: specPath });
     } catch (err) {
         console.error('Error reading spec:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Endpoint to serve standalone interactive HTML mockup safely
+app.get('/api/projects/mock', (req, res) => {
+    try {
+        const { projectPath, mockPath } = req.query;
+        if (!projectPath || !mockPath) {
+            return res.status(400).send('projectPath and mockPath are required');
+        }
+        const resolvedProject = path.resolve(projectPath);
+        const resolvedMock = path.isAbsolute(mockPath)
+            ? path.resolve(mockPath)
+            : path.resolve(resolvedProject, mockPath);
+        const rel = path.relative(resolvedProject, resolvedMock);
+        if (rel.startsWith('..') || path.isAbsolute(rel)) {
+            return res.status(403).send('Access denied: mock path outside project');
+        }
+        if (!fs.existsSync(resolvedMock)) {
+            return res.status(404).send('Mockup file not found');
+        }
+        const content = fs.readFileSync(resolvedMock, 'utf8');
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.send(content);
+    } catch (err) {
+        console.error('Error serving mock:', err.message);
+        res.status(500).send(err.message);
+    }
+});
+
+// Endpoint to serve project images and screenshots safely
+app.get('/api/projects/asset', (req, res) => {
+    try {
+        const { projectPath, assetPath } = req.query;
+        if (!projectPath || !assetPath) {
+            return res.status(400).json({ error: 'projectPath and assetPath are required' });
+        }
+        const resolvedProject = path.resolve(projectPath);
+        const resolvedAsset = path.isAbsolute(assetPath)
+            ? path.resolve(assetPath)
+            : path.resolve(resolvedProject, assetPath);
+        const rel = path.relative(resolvedProject, resolvedAsset);
+        if (rel.startsWith('..') || path.isAbsolute(rel)) {
+            return res.status(403).json({ error: 'Access denied: asset path outside project' });
+        }
+        if (!fs.existsSync(resolvedAsset)) {
+            return res.status(404).json({ error: 'Asset file not found' });
+        }
+
+        const ext = path.extname(resolvedAsset).toLowerCase();
+        const mimeTypes = {
+            '.png': 'image/png',
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.svg': 'image/svg+xml',
+            '.webp': 'image/webp',
+            '.gif': 'image/gif',
+            '.ico': 'image/x-icon'
+        };
+        const contentType = mimeTypes[ext] || 'application/octet-stream';
+        res.setHeader('Content-Type', contentType);
+        fs.createReadStream(resolvedAsset).pipe(res);
+    } catch (err) {
+        console.error('Error serving asset:', err.message);
         res.status(500).json({ error: err.message });
     }
 });
@@ -589,6 +687,7 @@ app.post('/api/projects/tasks', (req, res) => {
             expected_results: Array.isArray(expected_results) ? expected_results : [],
             running: false,
             blockedBy: Array.isArray(blockedBy) ? blockedBy : [],
+            ...(req.body.mock_path ? { mock_path: req.body.mock_path } : {}),
             ...(Array.isArray(req.body.questions) ? { questions: req.body.questions } : {}),
             ...(req.body.parent !== undefined && req.body.parent !== null ? { parent: req.body.parent } : {})
         });
@@ -652,7 +751,7 @@ app.put('/api/projects/tasks/:taskId', (req, res) => {
 
         const scalarFields = [
             'status', 'justification', 'title', 'priority', 'spec_path',
-            'spec_iterations', 'code_review_iterations', 'qa_iterations',
+            'mock_path', 'spec_iterations', 'code_review_iterations', 'qa_iterations',
             'resume_context'
         ];
         for (const field of scalarFields) {

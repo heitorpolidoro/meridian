@@ -44,6 +44,7 @@ truncate the file, and never write it from an empty in-memory list.
 | `blockedBy` | array of task ids that must reach `done` first | agent |
 | `parent` | string, id of another task on the same board, optional | agent |
 | `spec_path` | string, e.g. `docs/tasks/MERID-1-spec.md` | agent |
+| `mock_path` | string, e.g. `docs/tasks/MERID-1-mock.html` (interactive UI prototype) | agent |
 | `spec_iterations` | integer, spec revision rounds consumed | agent |
 | `code_review_iterations` | integer, code review revision rounds consumed | agent |
 | `qa_iterations` | integer, QA revision rounds consumed | agent |

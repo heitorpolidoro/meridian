@@ -106,6 +106,17 @@ Behavior, files touched, and test criteria — see "What a Spec Contains" above.
 (if relevant)
 ```
 
+## Interactive HTML Mockups for UI Tasks
+
+When a task introduces, modifies, or redesigns user interfaces, frontend components, or screen workflows, author a **standalone interactive HTML mockup** alongside the Markdown spec:
+
+- **Path:** `docs/tasks/<id>-mock.html`
+- **Zero-build & Self-contained:** Single standalone HTML5 document. Use Tailwind CSS via CDN (`<script src="https://cdn.tailwindcss.com"></script>`) and Lucide Icons (`<script src="https://unpkg.com/lucide@latest"></script>`).
+- **Mock Data Included:** Embed realistic mock JSON data directly in the script or render complete HTML states (populated list, empty state, active filters, or detail modals).
+- **Basic Interactivity:** Include lightweight vanilla JavaScript for interactive tab switching, dropdown toggles, modal open/close, or filter toggling so the human operator can test the visual flow directly in the Meridian task modal before approving the spec.
+- **Screenshots / Diagrams:** If visual diagrams or screenshot references are helpful, link them in the Markdown spec (e.g. `![Mockup](<path>)`). Meridian automatically renders local project images inside the spec reader.
+- Return `MOCK_PATH: docs/tasks/<id>-mock.html` in your report alongside `EXPECTED_RESULTS:`.
+
 For top-level plans: task breakdown with `blockedBy` dependency links, scope summaries, and draft `expected_results`.
 
 ## Your Report Goes to a File

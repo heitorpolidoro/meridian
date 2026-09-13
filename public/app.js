@@ -988,6 +988,9 @@ function renderTaskCardHtml(task, allTasks) {
         }
     }
 
+    const hasMock = Boolean(task.mock_path || task.has_mock);
+    const mockBadge = hasMock ? '<span class="task-mock-pill" title="Possui mockup interativo (HTML)">🖥️ Mock</span>' : '';
+
     // Terminal cards show when they got there: completed_at for done, moved_at
     // for nope — the same timestamps their columns sort and window by.
     const stampRaw = task.status === 'done' ? task.completed_at
@@ -1003,7 +1006,7 @@ function renderTaskCardHtml(task, allTasks) {
     }
     return `
         <div class="task-card${runningClass}" onclick="handleTaskCardClick(event, '${task.id}', '${projPathAttr}')">
-            <div class="task-title">${runningBadge}${projectBadge}${parentBadgeHtml}${progressChipHtml}${questionsBadge}<span class="task-id-code">${taskIdDisplay}</span>${task.title}</div>
+            <div class="task-title">${runningBadge}${projectBadge}${parentBadgeHtml}${progressChipHtml}${mockBadge}${questionsBadge}<span class="task-id-code">${taskIdDisplay}</span>${task.title}</div>
             ${(() => {
                 const move = manualTransition(task.status);
                 if (!move) return '';
@@ -1318,10 +1321,11 @@ window.openTaskModal = async function(taskId, projectPath) {
         window.history.replaceState(null, '', url.pathname + '?' + url.searchParams.toString());
     } catch (e) {}
 
-    renderTaskModalData(currentModalTask, null);
+    switchTaskModalTab('spec');
+    renderTaskModalData(currentModalTask, null, currentModalTask.mock_path, currentModalTask.has_mock);
     if (taskModal) taskModal.classList.remove('hidden');
 
-    // Fetch hydrated task details (and spec_content) from backend
+    // Fetch hydrated task details (and spec_content, mock_path) from backend
     if (currentModalProjPath && currentModalProjPath !== '__GLOBAL__') {
         try {
             const loadingEl = document.getElementById('tm-spec-loading');
@@ -1331,7 +1335,7 @@ window.openTaskModal = async function(taskId, projectPath) {
                 const data = await res.json();
                 if (data.task) {
                     currentModalTask = data.task;
-                    renderTaskModalData(data.task, data.spec_content);
+                    renderTaskModalData(data.task, data.spec_content, data.mock_path, data.has_mock);
                 }
             }
         } catch (err) {
@@ -1343,7 +1347,35 @@ window.openTaskModal = async function(taskId, projectPath) {
     }
 };
 
-function renderTaskModalData(task, specContent) {
+function formatSpecMarkdown(content, projectPath) {
+    if (!content) return '';
+    let html = '';
+    if (window.marked && typeof window.marked.parse === 'function') {
+        html = window.marked.parse(content);
+    } else {
+        html = `<pre><code>${escapeHtml(content)}</code></pre>`;
+    }
+
+    // Rewrite relative image src attributes so they load via /api/projects/asset
+    if (projectPath && html.includes('<img ')) {
+        const div = document.createElement('div');
+        div.innerHTML = html;
+        div.querySelectorAll('img').forEach(img => {
+            const src = img.getAttribute('src');
+            if (src && !src.startsWith('http://') && !src.startsWith('https://') && !src.startsWith('data:') && !src.startsWith('/')) {
+                img.src = `/api/projects/asset?projectPath=${encodeURIComponent(projectPath)}&assetPath=${encodeURIComponent(src)}`;
+                img.style.maxWidth = '100%';
+                img.style.borderRadius = '6px';
+                img.style.marginTop = '0.5rem';
+                img.style.marginBottom = '0.5rem';
+            }
+        });
+        html = div.innerHTML;
+    }
+    return html;
+}
+
+function renderTaskModalData(task, specContent, mockPath, hasMock) {
     const idEl = document.getElementById('tm-id');
     if (idEl) idEl.textContent = task.id ? `[${task.id}]` : '';
 
@@ -1408,11 +1440,7 @@ function renderTaskModalData(task, specContent) {
 
     if (specViewerEl) {
         if (specContent) {
-            if (window.marked && typeof window.marked.parse === 'function') {
-                specViewerEl.innerHTML = window.marked.parse(specContent);
-            } else {
-                specViewerEl.innerHTML = `<pre><code>${escapeHtml(specContent)}</code></pre>`;
-            }
+            specViewerEl.innerHTML = formatSpecMarkdown(specContent, currentModalProjPath);
             specViewerEl.classList.remove('empty');
         } else if (task.spec_path) {
             specViewerEl.innerHTML = `<div class="tm-spec-viewer empty">Documento de especificação (${escapeHtml(task.spec_path)}) ainda não encontrado ou vazio.</div>`;
@@ -1420,6 +1448,39 @@ function renderTaskModalData(task, specContent) {
         } else {
             specViewerEl.innerHTML = `<div class="tm-spec-viewer empty">Nenhuma especificação técnica gerada ainda para esta tarefa.</div>`;
             specViewerEl.classList.add('empty');
+        }
+    }
+
+    // Interactive Mockup setup
+    const mockBadge = document.getElementById('tm-mock-badge');
+    const mockIframe = document.getElementById('tm-mock-iframe');
+    const mockExternalLink = document.getElementById('tm-mock-external-link');
+    const mockEmpty = document.getElementById('tm-mock-empty');
+    const mockFrameWrapper = document.getElementById('tm-mock-frame-wrapper');
+
+    const effectiveMockPath = mockPath || task.mock_path;
+    const effectiveHasMock = Boolean(hasMock || effectiveMockPath);
+
+    if (mockBadge) {
+        if (effectiveHasMock) {
+            mockBadge.classList.remove('hidden');
+        } else {
+            mockBadge.classList.add('hidden');
+        }
+    }
+
+    if (mockIframe && mockExternalLink && mockEmpty && mockFrameWrapper) {
+        if (effectiveHasMock && effectiveMockPath && currentModalProjPath) {
+            const mockUrl = `/api/projects/mock?projectPath=${encodeURIComponent(currentModalProjPath)}&mockPath=${encodeURIComponent(effectiveMockPath)}`;
+            mockIframe.src = mockUrl;
+            mockExternalLink.href = mockUrl;
+            mockEmpty.classList.add('hidden');
+            mockFrameWrapper.classList.remove('hidden');
+        } else {
+            mockIframe.src = 'about:blank';
+            mockExternalLink.href = '#';
+            mockEmpty.classList.remove('hidden');
+            mockFrameWrapper.classList.add('hidden');
         }
     }
 
@@ -1662,11 +1723,61 @@ if (taskModal) {
         if (e.target === taskModal) closeTaskModal();
     });
 }
+// Spec vs Mockup Tab Switching
+function switchTaskModalTab(tabName) {
+    const tabSpec = document.getElementById('tm-tab-spec');
+    const tabMock = document.getElementById('tm-tab-mock');
+    const specContainer = document.getElementById('tm-spec-container');
+    const mockContainer = document.getElementById('tm-mock-container');
+
+    if (tabName === 'mock') {
+        if (tabSpec) tabSpec.classList.remove('tm-tab--active');
+        if (tabMock) tabMock.classList.add('tm-tab--active');
+        if (specContainer) specContainer.classList.add('hidden');
+        if (mockContainer) mockContainer.classList.remove('hidden');
+    } else {
+        if (tabSpec) tabSpec.classList.add('tm-tab--active');
+        if (tabMock) tabMock.classList.remove('tm-tab--active');
+        if (specContainer) specContainer.classList.remove('hidden');
+        if (mockContainer) mockContainer.classList.add('hidden');
+    }
+}
+
+const tabSpecBtn = document.getElementById('tm-tab-spec');
+const tabMockBtn = document.getElementById('tm-tab-mock');
+if (tabSpecBtn) tabSpecBtn.addEventListener('click', () => switchTaskModalTab('spec'));
+if (tabMockBtn) tabMockBtn.addEventListener('click', () => switchTaskModalTab('mock'));
+
+// Viewport controls for Mockup viewer
+document.querySelectorAll('.tm-viewport-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.tm-viewport-btn').forEach(b => b.classList.remove('tm-viewport-btn--active'));
+        btn.classList.add('tm-viewport-btn--active');
+        const viewport = btn.dataset.viewport;
+        const wrapper = document.getElementById('tm-mock-frame-wrapper');
+        if (wrapper) {
+            wrapper.className = `tm-mock-frame-wrapper viewport-${viewport}`;
+        }
+    });
+});
+
+// Mockup Reload Button
+const mockReloadBtn = document.getElementById('tm-mock-reload-btn');
+if (mockReloadBtn) {
+    mockReloadBtn.addEventListener('click', () => {
+        const iframe = document.getElementById('tm-mock-iframe');
+        if (iframe && iframe.src && iframe.src !== 'about:blank') {
+            iframe.src = iframe.src;
+        }
+    });
+}
+
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && taskModal && !taskModal.classList.contains('hidden')) {
         closeTaskModal();
     }
 });
+
 
 
 /* =========================================
