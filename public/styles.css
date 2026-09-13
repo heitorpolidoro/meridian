@@ -966,10 +966,10 @@ body:not([data-view="dashboard"]) #error-container {
     gap: 0.8rem;
 }
 
-/* Custom styled scrollbars - sleek dark modern style across all scrollable containers */
+/* Custom styled scrollbars - seamless integration with Meridian dark palette */
 * {
     scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+    scrollbar-color: #3f3f46 transparent;
 }
 
 ::-webkit-scrollbar {
@@ -982,12 +982,12 @@ body:not([data-view="dashboard"]) #error-container {
 }
 
 ::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.18);
+    background: #3f3f46;
     border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.35);
+    background: #52525b;
 }
 
 ::-webkit-scrollbar-corner {
