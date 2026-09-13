@@ -966,28 +966,32 @@ body:not([data-view="dashboard"]) #error-container {
     gap: 0.8rem;
 }
 
-/* Custom styled scrollbars for Kanban board & columns */
-.kanban-board::-webkit-scrollbar,
-.kanban-tasks::-webkit-scrollbar {
+/* Custom styled scrollbars - sleek dark modern style across all scrollable containers */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+::-webkit-scrollbar {
     width: 6px;
-    height: 8px;
+    height: 6px;
 }
 
-.kanban-board::-webkit-scrollbar-track,
-.kanban-tasks::-webkit-scrollbar-track {
-    background: rgba(0, 0, 0, 0.15);
-    border-radius: 4px;
+::-webkit-scrollbar-track {
+    background: transparent;
 }
 
-.kanban-board::-webkit-scrollbar-thumb,
-.kanban-tasks::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 4px;
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.18);
+    border-radius: 999px;
 }
 
-.kanban-board::-webkit-scrollbar-thumb:hover,
-.kanban-tasks::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.4);
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.35);
+}
+
+::-webkit-scrollbar-corner {
+    background: transparent;
 }
 
 .task-card {
