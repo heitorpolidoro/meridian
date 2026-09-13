@@ -203,6 +203,80 @@
         </div>
     </div>
 
-    <script src="app.js?v=40"></script>
+    <!-- Task Detail Modal (Centered) -->
+    <div id="task-modal" class="modal-overlay hidden">
+        <div class="modal-content task-modal-content">
+            <div class="modal-header task-modal-header">
+                <div class="task-modal-title-area">
+                    <div class="task-modal-tags">
+                        <span id="tm-id" class="task-id-code"></span>
+                        <span id="tm-status" class="task-status-badge"></span>
+                        <span id="tm-priority" class="task-priority-badge"></span>
+                        <span id="tm-project" class="project-tag-badge"></span>
+                    </div>
+                    <h2 id="tm-title">Task Title</h2>
+                </div>
+                <button type="button" class="close-modal-btn" id="close-task-modal-btn" aria-label="Close modal">&times;</button>
+            </div>
+
+            <div class="task-modal-body">
+                <!-- Description / Justification -->
+                <div id="tm-desc-section" class="task-modal-section hidden">
+                    <h4 class="task-modal-section-title">Contexto & Descrição</h4>
+                    <div id="tm-desc" class="task-modal-desc-box"></div>
+                </div>
+
+                <!-- Questions & Answers -->
+                <div id="tm-questions-section" class="task-modal-section">
+                    <div class="task-modal-section-header">
+                        <h4 class="task-modal-section-title">Perguntas & Respostas da IA <span id="tm-questions-count" class="tm-count-badge">0</span></h4>
+                        <button type="button" id="tm-add-question-btn" class="secondary-btn tm-small-btn">+ Nova Pergunta</button>
+                    </div>
+                    <div id="tm-new-question-box" class="tm-new-question-box hidden">
+                        <textarea id="tm-new-question-input" placeholder="Digite uma nova pergunta ou observação para a IA..." rows="2"></textarea>
+                        <div class="tm-new-question-actions">
+                            <button type="button" id="tm-cancel-new-question-btn" class="secondary-btn tm-small-btn">Cancelar</button>
+                            <button type="button" id="tm-save-new-question-btn" class="primary-btn tm-small-btn">Adicionar</button>
+                        </div>
+                    </div>
+                    <div id="tm-questions-list" class="task-questions-list">
+                        <!-- Questions injected dynamically -->
+                    </div>
+                </div>
+
+                <!-- Expected Results (if any) -->
+                <div id="tm-results-section" class="task-modal-section hidden">
+                    <h4 class="task-modal-section-title">Critérios de Aceite (Expected Results)</h4>
+                    <ul id="tm-results-list" class="task-results-list"></ul>
+                </div>
+
+                <!-- Spec Document Reader -->
+                <div id="tm-spec-section" class="task-modal-section">
+                    <div class="task-modal-section-header">
+                        <h4 class="task-modal-section-title">Documento de Especificação (Spec)</h4>
+                        <span id="tm-spec-path" class="tm-spec-path-label"></span>
+                    </div>
+                    <div id="tm-spec-loading" class="tm-spec-loading hidden">Carregando documento...</div>
+                    <div id="tm-spec-viewer" class="tm-spec-viewer markdown-body">
+                        <!-- Rendered spec markdown -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="task-modal-footer">
+                <div class="tm-footer-left">
+                    <button type="button" class="secondary-btn" id="tm-close-footer-btn">Fechar</button>
+                    <button type="button" class="secondary-btn" id="tm-save-answers-btn">Salvar Respostas</button>
+                </div>
+                <div class="tm-footer-right">
+                    <button type="button" class="secondary-btn tm-action-btn hidden" id="tm-request-changes-btn" style="border-color: #f59e0b; color: #fbbf24;">Pedir Ajuste à IA ↩</button>
+                    <button type="button" class="primary-btn tm-action-btn hidden" id="tm-approve-spec-btn" style="background: #10b981;">Aprovar Spec ✅</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="app.js?v=41"></script>
 </body>
 </html>

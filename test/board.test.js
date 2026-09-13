@@ -37,7 +37,7 @@ test('a null window means show everything', () => {
 const { manualTransition } = require('../lib/board');
 
 test('a task in any working status may be noped', () => {
-    for (const s of ['backlog','spec_review','ready_todo','in_progress','code_review','qa_review','blocked']) {
+    for (const s of ['backlog','spec_review','spec_approval','ready_todo','in_progress','code_review','qa_review','blocked']) {
         assert.deepEqual(manualTransition(s), { to: 'nope', label: 'Nope' }, `failed for ${s}`);
     }
 });

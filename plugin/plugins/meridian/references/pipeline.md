@@ -26,6 +26,7 @@ the beginning.
 |---|---|---|---|
 | `backlog` | `meridian:spec-generator` | title is non-empty | ask the operator for one |
 | `spec_review` | `meridian:spec-reviewer` | `spec_path` is set **and the file exists** | the spec was never written — go back to `backlog` |
+| `spec_approval` | **Human Gate** (not auto-dispatched) | spec exists; awaits human review & questions | Operator approves to `ready_todo` or requests changes to `spec_review` |
 | `ready_todo` | `meridian:developer` | spec file exists; `expected_results` non-empty (fetch it from `GET /api/projects/tasks/:taskId` — the board fetch doesn't carry it); every `blockedBy` id is `done` | missing spec or results → back to `backlog`. Unmet dependency → move to `blocked` |
 | `in_progress` | `meridian:developer` (re-dispatch) | same as `ready_todo` | same as `ready_todo`, plus the resumption briefing |
 | `code_review` | `meridian:code-reviewer` | there is something to review (`git diff --stat` against the task's base is non-empty) | the developer never ran — go back to `ready_todo` |

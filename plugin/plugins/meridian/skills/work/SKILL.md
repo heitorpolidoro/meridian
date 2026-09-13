@@ -123,6 +123,7 @@ what was missing and where the task went; a pass earns nothing.
 |---|---|
 | `backlog` | dispatch `meridian:spec-generator` |
 | `spec_review` | dispatch `meridian:spec-reviewer` |
+| `spec_approval` | **Do not start.** Awaits human review & sign-off on Kanban card. Report that the task is waiting in `spec_approval`, and stop. |
 | `ready_todo` | dispatch `meridian:developer` |
 | `in_progress` | dispatch `meridian:developer` **with the resumption briefing** (section 6) |
 | `code_review` | dispatch `meridian:code-reviewer` |
@@ -135,15 +136,15 @@ carrying it was interrupted. Say so, then enter at its `status` row above.
 
 ## 5. One invocation carries the task as far as it goes
 
-A task flows through **consecutive stages in a single invocation**. It does not
-stop at a stage boundary waiting to be invoked again. A `backlog` task runs all
-the spec stages and continues straight into the build stages without a second call to this
-skill; a `ready_todo` task runs implementation, code review and QA, is committed,
+A task flows through consecutive stages until it reaches a human gate or terminal state.
+A `backlog` task runs spec generation and spec review, landing in `spec_approval` where
+it pauses for the operator to review the spec and answer questions. Once approved by the
+operator into `ready_todo`, an invocation runs implementation, code review and QA, is committed,
 and lands in `done`.
 
-Stop only where `pipeline.md` says to stop: the task reaches `done`,
-or it lands in `blocked` — by the iteration cap, by the stagnation check, or by
-a specialist failure. Report where it ended and why.
+Stop only where `pipeline.md` says to stop: the task lands in `spec_approval` (awaiting
+human validation), reaches `done`, or lands in `blocked` — by the iteration cap, by the
+stagnation check, or by a specialist failure. Report where it ended and why.
 
 **One task at a time.** Never drive two tasks concurrently.
 

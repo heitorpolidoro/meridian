@@ -47,8 +47,14 @@ Enter at step 1 from `backlog`, at step 2 from `spec_review`.
    - On `VERDICT: NEEDS_SPLIT`, follow "A NEEDS_SPLIT verdict" in
      `pipeline.md`.
 
-3. **On `APPROVED`:** move the task to `ready_todo` and clear
-   `last_review_findings` to `[]` in the same update. The task is now ready to build.
+3. **On `APPROVED`:** move the task to `spec_approval` and clear
+   `last_review_findings` to `[]` in the same update. If either the generator or reviewer
+   formulated questions for the operator, ensure they are recorded in the `questions` array.
+   The task now awaits human approval:
+   - The operator opens the card in the centered modal on the Kanban board, reads the spec,
+     answers any open questions, and clicks **Aprovar Spec** (moving it to `ready_todo`) or
+     **Pedir Ajuste à IA** (moving it back to `spec_review`).
+   - The automated pipeline stops here and does not auto-advance to implementation.
    (No unblocking sweep here — dependents wait for `done`, not for an approved
    spec.)
 

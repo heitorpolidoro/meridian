@@ -36,10 +36,11 @@ truncate the file, and never write it from an empty in-memory list.
 |---|---|---|
 | `id` | string, `<KEY>-<N>` | **server only** — generated on create |
 | `title` | string, short imperative | agent, on create and via update |
-| `status` | string, one of the nine below | agent |
+| `status` | string, one of the ten below | agent / human |
 | `priority` | string, one of the four below | agent (defaults to `medium`) |
 | `justification` | string — why the task is blocked, or why it exists | agent |
 | `expected_results` | array of strings — concrete, mechanically verifiable outcomes | agent — detail file, not present in `GET /api/status` |
+| `questions` | array of objects: `[{ id, question, answer, by, created_at, answered_at }]` | agent / human |
 | `blockedBy` | array of task ids that must reach `done` first | agent |
 | `parent` | string, id of another task on the same board, optional | agent |
 | `spec_path` | string, e.g. `docs/tasks/MERID-1-spec.md` | agent |
@@ -58,29 +59,25 @@ The four timestamps are stamped by the server and **must never be written by an
 agent**. `created_at` is set once on creation. `updated_at` is set on every
 write. `moved_at` is set on every status change. `completed_at` is set when the
 status enters `done` and set back to `null` when it leaves `done`. Sending any
-of these four in a request body has no effect — the server overwrites them.
+of them in a write is refused by the server with HTTP 400.
 
-`blockedBy` is the primary reason a task is `blocked`; that dependency is
-sufficient justification on its own (e.g. `justification: "Blocked on MERID-3"`).
+An empty string is not a valid value for any string field. If a field has no
+value, omit it (on create) or do not mention it in the update payload.
 
-`parent` links a task to another task on the same board as its sub-task.
-Nesting is capped at **one level**: the server rejects a write with `HTTP 400`
-when the referenced parent does not exist on the same board, when the
-referenced parent itself already has a `parent`, when the task being written
-already has children (other tasks naming it as `parent`), or when a task
-names itself as its own parent. Sending `"parent": null` on update clears the
-field. No `subtasks`/`children` array is ever stored on the parent — anything
-that needs a task's children derives them by filtering the task list on
-`parent` at read time.
+A newly created task has no `spec_path`, no `spec_iterations`, no
+`code_review_iterations`, no `qa_iterations`, no `last_review_findings`, no
+`parent`, no `resume_context` and `blockedBy: []`. If it was created in `backlog`,
+it also has no `expected_results` — authoring them is the generator's job, not the
+creator's. A task created straight into `ready_todo` without them is a broken
+task; the `pipeline.md` stage check will send it back to `backlog` on sight.
 
-**`blockedBy` gates implementation, not specification.** A task with open
-dependencies is still specced and reaches `ready_todo` — writing its spec needs
-the *specs* of what it depends on, not their finished code. It becomes `blocked`
-only when the developer would be dispatched with a dependency not yet `done`, and the
+A task retains its `spec_path` through every stage that follows `spec_review`.
+Even when blocked, the spec stays: moving a task to `blocked` because a
+dependency is unmet does not invalidate the work already done on it, and the
 unblocking sweep returns it to `ready_todo`, spec intact. See
 `references/pipeline.md`.
 
-A task may be created in **any** of the nine statuses, and the create endpoint
+A task may be created in **any** of the ten statuses, and the create endpoint
 honours it — work that was already finished is recorded as `done`, not walked
 through the pipeline to get there. `backlog` is only the default. What a later
 status does *not* do is conjure the artefacts that status implies: a task created
@@ -90,15 +87,16 @@ the gaps.
 
 Never delete a task. Move it to `nope` instead.
 
-## The nine statuses
+## The ten statuses
 
-`status` must be **exactly** one of these nine lowercase strings. They carry no
+`status` must be **exactly** one of these ten lowercase strings. They carry no
 spaces and no slashes. Do not invent new statuses or use synonyms like
 `pending`, `todo`, `completed`, `in progress` or `qa/review`.
 
 - `backlog`: Task is planned but not ready to be worked on yet.
 - `spec_review`: Task needs specification or design review.
-- `ready_todo`: Task is fully specified and ready to be picked up.
+- `spec_approval`: Spec and Q&A awaiting human validation and approval.
+- `ready_todo`: Task is fully specified and ready to be picked up by developer.
 - `in_progress`: Task is currently being worked on by developer.
 - `code_review`: Task code is being reviewed for architecture, security, and test quality.
 - `qa_review`: Task is being verified independently by QA against expected results.

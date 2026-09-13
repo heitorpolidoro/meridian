@@ -88,7 +88,7 @@ function migrateProjects() {
 migrateProjects();
 
 const VALID_STATUSES = [
-    'backlog', 'spec_review', 'ready_todo', 'in_progress', 'code_review',
+    'backlog', 'spec_review', 'spec_approval', 'ready_todo', 'in_progress', 'code_review',
     'qa_review', 'blocked', 'done', 'nope'
 ];
 const PRIORITY_ORDER = ['critical', 'high', 'medium', 'low'];
@@ -118,6 +118,9 @@ function validateTaskFields(body) {
     // the wrong type is refused.
     if (body.expected_results !== undefined && !Array.isArray(body.expected_results)) {
         return `Invalid expected_results: expected an array, got ${body.expected_results === null ? 'null' : typeof body.expected_results}. Omit the field to leave it unchanged.`;
+    }
+    if (body.questions !== undefined && !Array.isArray(body.questions)) {
+        return `Invalid questions: expected an array, got ${body.questions === null ? 'null' : typeof body.questions}. Omit the field to leave it unchanged.`;
     }
     return null;
 }
@@ -488,9 +491,52 @@ app.get('/api/projects/tasks/:taskId', (req, res) => {
         if (!task) {
             return res.status(404).json({ error: 'Task not found' });
         }
-        res.json({ task });
+
+        let spec_content = null;
+        if (task.spec_path) {
+            try {
+                const resolvedProject = path.resolve(projectPath);
+                const resolvedSpec = path.isAbsolute(task.spec_path)
+                    ? path.resolve(task.spec_path)
+                    : path.resolve(resolvedProject, task.spec_path);
+                const rel = path.relative(resolvedProject, resolvedSpec);
+                if (!rel.startsWith('..') && !path.isAbsolute(rel) && fs.existsSync(resolvedSpec)) {
+                    spec_content = fs.readFileSync(resolvedSpec, 'utf8');
+                }
+            } catch (e) {
+                // Ignore failure to read spec
+            }
+        }
+
+        res.json({ task, spec_content });
     } catch (err) {
         console.error('Error reading task:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Endpoint to read Markdown spec content safely within the project folder
+app.get('/api/projects/spec', (req, res) => {
+    try {
+        const { projectPath, specPath } = req.query;
+        if (!projectPath || !specPath) {
+            return res.status(400).json({ error: 'projectPath and specPath are required' });
+        }
+        const resolvedProject = path.resolve(projectPath);
+        const resolvedSpec = path.isAbsolute(specPath)
+            ? path.resolve(specPath)
+            : path.resolve(resolvedProject, specPath);
+        const rel = path.relative(resolvedProject, resolvedSpec);
+        if (rel.startsWith('..') || path.isAbsolute(rel)) {
+            return res.status(403).json({ error: 'Access denied: spec path outside project' });
+        }
+        if (!fs.existsSync(resolvedSpec)) {
+            return res.status(404).json({ error: 'Spec file not found' });
+        }
+        const content = fs.readFileSync(resolvedSpec, 'utf8');
+        res.json({ content, path: specPath });
+    } catch (err) {
+        console.error('Error reading spec:', err.message);
         res.status(500).json({ error: err.message });
     }
 });
@@ -543,6 +589,7 @@ app.post('/api/projects/tasks', (req, res) => {
             expected_results: Array.isArray(expected_results) ? expected_results : [],
             running: false,
             blockedBy: Array.isArray(blockedBy) ? blockedBy : [],
+            ...(Array.isArray(req.body.questions) ? { questions: req.body.questions } : {}),
             ...(req.body.parent !== undefined && req.body.parent !== null ? { parent: req.body.parent } : {})
         });
 
@@ -621,6 +668,9 @@ app.put('/api/projects/tasks/:taskId', (req, res) => {
         }
         if (req.body.last_review_findings !== undefined) {
             task.last_review_findings = Array.isArray(req.body.last_review_findings) ? req.body.last_review_findings : [];
+        }
+        if (req.body.questions !== undefined) {
+            task.questions = Array.isArray(req.body.questions) ? req.body.questions : [];
         }
         if (req.body.parent === null) {
             delete task.parent;

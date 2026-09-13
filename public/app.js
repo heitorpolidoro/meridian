@@ -1,6 +1,7 @@
 const KANBAN_STATUSES = [
     { id: 'backlog', label: 'Backlog' },
     { id: 'spec_review', label: 'Spec Review' },
+    { id: 'spec_approval', label: 'Spec Approval' },
     { id: 'ready_todo', label: 'Ready to Do' },
     { id: 'in_progress', label: 'In Progress' },
     { id: 'code_review', label: 'Code Review' },
@@ -11,13 +12,14 @@ const KANBAN_STATUSES = [
 ];
 
 const STATUS_PRIORITY = {
-    'blocked': 7,
-    'pending': 7,
-    'qa_review': 6,
-    'code_review': 5,
-    'in_progress': 4,
-    'ready_todo': 3,
-    'todo': 3,
+    'blocked': 8,
+    'pending': 8,
+    'qa_review': 7,
+    'code_review': 6,
+    'in_progress': 5,
+    'ready_todo': 4,
+    'todo': 4,
+    'spec_approval': 3,
     'spec_review': 2,
     'backlog': 1
 };
@@ -58,7 +60,7 @@ function isRecentlyDismissed(task, windowDays, now = new Date()) {
 // offers a human; every other transition belongs to the pipeline, driven
 // through the API by meridian:work. lib/board.js is the source of truth.
 const WORKING_STATUSES = [
-    'backlog', 'spec_review', 'ready_todo', 'in_progress',
+    'backlog', 'spec_review', 'spec_approval', 'ready_todo', 'in_progress',
     'code_review', 'qa_review', 'blocked'
 ];
 
@@ -715,6 +717,13 @@ function handleUrlRouting() {
             showFlashMessage(`No project at /${route.slug}`, 'error');
             history.replaceState(null, '', '/');
     }
+
+    const taskParam = new URLSearchParams(window.location.search).get('task');
+    if (taskParam) {
+        openTaskModal(taskParam);
+    } else if (taskModal && !taskModal.classList.contains('hidden')) {
+        closeTaskModal(false);
+    }
 }
 
 // Swaps the visible view. The first call removes the cold-load placeholder;
@@ -942,8 +951,9 @@ function renderRunningTickets(tasks) {
         const projBadge = task.projectName
             ? `<span class="running-ticket-proj">· ${task.projectName}</span>`
             : '';
+        const projPathAttr = task.projectPath ? task.projectPath.replace(/\\/g, '\\\\').replace(/'/g, "\\'") : '';
         return `
-            <div class="running-ticket-card" title="${task.title}">
+            <div class="running-ticket-card" title="${task.title}" onclick="openTaskModal('${task.id}', '${projPathAttr}')" style="cursor: pointer;">
                 <div class="running-ticket-id">${task.id || ''}</div>
                 <div class="running-ticket-title">${task.title}</div>
                 <div class="running-ticket-meta">
@@ -959,7 +969,6 @@ function renderTaskCardHtml(task, allTasks) {
     const taskIdDisplay = task.id ? `[${task.id}] ` : '';
     const projPathAttr = task.projectPath ? task.projectPath.replace(/\\/g, '\\\\').replace(/'/g, "\\'") : '';
     const projectBadge = task.projectName ? `<span class="project-tag-badge" title="${task.projectName}">${task.projectName}</span>` : '';
-    const uid = `j-${task.id}`.replace(/[^a-zA-Z0-9\-]/g, '_');
     const runningClass = task.running ? ' task-card--running' : '';
     const runningBadge = task.running ? '<span class="running-inline-dot" title="Agent is working on this task"></span>' : '';
     const parentBadgeLabel = parentBadge(task);
@@ -968,6 +977,17 @@ function renderTaskCardHtml(task, allTasks) {
         ? `<span class="task-parent-badge" title="Parent task ${task.parent}">${parentBadgeLabel}</span>` : '';
     const progressChipHtml = progress !== null
         ? `<span class="task-progress-chip" title="Sub-tasks done">${progress.done}/${progress.total}</span>` : '';
+
+    let questionsBadge = '';
+    if (task.questions && task.questions.length > 0) {
+        const unanswered = task.questions.filter(q => !q.answer || !q.answer.trim()).length;
+        if (unanswered > 0) {
+            questionsBadge = `<span class="task-questions-pill" title="${unanswered} pergunta(s) da IA aguardando resposta">❓ ${unanswered}</span>`;
+        } else {
+            questionsBadge = `<span class="task-questions-pill" style="color: #34d399; background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.35);" title="Perguntas respondidas">💬 ${task.questions.length}</span>`;
+        }
+    }
+
     // Terminal cards show when they got there: completed_at for done, moved_at
     // for nope — the same timestamps their columns sort and window by.
     const stampRaw = task.status === 'done' ? task.completed_at
@@ -982,14 +1002,8 @@ function renderTaskCardHtml(task, allTasks) {
         }
     }
     return `
-        <div class="task-card${runningClass}">
-            <div class="task-title">${runningBadge}${projectBadge}${parentBadgeHtml}${progressChipHtml}<span class="task-id-code">${taskIdDisplay}</span>${task.title}</div>
-            ${task.justification ? `
-            <div class="task-justification-toggle" onclick="toggleJustification('${uid}', this)" title="Show/hide details">
-                <span class="toggle-arrow">▶</span> <em>details</em>
-            </div>
-            <div class="task-justification" id="${uid}">${task.justification}</div>
-            ` : ''}
+        <div class="task-card${runningClass}" onclick="handleTaskCardClick(event, '${task.id}', '${projPathAttr}')">
+            <div class="task-title">${runningBadge}${projectBadge}${parentBadgeHtml}${progressChipHtml}${questionsBadge}<span class="task-id-code">${taskIdDisplay}</span>${task.title}</div>
             ${(() => {
                 const move = manualTransition(task.status);
                 if (!move) return '';
@@ -1244,6 +1258,415 @@ window.changeTaskStatus = async function(taskId, newStatusId, targetProjPath) {
         refreshProjectView(); // Revert UI
     }
 };
+
+/* =========================================
+   Task Detail Modal Logic (Centered Modal)
+   ========================================= */
+
+let currentModalTask = null;
+let currentModalProjPath = null;
+
+const taskModal = document.getElementById('task-modal');
+const closeTaskModalBtn = document.getElementById('close-task-modal-btn');
+const closeTaskModalFooterBtn = document.getElementById('tm-close-footer-btn');
+const tmSaveAnswersBtn = document.getElementById('tm-save-answers-btn');
+const tmRequestChangesBtn = document.getElementById('tm-request-changes-btn');
+const tmApproveSpecBtn = document.getElementById('tm-approve-spec-btn');
+const tmAddQuestionBtn = document.getElementById('tm-add-question-btn');
+const tmNewQuestionBox = document.getElementById('tm-new-question-box');
+const tmNewQuestionInput = document.getElementById('tm-new-question-input');
+const tmCancelNewQuestionBtn = document.getElementById('tm-cancel-new-question-btn');
+const tmSaveNewQuestionBtn = document.getElementById('tm-save-new-question-btn');
+
+function statusBadgeText(status) {
+    const s = KANBAN_STATUSES.find(st => st.id === status);
+    return s ? s.label : (status || '');
+}
+
+window.handleTaskCardClick = function(event, taskId, projectPath) {
+    if (event.target.closest('.task-actions') || event.target.closest('button') || event.target.closest('a')) {
+        return;
+    }
+    openTaskModal(taskId, projectPath);
+};
+
+window.openTaskModal = async function(taskId, projectPath) {
+    let projPath = projectPath || currentProjectViewPath;
+    let task = null;
+
+    // Search task in memory across registered projects
+    if (currentProjectsData && currentProjectsData.length > 0) {
+        for (const p of currentProjectsData) {
+            if (!projPath || p.path === projPath) {
+                const found = (p.tasks || []).find(t => t.id === taskId);
+                if (found) {
+                    task = found;
+                    if (!projPath) projPath = p.path;
+                    break;
+                }
+            }
+        }
+    }
+
+    currentModalTask = task ? { ...task } : { id: taskId, title: 'Carregando...', status: 'backlog' };
+    currentModalProjPath = projPath || (task && task.projectPath) || '';
+
+    // Update URL with ?task=<id>
+    try {
+        const url = new URL(window.location);
+        url.searchParams.set('task', taskId);
+        window.history.replaceState(null, '', url.pathname + '?' + url.searchParams.toString());
+    } catch (e) {}
+
+    renderTaskModalData(currentModalTask, null);
+    if (taskModal) taskModal.classList.remove('hidden');
+
+    // Fetch hydrated task details (and spec_content) from backend
+    if (currentModalProjPath && currentModalProjPath !== '__GLOBAL__') {
+        try {
+            const loadingEl = document.getElementById('tm-spec-loading');
+            if (loadingEl) loadingEl.classList.remove('hidden');
+            const res = await fetch(`/api/projects/tasks/${taskId}?project=${encodeURIComponent(currentModalProjPath)}`);
+            if (res.ok) {
+                const data = await res.json();
+                if (data.task) {
+                    currentModalTask = data.task;
+                    renderTaskModalData(data.task, data.spec_content);
+                }
+            }
+        } catch (err) {
+            console.error('Error fetching task details:', err);
+        } finally {
+            const loadingEl = document.getElementById('tm-spec-loading');
+            if (loadingEl) loadingEl.classList.add('hidden');
+        }
+    }
+};
+
+function renderTaskModalData(task, specContent) {
+    const idEl = document.getElementById('tm-id');
+    if (idEl) idEl.textContent = task.id ? `[${task.id}]` : '';
+
+    const statusEl = document.getElementById('tm-status');
+    if (statusEl) {
+        statusEl.textContent = statusBadgeText(task.status);
+        statusEl.className = `task-status-badge status-${task.status}`;
+    }
+
+    const priorityEl = document.getElementById('tm-priority');
+    if (priorityEl) {
+        priorityEl.textContent = (task.priority || 'medium').toUpperCase();
+        priorityEl.className = `task-priority-badge priority-${task.priority || 'medium'}`;
+    }
+
+    const projectEl = document.getElementById('tm-project');
+    if (projectEl) {
+        if (task.projectName) {
+            projectEl.textContent = task.projectName;
+            projectEl.classList.remove('hidden');
+        } else {
+            projectEl.classList.add('hidden');
+        }
+    }
+
+    const titleEl = document.getElementById('tm-title');
+    if (titleEl) titleEl.textContent = task.title || '';
+
+    // Description / Justification
+    const descSection = document.getElementById('tm-desc-section');
+    const descBox = document.getElementById('tm-desc');
+    if (descSection && descBox) {
+        if (task.justification && task.justification.trim()) {
+            descBox.textContent = task.justification;
+            descSection.classList.remove('hidden');
+        } else {
+            descSection.classList.add('hidden');
+        }
+    }
+
+    // Expected Results
+    const resultsSection = document.getElementById('tm-results-section');
+    const resultsList = document.getElementById('tm-results-list');
+    if (resultsSection && resultsList) {
+        if (task.expected_results && task.expected_results.length > 0) {
+            resultsList.innerHTML = task.expected_results.map(r => `<li>${escapeHtml(r)}</li>`).join('');
+            resultsSection.classList.remove('hidden');
+        } else {
+            resultsSection.classList.add('hidden');
+        }
+    }
+
+    // Questions & Answers
+    renderTaskQuestions(task.questions || []);
+
+    // Spec document
+    const specPathEl = document.getElementById('tm-spec-path');
+    const specViewerEl = document.getElementById('tm-spec-viewer');
+    if (specPathEl) {
+        specPathEl.textContent = task.spec_path || 'Nenhum caminho de spec registrado';
+    }
+
+    if (specViewerEl) {
+        if (specContent) {
+            if (window.marked && typeof window.marked.parse === 'function') {
+                specViewerEl.innerHTML = window.marked.parse(specContent);
+            } else {
+                specViewerEl.innerHTML = `<pre><code>${escapeHtml(specContent)}</code></pre>`;
+            }
+            specViewerEl.classList.remove('empty');
+        } else if (task.spec_path) {
+            specViewerEl.innerHTML = `<div class="tm-spec-viewer empty">Documento de especificação (${escapeHtml(task.spec_path)}) ainda não encontrado ou vazio.</div>`;
+            specViewerEl.classList.add('empty');
+        } else {
+            specViewerEl.innerHTML = `<div class="tm-spec-viewer empty">Nenhuma especificação técnica gerada ainda para esta tarefa.</div>`;
+            specViewerEl.classList.add('empty');
+        }
+    }
+
+    // Status action buttons
+    const isApproval = task.status === 'spec_approval';
+    const isSpecReview = task.status === 'spec_review';
+
+    if (tmRequestChangesBtn && tmApproveSpecBtn) {
+        if (isApproval || isSpecReview) {
+            tmRequestChangesBtn.classList.remove('hidden');
+            tmApproveSpecBtn.classList.remove('hidden');
+            if (isApproval) {
+                tmRequestChangesBtn.textContent = 'Pedir Ajuste à IA ↩';
+                tmApproveSpecBtn.textContent = 'Aprovar Spec ✅';
+            } else {
+                tmRequestChangesBtn.textContent = 'Ajustar Perguntas';
+                tmApproveSpecBtn.textContent = 'Aprovar Spec Direto ✅';
+            }
+        } else {
+            tmRequestChangesBtn.classList.add('hidden');
+            tmApproveSpecBtn.classList.add('hidden');
+        }
+    }
+}
+
+function renderTaskQuestions(questions) {
+    const list = document.getElementById('tm-questions-list');
+    const countEl = document.getElementById('tm-questions-count');
+    if (countEl) countEl.textContent = questions.length;
+    if (!list) return;
+
+    if (!questions || questions.length === 0) {
+        list.innerHTML = '<div class="task-question-empty">Nenhuma pergunta da IA registrada para esta tarefa.</div>';
+        return;
+    }
+
+    list.innerHTML = questions.map((q, idx) => {
+        const qid = q.id || `q-${idx}`;
+        const by = q.by || 'IA';
+        const hasUnanswered = !q.answer || !q.answer.trim();
+        const dateStr = q.created_at ? new Date(q.created_at).toLocaleDateString(undefined, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+        return `
+            <div class="task-question-card ${hasUnanswered ? 'has-unanswered' : ''}">
+                <div class="task-question-meta">
+                    <span class="task-question-by">De: ${escapeHtml(by)}</span>
+                    <span class="task-question-date">${dateStr}</span>
+                </div>
+                <div class="task-question-text">${escapeHtml(q.question)}</div>
+                <div class="task-answer-area">
+                    <label>Sua resposta / orientação:</label>
+                    <textarea class="task-answer-textarea" data-qid="${escapeHtml(qid)}" placeholder="Digite sua resposta para a IA...">${escapeHtml(q.answer || '')}</textarea>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function collectQuestionsFromModal() {
+    if (!currentModalTask) return [];
+    const questions = currentModalTask.questions ? [...currentModalTask.questions] : [];
+    const textareas = document.querySelectorAll('#tm-questions-list .task-answer-textarea');
+    textareas.forEach((ta, idx) => {
+        const qid = ta.dataset.qid;
+        const ans = ta.value.trim();
+        const existing = questions.find(q => (q.id && q.id === qid) || (!q.id && `q-${idx}` === qid));
+        if (existing) {
+            existing.answer = ans;
+            if (ans && !existing.answered_at) existing.answered_at = new Date().toISOString();
+        }
+    });
+    return questions;
+}
+
+window.closeTaskModal = function(updateUrl = true) {
+    if (taskModal) taskModal.classList.add('hidden');
+    currentModalTask = null;
+    currentModalProjPath = null;
+    if (updateUrl) {
+        try {
+            const url = new URL(window.location);
+            url.searchParams.delete('task');
+            window.history.replaceState(null, '', url.pathname + (url.search ? url.search : ''));
+        } catch (e) {}
+    }
+};
+
+// Event listeners for task modal
+if (tmSaveAnswersBtn) {
+    tmSaveAnswersBtn.addEventListener('click', async () => {
+        if (!currentModalTask || !currentModalProjPath) return;
+        const updatedQuestions = collectQuestionsFromModal();
+        currentModalTask.questions = updatedQuestions;
+        try {
+            tmSaveAnswersBtn.disabled = true;
+            tmSaveAnswersBtn.textContent = 'Salvando...';
+            const res = await fetch(`/api/projects/tasks/${currentModalTask.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    projectPath: currentModalProjPath,
+                    questions: updatedQuestions
+                })
+            });
+            if (res.ok) {
+                showFlashMessage('Respostas salvas com sucesso!', 'success');
+                renderTaskQuestions(updatedQuestions);
+                refreshProjectView();
+            } else {
+                const errData = await res.json().catch(() => ({}));
+                showFlashMessage(errData.error || 'Erro ao salvar respostas', 'error');
+            }
+        } catch (err) {
+            showFlashMessage('Erro de rede ao salvar respostas', 'error');
+        } finally {
+            tmSaveAnswersBtn.disabled = false;
+            tmSaveAnswersBtn.textContent = 'Salvar Respostas';
+        }
+    });
+}
+
+if (tmRequestChangesBtn) {
+    tmRequestChangesBtn.addEventListener('click', async () => {
+        if (!currentModalTask || !currentModalProjPath) return;
+        const updatedQuestions = collectQuestionsFromModal();
+        currentModalTask.questions = updatedQuestions;
+        try {
+            tmRequestChangesBtn.disabled = true;
+            const res = await fetch(`/api/projects/tasks/${currentModalTask.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    projectPath: currentModalProjPath,
+                    status: 'spec_review',
+                    questions: updatedQuestions
+                })
+            });
+            if (res.ok) {
+                showFlashMessage('Enviado para revisão da IA!', 'success');
+                closeTaskModal();
+                refreshProjectView();
+            } else {
+                const errData = await res.json().catch(() => ({}));
+                showFlashMessage(errData.error || 'Erro ao atualizar tarefa', 'error');
+            }
+        } catch (err) {
+            showFlashMessage('Erro de rede ao atualizar status', 'error');
+        } finally {
+            tmRequestChangesBtn.disabled = false;
+        }
+    });
+}
+
+if (tmApproveSpecBtn) {
+    tmApproveSpecBtn.addEventListener('click', async () => {
+        if (!currentModalTask || !currentModalProjPath) return;
+        const updatedQuestions = collectQuestionsFromModal();
+        currentModalTask.questions = updatedQuestions;
+        try {
+            tmApproveSpecBtn.disabled = true;
+            const res = await fetch(`/api/projects/tasks/${currentModalTask.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    projectPath: currentModalProjPath,
+                    status: 'ready_todo',
+                    questions: updatedQuestions
+                })
+            });
+            if (res.ok) {
+                showFlashMessage('Spec aprovada! Tarefa pronta para execução (Ready to Do) 🚀', 'success');
+                closeTaskModal();
+                refreshProjectView();
+            } else {
+                const errData = await res.json().catch(() => ({}));
+                showFlashMessage(errData.error || 'Erro ao aprovar spec', 'error');
+            }
+        } catch (err) {
+            showFlashMessage('Erro de rede ao aprovar spec', 'error');
+        } finally {
+            tmApproveSpecBtn.disabled = false;
+        }
+    });
+}
+
+if (tmAddQuestionBtn) {
+    tmAddQuestionBtn.addEventListener('click', () => {
+        if (tmNewQuestionBox) {
+            tmNewQuestionBox.classList.toggle('hidden');
+            if (!tmNewQuestionBox.classList.contains('hidden') && tmNewQuestionInput) {
+                tmNewQuestionInput.focus();
+            }
+        }
+    });
+}
+
+if (tmCancelNewQuestionBtn) {
+    tmCancelNewQuestionBtn.addEventListener('click', () => {
+        if (tmNewQuestionBox) tmNewQuestionBox.classList.add('hidden');
+        if (tmNewQuestionInput) tmNewQuestionInput.value = '';
+    });
+}
+
+if (tmSaveNewQuestionBtn) {
+    tmSaveNewQuestionBtn.addEventListener('click', async () => {
+        if (!tmNewQuestionInput) return;
+        const text = tmNewQuestionInput.value.trim();
+        if (!text) return;
+        const currentQuestions = collectQuestionsFromModal();
+        const newQ = {
+            id: 'q-' + Date.now(),
+            question: text,
+            answer: '',
+            by: 'Operador',
+            created_at: new Date().toISOString()
+        };
+        currentQuestions.push(newQ);
+        if (currentModalTask) currentModalTask.questions = currentQuestions;
+        tmNewQuestionInput.value = '';
+        if (tmNewQuestionBox) tmNewQuestionBox.classList.add('hidden');
+        renderTaskQuestions(currentQuestions);
+
+        if (currentModalProjPath && currentModalTask && currentModalTask.id) {
+            await fetch(`/api/projects/tasks/${currentModalTask.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    projectPath: currentModalProjPath,
+                    questions: currentQuestions
+                })
+            });
+            refreshProjectView();
+        }
+    });
+}
+
+if (closeTaskModalBtn) closeTaskModalBtn.addEventListener('click', () => closeTaskModal());
+if (closeTaskModalFooterBtn) closeTaskModalFooterBtn.addEventListener('click', () => closeTaskModal());
+if (taskModal) {
+    taskModal.addEventListener('click', (e) => {
+        if (e.target === taskModal) closeTaskModal();
+    });
+}
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && taskModal && !taskModal.classList.contains('hidden')) {
+        closeTaskModal();
+    }
+});
 
 
 /* =========================================
