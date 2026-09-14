@@ -6,7 +6,7 @@
     <title>Meridian Dashboard</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
-    <link rel="stylesheet" href="styles.css?v=31">
+    <link rel="stylesheet" href="styles.css?v=32">
 </head>
 <body>
     <div id="flash-message-container" class="flash-message-container"></div>
@@ -54,6 +54,12 @@
             <div class="kanban-toolbar">
                 <div class="toolbar-controls">
                     <h3>Kanban Board</h3>
+                    <div class="card-search-wrapper">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" id="card-search-input" class="card-search-input" placeholder="Search cards (title, body, ID)... [/]" autocomplete="off">
+                        <span id="card-search-count" class="card-search-count hidden"></span>
+                        <button type="button" id="card-search-clear" class="card-search-clear hidden" title="Clear search (Esc)">&times;</button>
+                    </div>
                     <label class="toolbar-control">
                         <span>Done/Nope shown:</span>
                         <select id="done-window" class="toolbar-select">
@@ -326,6 +332,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="app.js?v=45"></script>
+    <script src="app.js?v=46"></script>
 </body>
 </html>

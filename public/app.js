@@ -34,6 +34,8 @@ let doneWindowDays = (() => {
     const v = localStorage.getItem('meridian_done_window');
     return v === '' ? null : (v === null ? 7 : Number(v));
 })();
+let cardSearchQuery = '';
+let currentKanbanTasks = [];
 
 // Mirrors lib/board.js#isRecentlyCompleted. The frontend has no module
 // system and no build step, so it cannot import that file — lib/board.js
@@ -771,6 +773,9 @@ window.addEventListener('popstate', () => {
 
 function showDashboard(pushState = true) {
     currentProjectViewPath = null;
+    cardSearchQuery = '';
+    const searchInput = document.getElementById('card-search-input');
+    if (searchInput) searchInput.value = '';
     activateView('dashboard');
     setBreadcrumb(null);
     document.title = 'Meridian Dashboard';
@@ -780,6 +785,11 @@ function showDashboard(pushState = true) {
 }
 
 window.showProjectView = function(projPath, pushState = true, initialTab = 'board') {
+    if (currentProjectViewPath !== projPath) {
+        cardSearchQuery = '';
+        const searchInput = document.getElementById('card-search-input');
+        if (searchInput) searchInput.value = '';
+    }
     currentProjectViewPath = projPath;
     activateView('project');
     refreshProjectView();
@@ -802,6 +812,11 @@ window.showProjectView = function(projPath, pushState = true, initialTab = 'boar
 
 window.showGlobalTicketsView = function(pushState = true) {
     showBoardTab();
+    if (currentProjectViewPath !== '__GLOBAL__') {
+        cardSearchQuery = '';
+        const searchInput = document.getElementById('card-search-input');
+        if (searchInput) searchInput.value = '';
+    }
     currentProjectViewPath = '__GLOBAL__';
     activateView('global');
     setBreadcrumb('All Tickets');
@@ -1098,11 +1113,71 @@ function renderKanbanBoard(tasks) {
         };
     }
 
-    renderRunningTickets(tasks);
+    currentKanbanTasks = tasks || [];
+
+    const searchInput = document.getElementById('card-search-input');
+    const searchClear = document.getElementById('card-search-clear');
+    const searchCount = document.getElementById('card-search-count');
+
+    if (searchInput) {
+        if (searchInput.value !== cardSearchQuery) {
+            searchInput.value = cardSearchQuery;
+        }
+        searchInput.oninput = (e) => {
+            cardSearchQuery = e.target.value;
+            renderKanbanBoard(currentKanbanTasks);
+        };
+        searchInput.onkeydown = (e) => {
+            if (e.key === 'Escape') {
+                e.stopPropagation();
+                cardSearchQuery = '';
+                searchInput.value = '';
+                renderKanbanBoard(currentKanbanTasks);
+                searchInput.blur();
+            }
+        };
+    }
+
+    if (searchClear) {
+        searchClear.onclick = () => {
+            cardSearchQuery = '';
+            if (searchInput) {
+                searchInput.value = '';
+                searchInput.focus();
+            }
+            renderKanbanBoard(currentKanbanTasks);
+        };
+    }
+
+    const q = cardSearchQuery.trim().toLowerCase();
+    let displayTasks = tasks;
+    if (q) {
+        displayTasks = tasks.filter(t => {
+            const titleMatch = Boolean(t.title && t.title.toLowerCase().includes(q));
+            const idMatch = Boolean(t.id && t.id.toLowerCase().includes(q));
+            const bodyMatch = Boolean(t.justification && t.justification.toLowerCase().includes(q));
+            const resultsMatch = Boolean(Array.isArray(t.expected_results) && t.expected_results.some(r => r && r.toLowerCase().includes(q)));
+            const projMatch = Boolean(isGlobal && t.projectName && t.projectName.toLowerCase().includes(q));
+            return titleMatch || idMatch || bodyMatch || resultsMatch || projMatch;
+        });
+
+        if (searchCount) {
+            searchCount.textContent = `${displayTasks.length}`;
+            searchCount.title = `${displayTasks.length} matching cards out of ${tasks.length}`;
+            searchCount.classList.remove('hidden');
+        }
+        if (searchClear) searchClear.classList.remove('hidden');
+    } else {
+        if (searchCount) searchCount.classList.add('hidden');
+        if (searchClear) searchClear.classList.add('hidden');
+    }
+
+    renderRunningTickets(displayTasks);
 
     // Rails are decided on the total per status — never on the done/nope windowed count.
+    const tasksForCollapse = q ? displayTasks : tasks;
     const collapsed = collapsedColumns(
-        KANBAN_STATUSES.map(s => ({ id: s.id, count: tasks.filter(t => t.status === s.id).length })),
+        KANBAN_STATUSES.map(s => ({ id: s.id, count: tasksForCollapse.filter(t => t.status === s.id).length })),
         expandedRails
     );
 
@@ -1110,7 +1185,7 @@ function renderKanbanBoard(tasks) {
     board.innerHTML = '';
 
     KANBAN_STATUSES.forEach(statusCol => {
-        let colTasks = tasks.filter(t => t.status === statusCol.id);
+        let colTasks = displayTasks.filter(t => t.status === statusCol.id);
         if (statusCol.id === 'done') {
             colTasks = [...colTasks].sort(byRecencyDesc('completed_at'));
         } else if (statusCol.id === 'nope') {
@@ -1124,7 +1199,7 @@ function renderKanbanBoard(tasks) {
             board.insertAdjacentHTML('beforeend', `
             <div class="kanban-column kanban-column--collapsed" data-status-id="${statusCol.id}" role="button" tabindex="0" title="Expand ${statusCol.label}" onclick="expandRail('${statusCol.id}')" onkeydown="railKeydown(event, '${statusCol.id}')">
                 <span class="kanban-rail-label">${statusCol.label}</span>
-                <span class="kanban-column-count">0</span>
+                <span class="kanban-column-count">${colTasks.length}</span>
             </div>
             `);
             return;
@@ -1132,12 +1207,14 @@ function renderKanbanBoard(tasks) {
 
         let visibleTasks = colTasks;
         let hiddenTasks = [];
-        if (statusCol.id === 'done') {
-            visibleTasks = colTasks.filter(t => isRecentlyCompleted(t, doneWindowDays));
-            hiddenTasks = colTasks.filter(t => !isRecentlyCompleted(t, doneWindowDays));
-        } else if (statusCol.id === 'nope') {
-            visibleTasks = colTasks.filter(t => isRecentlyDismissed(t, doneWindowDays));
-            hiddenTasks = colTasks.filter(t => !isRecentlyDismissed(t, doneWindowDays));
+        if (!q) {
+            if (statusCol.id === 'done') {
+                visibleTasks = colTasks.filter(t => isRecentlyCompleted(t, doneWindowDays));
+                hiddenTasks = colTasks.filter(t => !isRecentlyCompleted(t, doneWindowDays));
+            } else if (statusCol.id === 'nope') {
+                visibleTasks = colTasks.filter(t => isRecentlyDismissed(t, doneWindowDays));
+                hiddenTasks = colTasks.filter(t => !isRecentlyDismissed(t, doneWindowDays));
+            }
         }
 
         const hiddenChipHtml = hiddenTasks.length > 0 ? `
@@ -1149,7 +1226,7 @@ function renderKanbanBoard(tasks) {
 
         // Only an expanded rail is truly empty; a windowed done/nope column
         // with nothing visible still has its chip, never this placeholder.
-        const emptyHtml = colTasks.length === 0 ? '<div class="kanban-empty">Empty</div>' : '';
+        const emptyHtml = colTasks.length === 0 ? `<div class="kanban-empty">${q ? 'No matches' : 'Empty'}</div>` : '';
 
         const colHtml = `
             <div class="kanban-column" data-status-id="${statusCol.id}">
@@ -1852,8 +1929,34 @@ if (mockReloadBtn) {
 }
 
 document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && taskModal && !taskModal.classList.contains('hidden')) {
-        closeTaskModal();
+    if (e.key === 'Escape') {
+        if (revisionModal && !revisionModal.classList.contains('hidden')) {
+            revisionModal.classList.add('hidden');
+            return;
+        }
+        if (taskModal && !taskModal.classList.contains('hidden')) {
+            closeTaskModal();
+            return;
+        }
+        if (cardSearchQuery) {
+            cardSearchQuery = '';
+            const searchInput = document.getElementById('card-search-input');
+            if (searchInput) {
+                searchInput.value = '';
+                searchInput.blur();
+            }
+            renderKanbanBoard(currentKanbanTasks);
+            return;
+        }
+    }
+    if (e.key === '/' && !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName) && !document.activeElement?.isContentEditable) {
+        const projectView = document.getElementById('project-view');
+        const searchInput = document.getElementById('card-search-input');
+        if (projectView && !projectView.classList.contains('hidden') && searchInput) {
+            e.preventDefault();
+            searchInput.focus();
+            searchInput.select();
+        }
     }
 });
 
