@@ -6,7 +6,7 @@
     <title>Meridian Dashboard</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
-    <link rel="stylesheet" href="styles.css?v=30">
+    <link rel="stylesheet" href="styles.css?v=31">
 </head>
 <body>
     <div id="flash-message-container" class="flash-message-container"></div>
@@ -229,7 +229,15 @@
                 <!-- Questions & Answers -->
                 <div id="tm-questions-section" class="task-modal-section">
                     <div class="task-modal-section-header">
-                        <h4 class="task-modal-section-title">AI Questions & Answers <span id="tm-questions-count" class="tm-count-badge">0</span></h4>
+                        <h4 class="task-modal-section-title">Questions & Answers <span id="tm-questions-count" class="tm-count-badge">0</span></h4>
+                        <button type="button" id="tm-ask-ai-btn" class="secondary-btn tm-small-btn">+ Ask AI</button>
+                    </div>
+                    <div id="tm-ask-ai-box" class="tm-new-question-box hidden">
+                        <textarea id="tm-ask-ai-input" placeholder="Type a question for the AI to answer about this task, spec, or mockup..." rows="2"></textarea>
+                        <div class="tm-new-question-actions">
+                            <button type="button" id="tm-cancel-ask-ai-btn" class="secondary-btn tm-small-btn">Cancel</button>
+                            <button type="button" id="tm-submit-ask-ai-btn" class="primary-btn tm-small-btn">Submit Question</button>
+                        </div>
                     </div>
                     <div id="tm-questions-list" class="task-questions-list">
                         <!-- Questions injected dynamically -->
@@ -318,6 +326,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="app.js?v=44"></script>
+    <script src="app.js?v=45"></script>
 </body>
 </html>

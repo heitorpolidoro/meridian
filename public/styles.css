@@ -1679,6 +1679,33 @@ body:not([data-view="dashboard"]) #error-container {
     box-shadow: 0 0 0 1px #6366f1;
 }
 
+.task-ai-answer-box {
+    background: rgba(99, 102, 241, 0.08);
+    border: 1px solid rgba(99, 102, 241, 0.25);
+    border-radius: 6px;
+    padding: 0.65rem 0.85rem;
+    font-size: 0.88rem;
+    color: #e0e7ff;
+    line-height: 1.5;
+    margin-top: 0.25rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.task-pending-ai-notice {
+    font-size: 0.82rem;
+    color: #fbbf24;
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px dashed rgba(245, 158, 11, 0.3);
+    border-radius: 6px;
+    padding: 0.45rem 0.75rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin-top: 0.25rem;
+    width: fit-content;
+}
+
 /* Expected Results */
 .task-results-list {
     margin: 0.5rem 0 0 1.25rem;

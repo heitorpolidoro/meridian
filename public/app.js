@@ -1280,6 +1280,11 @@ const closeRevisionModalBtn = document.getElementById('close-revision-modal-btn'
 const cancelRevisionModalBtn = document.getElementById('cancel-revision-modal-btn');
 const confirmRevisionBtn = document.getElementById('confirm-revision-btn');
 const tmRevisionFeedbackInput = document.getElementById('tm-revision-feedback-input');
+const tmAskAiBtn = document.getElementById('tm-ask-ai-btn');
+const tmAskAiBox = document.getElementById('tm-ask-ai-box');
+const tmAskAiInput = document.getElementById('tm-ask-ai-input');
+const tmCancelAskAiBtn = document.getElementById('tm-cancel-ask-ai-btn');
+const tmSubmitAskAiBtn = document.getElementById('tm-submit-ask-ai-btn');
 
 function statusBadgeText(status) {
     const s = KANBAN_STATUSES.find(st => st.id === status);
@@ -1513,15 +1518,43 @@ function renderTaskQuestions(questions) {
     if (!list) return;
 
     if (!questions || questions.length === 0) {
-        list.innerHTML = '<div class="task-question-empty">No AI questions recorded for this task.</div>';
+        list.innerHTML = '<div class="task-question-empty">No questions recorded for this task.</div>';
         return;
     }
 
     list.innerHTML = questions.map((q, idx) => {
         const qid = q.id || `q-${idx}`;
         const by = q.by || 'IA';
-        const hasUnanswered = !q.answer || !q.answer.trim();
+        const isFromOperator = String(by).toLowerCase() === 'operator';
+        const hasAnswer = Boolean(q.answer && q.answer.trim());
+        const hasUnanswered = !hasAnswer;
         const dateStr = q.created_at ? new Date(q.created_at).toLocaleDateString(undefined, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+
+        let answerHtml = '';
+        if (isFromOperator) {
+            if (hasAnswer) {
+                answerHtml = `
+                    <div class="task-answer-area">
+                        <label>AI Answer:</label>
+                        <div class="task-ai-answer-box">${escapeHtml(q.answer)}</div>
+                    </div>
+                `;
+            } else {
+                answerHtml = `
+                    <div class="task-answer-area">
+                        <div class="task-pending-ai-notice">⏳ Awaiting AI answer...</div>
+                    </div>
+                `;
+            }
+        } else {
+            answerHtml = `
+                <div class="task-answer-area">
+                    <label>Your answer / guidance:</label>
+                    <textarea class="task-answer-textarea" data-qid="${escapeHtml(qid)}" placeholder="Type your answer for the AI...">${escapeHtml(q.answer || '')}</textarea>
+                </div>
+            `;
+        }
+
         return `
             <div class="task-question-card ${hasUnanswered ? 'has-unanswered' : ''}">
                 <div class="task-question-meta">
@@ -1529,10 +1562,7 @@ function renderTaskQuestions(questions) {
                     <span class="task-question-date">${dateStr}</span>
                 </div>
                 <div class="task-question-text">${escapeHtml(q.question)}</div>
-                <div class="task-answer-area">
-                    <label>Your answer / guidance:</label>
-                    <textarea class="task-answer-textarea" data-qid="${escapeHtml(qid)}" placeholder="Type your answer for the AI...">${escapeHtml(q.answer || '')}</textarea>
-                </div>
+                ${answerHtml}
             </div>
         `;
     }).join('');
@@ -1698,6 +1728,69 @@ if (tmApproveSpecBtn) {
             showFlashMessage('Network error approving spec', 'error');
         } finally {
             tmApproveSpecBtn.disabled = false;
+        }
+    });
+}
+
+if (tmAskAiBtn) {
+    tmAskAiBtn.addEventListener('click', () => {
+        if (tmAskAiBox) {
+            tmAskAiBox.classList.toggle('hidden');
+            if (!tmAskAiBox.classList.contains('hidden') && tmAskAiInput) {
+                tmAskAiInput.focus();
+            }
+        }
+    });
+}
+
+if (tmCancelAskAiBtn) {
+    tmCancelAskAiBtn.addEventListener('click', () => {
+        if (tmAskAiBox) tmAskAiBox.classList.add('hidden');
+        if (tmAskAiInput) tmAskAiInput.value = '';
+    });
+}
+
+if (tmSubmitAskAiBtn) {
+    tmSubmitAskAiBtn.addEventListener('click', async () => {
+        if (!tmAskAiInput) return;
+        const text = tmAskAiInput.value.trim();
+        if (!text) return;
+        if (!currentModalTask || !currentModalProjPath) return;
+
+        const currentQuestions = collectQuestionsFromModal();
+        const newQ = {
+            id: 'q-' + Date.now(),
+            question: text,
+            answer: '',
+            by: 'Operator',
+            created_at: new Date().toISOString()
+        };
+        currentQuestions.push(newQ);
+        currentModalTask.questions = currentQuestions;
+        tmAskAiInput.value = '';
+        if (tmAskAiBox) tmAskAiBox.classList.add('hidden');
+        renderTaskQuestions(currentQuestions);
+
+        try {
+            tmSubmitAskAiBtn.disabled = true;
+            const res = await fetch(`/api/projects/tasks/${currentModalTask.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    projectPath: currentModalProjPath,
+                    questions: currentQuestions
+                })
+            });
+            if (res.ok) {
+                showFlashMessage('Question submitted for AI!', 'success');
+                refreshProjectView();
+            } else {
+                showFlashMessage('Error saving question', 'error');
+            }
+        } catch (err) {
+            showFlashMessage('Network error saving question', 'error');
+        } finally {
+            tmSubmitAskAiBtn.disabled = false;
         }
     });
 }

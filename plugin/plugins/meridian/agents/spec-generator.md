@@ -29,6 +29,13 @@ operator's intent: satisfy them in the spec, and return them again, refined for
 verifiability but not replaced. Do not write them into `.meridian/tasks.jsonl` —
 the `work` skill persists them through the API, exactly as it does `spec_path`.
 
+## Answering Operator Questions
+
+If the task's `questions` array contains questions asked by the operator (`by: "Operator"` or similar) that do not yet have an `answer`:
+1. **Answer each question**: Formulate a direct, concrete technical answer resolving the operator's doubt or confirming how the spec addresses their concern.
+2. Incorporate the answer into the spec and mockup.
+3. Return the answered questions so the `work` skill records `answer` and `answered_at` in the task's `questions` array.
+
 ## When the Task Needs Splitting Instead of a Spec
 
 Sometimes the right call is to not write a spec at all: the task in front of
