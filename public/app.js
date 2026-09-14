@@ -1275,11 +1275,11 @@ const closeTaskModalFooterBtn = document.getElementById('tm-close-footer-btn');
 const tmSaveAnswersBtn = document.getElementById('tm-save-answers-btn');
 const tmRequestChangesBtn = document.getElementById('tm-request-changes-btn');
 const tmApproveSpecBtn = document.getElementById('tm-approve-spec-btn');
-const tmAddQuestionBtn = document.getElementById('tm-add-question-btn');
-const tmNewQuestionBox = document.getElementById('tm-new-question-box');
-const tmNewQuestionInput = document.getElementById('tm-new-question-input');
-const tmCancelNewQuestionBtn = document.getElementById('tm-cancel-new-question-btn');
-const tmSaveNewQuestionBtn = document.getElementById('tm-save-new-question-btn');
+const revisionModal = document.getElementById('revision-modal');
+const closeRevisionModalBtn = document.getElementById('close-revision-modal-btn');
+const cancelRevisionModalBtn = document.getElementById('cancel-revision-modal-btn');
+const confirmRevisionBtn = document.getElementById('confirm-revision-btn');
+const tmRevisionFeedbackInput = document.getElementById('tm-revision-feedback-input');
 
 function statusBadgeText(status) {
     const s = KANBAN_STATUSES.find(st => st.id === status);
@@ -1601,24 +1601,60 @@ if (tmSaveAnswersBtn) {
     });
 }
 
+function closeRevisionModal() {
+    if (revisionModal) revisionModal.classList.add('hidden');
+    if (tmRevisionFeedbackInput) tmRevisionFeedbackInput.value = '';
+}
+
+if (closeRevisionModalBtn) closeRevisionModalBtn.addEventListener('click', closeRevisionModal);
+if (cancelRevisionModalBtn) cancelRevisionModalBtn.addEventListener('click', closeRevisionModal);
+
 if (tmRequestChangesBtn) {
-    tmRequestChangesBtn.addEventListener('click', async () => {
+    tmRequestChangesBtn.addEventListener('click', () => {
+        if (!currentModalTask || !currentModalProjPath) return;
+        if (tmRevisionFeedbackInput) tmRevisionFeedbackInput.value = '';
+        if (revisionModal) revisionModal.classList.remove('hidden');
+        if (tmRevisionFeedbackInput) tmRevisionFeedbackInput.focus();
+    });
+}
+
+if (confirmRevisionBtn) {
+    confirmRevisionBtn.addEventListener('click', async () => {
         if (!currentModalTask || !currentModalProjPath) return;
         const updatedQuestions = collectQuestionsFromModal();
+        const feedbackText = tmRevisionFeedbackInput ? tmRevisionFeedbackInput.value.trim() : '';
+
+        if (feedbackText) {
+            updatedQuestions.push({
+                id: 'rev-' + Date.now(),
+                question: 'Operator Revision Request',
+                answer: feedbackText,
+                by: 'Operator',
+                created_at: new Date().toISOString()
+            });
+        }
         currentModalTask.questions = updatedQuestions;
+
         try {
-            tmRequestChangesBtn.disabled = true;
+            confirmRevisionBtn.disabled = true;
+            confirmRevisionBtn.textContent = 'Sending...';
+            const payload = {
+                projectPath: currentModalProjPath,
+                status: 'spec_review',
+                questions: updatedQuestions
+            };
+            if (feedbackText) {
+                payload.operator_feedback = feedbackText;
+                payload.resume_context = `Operator revision requested: ${feedbackText}`;
+            }
             const res = await fetch(`/api/projects/tasks/${currentModalTask.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    projectPath: currentModalProjPath,
-                    status: 'spec_review',
-                    questions: updatedQuestions
-                })
+                body: JSON.stringify(payload)
             });
             if (res.ok) {
                 showFlashMessage('Sent for AI revision!', 'success');
+                closeRevisionModal();
                 closeTaskModal();
                 refreshProjectView();
             } else {
@@ -1628,7 +1664,8 @@ if (tmRequestChangesBtn) {
         } catch (err) {
             showFlashMessage('Network error updating task status', 'error');
         } finally {
-            tmRequestChangesBtn.disabled = false;
+            confirmRevisionBtn.disabled = false;
+            confirmRevisionBtn.textContent = 'Send to AI ↩';
         }
     });
 }
@@ -1661,57 +1698,6 @@ if (tmApproveSpecBtn) {
             showFlashMessage('Network error approving spec', 'error');
         } finally {
             tmApproveSpecBtn.disabled = false;
-        }
-    });
-}
-
-if (tmAddQuestionBtn) {
-    tmAddQuestionBtn.addEventListener('click', () => {
-        if (tmNewQuestionBox) {
-            tmNewQuestionBox.classList.toggle('hidden');
-            if (!tmNewQuestionBox.classList.contains('hidden') && tmNewQuestionInput) {
-                tmNewQuestionInput.focus();
-            }
-        }
-    });
-}
-
-if (tmCancelNewQuestionBtn) {
-    tmCancelNewQuestionBtn.addEventListener('click', () => {
-        if (tmNewQuestionBox) tmNewQuestionBox.classList.add('hidden');
-        if (tmNewQuestionInput) tmNewQuestionInput.value = '';
-    });
-}
-
-if (tmSaveNewQuestionBtn) {
-    tmSaveNewQuestionBtn.addEventListener('click', async () => {
-        if (!tmNewQuestionInput) return;
-        const text = tmNewQuestionInput.value.trim();
-        if (!text) return;
-        const currentQuestions = collectQuestionsFromModal();
-        const newQ = {
-            id: 'q-' + Date.now(),
-            question: text,
-            answer: '',
-            by: 'Operator',
-            created_at: new Date().toISOString()
-        };
-        currentQuestions.push(newQ);
-        if (currentModalTask) currentModalTask.questions = currentQuestions;
-        tmNewQuestionInput.value = '';
-        if (tmNewQuestionBox) tmNewQuestionBox.classList.add('hidden');
-        renderTaskQuestions(currentQuestions);
-
-        if (currentModalProjPath && currentModalTask && currentModalTask.id) {
-            await fetch(`/api/projects/tasks/${currentModalTask.id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    projectPath: currentModalProjPath,
-                    questions: currentQuestions
-                })
-            });
-            refreshProjectView();
         }
     });
 }

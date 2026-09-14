@@ -230,14 +230,6 @@
                 <div id="tm-questions-section" class="task-modal-section">
                     <div class="task-modal-section-header">
                         <h4 class="task-modal-section-title">AI Questions & Answers <span id="tm-questions-count" class="tm-count-badge">0</span></h4>
-                        <button type="button" id="tm-add-question-btn" class="secondary-btn tm-small-btn">+ New Question</button>
-                    </div>
-                    <div id="tm-new-question-box" class="tm-new-question-box hidden">
-                        <textarea id="tm-new-question-input" placeholder="Type a new question or guidance for AI..." rows="2"></textarea>
-                        <div class="tm-new-question-actions">
-                            <button type="button" id="tm-cancel-new-question-btn" class="secondary-btn tm-small-btn">Cancel</button>
-                            <button type="button" id="tm-save-new-question-btn" class="primary-btn tm-small-btn">Add</button>
-                        </div>
                     </div>
                     <div id="tm-questions-list" class="task-questions-list">
                         <!-- Questions injected dynamically -->
@@ -305,7 +297,27 @@
         </div>
     </div>
 
+    <!-- AI Revision Feedback Modal -->
+    <div id="revision-modal" class="modal-overlay hidden" style="z-index: 1100;">
+        <div class="modal-content" style="max-width: 520px;">
+            <div class="modal-header">
+                <h2>Request AI Revision ↩</h2>
+                <button type="button" class="close-modal-btn" id="close-revision-modal-btn" aria-label="Close modal">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 1rem 0;">
+                <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.85rem;">
+                    Provide any additional instructions or guidance for the AI to adjust the specification or mockup (optional):
+                </p>
+                <textarea id="tm-revision-feedback-input" class="task-answer-textarea" rows="4" placeholder="e.g. Include error handling for 404/500, add pagination, adjust the mobile layout..." style="min-height: 100px;"></textarea>
+            </div>
+            <div class="form-actions" style="display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1rem;">
+                <button type="button" class="secondary-btn" id="cancel-revision-modal-btn">Cancel</button>
+                <button type="button" class="primary-btn" id="confirm-revision-btn" style="background: #f59e0b;">Send to AI ↩</button>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="app.js?v=43"></script>
+    <script src="app.js?v=44"></script>
 </body>
 </html>

@@ -752,7 +752,7 @@ app.put('/api/projects/tasks/:taskId', (req, res) => {
         const scalarFields = [
             'status', 'justification', 'title', 'priority', 'spec_path',
             'mock_path', 'spec_iterations', 'code_review_iterations', 'qa_iterations',
-            'resume_context'
+            'resume_context', 'operator_feedback'
         ];
         for (const field of scalarFields) {
             if (req.body[field] !== undefined) task[field] = req.body[field];
