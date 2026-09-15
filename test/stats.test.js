@@ -4,11 +4,11 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const {
-    aggregateStats, readEventLines, TOP_N, UNTIMED_STATUSES,
+    aggregateStats, readEventLines, TOP_N,
     listRegisteredProjects, aggregateWorkspaceStats, computeWorkspaceStats
 } = require('../lib/stats');
 
-test('a single task entering backlog then in_progress produces correct stage durations, last one ongoing', () => {
+test('status events alone record visits but no duration - only a running interval is time', () => {
     const t0 = new Date('2026-01-01T00:00:00.000Z');
     const t1 = new Date('2026-01-01T01:00:00.000Z');
     const t2 = new Date('2026-01-01T03:00:00.000Z');
@@ -18,7 +18,87 @@ test('a single task entering backlog then in_progress produces correct stage dur
     ];
     const { tasks } = aggregateStats(events, t2);
     assert.deepEqual(tasks['X'].stages.backlog, { visits: 1 });
-    assert.deepEqual(tasks['X'].stages.in_progress, { totalMs: t2 - t1, visits: 1, ongoing: true });
+    assert.deepEqual(tasks['X'].stages.in_progress, { visits: 1 });
+});
+
+test('a running interval is timed against the stage in effect when the flag went up', () => {
+    const t0 = new Date('2026-01-01T00:00:00.000Z');
+    const t1 = new Date('2026-01-01T01:00:00.000Z'); // -> in_progress, agent starts
+    const t2 = new Date('2026-01-01T01:12:00.000Z'); // agent finishes
+    const now = new Date('2026-01-01T09:00:00.000Z');
+    const events = [
+        { task: 'X', field: 'status', from: null, to: 'backlog', at: t0.toISOString() },
+        { task: 'X', field: 'status', from: 'backlog', to: 'in_progress', at: t1.toISOString() },
+        { task: 'X', field: 'running', from: false, to: true, at: t1.toISOString() },
+        { task: 'X', field: 'running', from: true, to: false, at: t2.toISOString() }
+    ];
+    const { tasks } = aggregateStats(events, now);
+    // The 8h the task then sat idle in in_progress is not the agent's time.
+    assert.deepEqual(tasks['X'].stages.in_progress, { totalMs: t2 - t1, visits: 1, ongoing: false });
+    assert.deepEqual(tasks['X'].stages.backlog, { visits: 1 });
+});
+
+test('a running interval left open counts to now and is flagged ongoing', () => {
+    const t0 = new Date('2026-01-01T00:00:00.000Z');
+    const now = new Date('2026-01-01T00:30:00.000Z');
+    const events = [
+        { task: 'X', field: 'status', from: null, to: 'in_progress', at: t0.toISOString() },
+        { task: 'X', field: 'running', from: false, to: true, at: t0.toISOString() }
+    ];
+    const { tasks } = aggregateStats(events, now);
+    assert.deepEqual(tasks['X'].stages.in_progress, { totalMs: now - t0, visits: 1, ongoing: true });
+});
+
+test('a running:false with no open interval before it is ignored', () => {
+    const t0 = new Date('2026-01-01T00:00:00.000Z');
+    const now = new Date('2026-01-01T01:00:00.000Z');
+    const events = [
+        { task: 'X', field: 'status', from: null, to: 'in_progress', at: t0.toISOString() },
+        { task: 'X', field: 'running', from: true, to: false, at: '2026-01-01T00:10:00.000Z' }
+    ];
+    const { tasks } = aggregateStats(events, now);
+    assert.deepEqual(tasks['X'].stages.in_progress, { visits: 1 });
+});
+
+test('a running interval on a task with no status event at all lands in the unknown stage', () => {
+    const t0 = new Date('2026-01-01T00:00:00.000Z');
+    const t1 = new Date('2026-01-01T00:05:00.000Z');
+    const now = new Date('2026-01-01T01:00:00.000Z');
+    const events = [
+        { task: 'X', field: 'running', from: false, to: true, at: t0.toISOString() },
+        { task: 'X', field: 'running', from: true, to: false, at: t1.toISOString() }
+    ];
+    const { tasks } = aggregateStats(events, now);
+    assert.equal(tasks['X'].stages.unknown.totalMs, t1 - t0);
+    assert.equal(tasks['X'].stages.unknown.visits, 0);
+});
+
+test('a running interval opened just before the first status event clamps to that stage', () => {
+    const t0 = new Date('2026-01-01T00:00:00.000Z');
+    const t1 = new Date('2026-01-01T00:05:00.000Z');
+    const now = new Date('2026-01-01T01:00:00.000Z');
+    const events = [
+        { task: 'X', field: 'running', from: false, to: true, at: t0.toISOString() },
+        { task: 'X', field: 'running', from: true, to: false, at: t1.toISOString() },
+        { task: 'X', field: 'status', from: null, to: 'backlog', at: '2026-01-01T00:06:00.000Z' }
+    ];
+    const { tasks } = aggregateStats(events, now);
+    assert.equal(tasks['X'].stages.backlog.totalMs, t1 - t0);
+});
+
+test('two running intervals in the same stage sum, and a reopened flag closes the previous one', () => {
+    const t0 = new Date('2026-01-01T00:00:00.000Z');
+    const now = new Date('2026-01-01T02:00:00.000Z');
+    const events = [
+        { task: 'X', field: 'status', from: null, to: 'code_review', at: t0.toISOString() },
+        { task: 'X', field: 'running', from: false, to: true, at: '2026-01-01T00:00:00.000Z' },
+        { task: 'X', field: 'running', from: true, to: false, at: '2026-01-01T00:05:00.000Z' },
+        { task: 'X', field: 'running', from: false, to: true, at: '2026-01-01T00:20:00.000Z' },
+        { task: 'X', field: 'running', from: true, to: false, at: '2026-01-01T00:27:00.000Z' }
+    ];
+    const { tasks } = aggregateStats(events, now);
+    assert.equal(tasks['X'].stages.code_review.totalMs, 12 * 60 * 1000);
+    assert.equal(tasks['X'].stages.code_review.ongoing, false);
 });
 
 test('two separate visits to the same stage sum into one totalMs with visits:2', () => {
@@ -41,58 +121,75 @@ test('two separate visits to the same stage sum into one totalMs with visits:2',
     assert.equal(tasks['X'].stages.done.ongoing, undefined);
 });
 
-// --- untimed stages: everything the pipeline does not enter to dispatch ------
-
-test('UNTIMED_STATUSES is every stage but in_progress, code_review and qa_review', () => {
-    assert.deepEqual([...UNTIMED_STATUSES].sort(),
-        ['backlog', 'blocked', 'done', 'nope', 'ready_todo', 'spec_approval', 'spec_review']);
+test('two running intervals across two visits to the same stage sum into one totalMs', () => {
+    const now = new Date('2026-01-01T05:00:00.000Z');
+    const events = [
+        { task: 'X', field: 'status', from: null, to: 'in_progress', at: '2026-01-01T00:00:00.000Z' },
+        { task: 'X', field: 'running', from: false, to: true, at: '2026-01-01T00:00:00.000Z' },
+        { task: 'X', field: 'running', from: true, to: false, at: '2026-01-01T00:10:00.000Z' },
+        { task: 'X', field: 'status', from: 'in_progress', to: 'code_review', at: '2026-01-01T01:00:00.000Z' },
+        { task: 'X', field: 'status', from: 'code_review', to: 'in_progress', at: '2026-01-01T02:00:00.000Z' },
+        { task: 'X', field: 'running', from: false, to: true, at: '2026-01-01T02:00:00.000Z' },
+        { task: 'X', field: 'running', from: true, to: false, at: '2026-01-01T02:05:00.000Z' }
+    ];
+    const { tasks } = aggregateStats(events, now);
+    assert.equal(tasks['X'].stages.in_progress.visits, 2);
+    assert.equal(tasks['X'].stages.in_progress.totalMs, 15 * 60 * 1000);
 });
 
-for (const untimed of ['backlog', 'spec_review', 'spec_approval', 'ready_todo', 'blocked', 'done', 'nope']) {
-    test(`a task's per-task stage entry for ${untimed} has no totalMs and is never ongoing, even as the last open interval`, () => {
-        const t0 = new Date('2026-01-01T00:00:00.000Z');
-        const now = new Date('2026-01-01T05:00:00.000Z');
-        const events = [
-            { task: 'X', field: 'status', from: null, to: untimed, at: t0.toISOString() }
-        ];
-        const { tasks } = aggregateStats(events, now);
-        assert.equal(tasks['X'].stages[untimed].totalMs, undefined);
-        assert.equal(tasks['X'].stages[untimed].ongoing, undefined);
-        assert.equal(tasks['X'].stages[untimed].visits, 1);
-    });
+// --- a stage with no agent run carries no duration, by data not by list ------
 
-    test(`stages.${untimed} has no avgMs/maxMs/topByTime but correct taskCount and token/agent attribution for a dispatch made while a task sat in ${untimed}`, () => {
+for (const waiting of ['ready_todo', 'spec_approval', 'blocked', 'done', 'nope']) {
+    test(`stages.${waiting} has no avgMs/maxMs/topByTime but keeps taskCount and token attribution when no agent ran there`, () => {
         const t0 = new Date('2026-01-01T00:00:00.000Z');
         const now = new Date('2026-01-01T02:00:00.000Z');
         const events = [
-            { task: 'X', field: 'status', from: null, to: untimed, at: t0.toISOString() },
+            { task: 'X', field: 'status', from: null, to: waiting, at: t0.toISOString() },
             {
                 task: 'X', type: 'dispatch_tokens', agent: 'meridian:spec-generator',
                 output_tokens: 250, context_tokens: 3000, at: '2026-01-01T00:30:00.000Z'
             }
         ];
-        const { stages } = aggregateStats(events, now);
-        assert.ok(stages[untimed], `stages.${untimed} present`);
-        assert.ok(!('avgMs' in stages[untimed]));
-        assert.ok(!('maxMs' in stages[untimed]));
-        assert.ok(!('topByTime' in stages[untimed]));
-        assert.equal(stages[untimed].taskCount, 1);
-        assert.equal(stages[untimed].avgTokens, 250);
-        assert.equal(stages[untimed].maxTokens, 250);
-        assert.deepEqual(stages[untimed].topByTokens, [
-            { task: 'X', tokens: 250, maxContextTokens: 3000 }
-        ]);
-        assert.deepEqual(stages[untimed].agents, [
+        const { tasks, stages } = aggregateStats(events, now);
+        assert.equal(tasks['X'].stages[waiting].totalMs, undefined);
+        assert.equal(tasks['X'].stages[waiting].ongoing, undefined);
+        assert.equal(tasks['X'].stages[waiting].visits, 1);
+        assert.ok(stages[waiting], `stages.${waiting} present`);
+        assert.ok(!('avgMs' in stages[waiting]));
+        assert.ok(!('maxMs' in stages[waiting]));
+        assert.ok(!('topByTime' in stages[waiting]));
+        assert.equal(stages[waiting].taskCount, 1);
+        assert.equal(stages[waiting].avgTokens, 250);
+        assert.deepEqual(stages[waiting].agents, [
             { agent: 'meridian:spec-generator', totalOutputTokens: 250, dispatches: 1 }
         ]);
     });
 }
 
-test('a work stage (in_progress) is unaffected: still produces totalMs/ongoing and avgMs/maxMs/topByTime', () => {
+// Nothing excludes a stage by name any more: backlog and spec_review are where
+// the spec-generator and spec-reviewer actually run, and they get real numbers.
+for (const worked of ['backlog', 'spec_review']) {
+    test(`stages.${worked} carries avgMs/maxMs when an agent ran there`, () => {
+        const t0 = new Date('2026-01-01T00:00:00.000Z');
+        const now = new Date('2026-01-01T02:00:00.000Z');
+        const events = [
+            { task: 'X', field: 'status', from: null, to: worked, at: t0.toISOString() },
+            { task: 'X', field: 'running', from: false, to: true, at: t0.toISOString() },
+            { task: 'X', field: 'running', from: true, to: false, at: '2026-01-01T00:04:00.000Z' }
+        ];
+        const { stages } = aggregateStats(events, now);
+        assert.equal(stages[worked].avgMs, 4 * 60 * 1000);
+        assert.equal(stages[worked].maxMs, 4 * 60 * 1000);
+        assert.deepEqual(stages[worked].topByTime, [{ task: 'X', ms: 4 * 60 * 1000, ongoing: false }]);
+    });
+}
+
+test('an open running interval produces totalMs/ongoing and avgMs/maxMs/topByTime', () => {
     const t0 = new Date('2026-01-01T00:00:00.000Z');
     const now = new Date('2026-01-01T02:00:00.000Z');
     const events = [
-        { task: 'X', field: 'status', from: null, to: 'in_progress', at: t0.toISOString() }
+        { task: 'X', field: 'status', from: null, to: 'in_progress', at: t0.toISOString() },
+        { task: 'X', field: 'running', from: false, to: true, at: t0.toISOString() }
     ];
     const { tasks, stages } = aggregateStats(events, now);
     assert.deepEqual(tasks['X'].stages.in_progress, { totalMs: now - t0, visits: 1, ongoing: true });
@@ -153,6 +250,8 @@ test('board-wide stage avgMs/maxMs/topByTime computed correctly across multiple 
         const t0 = new Date('2026-01-01T00:00:00.000Z');
         const t1 = new Date(t0.getTime() + h * 3600 * 1000);
         events.push({ task: taskId, field: 'status', from: null, to: 'in_progress', at: t0.toISOString() });
+        events.push({ task: taskId, field: 'running', from: false, to: true, at: t0.toISOString() });
+        events.push({ task: taskId, field: 'running', from: true, to: false, at: t1.toISOString() });
         events.push({ task: taskId, field: 'status', from: 'in_progress', to: 'done', at: t1.toISOString() });
     });
     const { stages } = aggregateStats(events, now);
@@ -182,9 +281,9 @@ test('malformed events (missing task, unparseable at, status with no to, non-num
     assert.equal(result.tasks['X'].dispatches.count, 0);
 });
 
-test('field:"running" and events with neither field nor type are accepted without throwing and contribute nothing', () => {
+test('a running event with a non-boolean `to`, and events with neither field nor type, are ignored without throwing', () => {
     const events = [
-        { task: 'X', field: 'running', from: false, to: true, at: '2026-01-01T00:00:00.000Z' },
+        { task: 'X', field: 'running', from: false, to: 'yes', at: '2026-01-01T00:00:00.000Z' },
         { task: 'X', at: '2026-01-01T00:00:00.000Z' }
     ];
     let result;
@@ -283,10 +382,14 @@ test('aggregateWorkspaceStats merges a shared stage across two projects into one
     const now = new Date('2026-01-01T10:00:00.000Z');
     const eventsA = [
         { task: 'T1', field: 'status', from: null, to: 'in_progress', at: '2026-01-01T00:00:00.000Z' },
+        { task: 'T1', field: 'running', from: false, to: true, at: '2026-01-01T00:00:00.000Z' },
+        { task: 'T1', field: 'running', from: true, to: false, at: '2026-01-01T01:00:00.000Z' },
         { task: 'T1', field: 'status', from: 'in_progress', to: 'done', at: '2026-01-01T01:00:00.000Z' }
     ];
     const eventsB = [
         { task: 'T1', field: 'status', from: null, to: 'in_progress', at: '2026-01-01T00:00:00.000Z' },
+        { task: 'T1', field: 'running', from: false, to: true, at: '2026-01-01T00:00:00.000Z' },
+        { task: 'T1', field: 'running', from: true, to: false, at: '2026-01-01T03:00:00.000Z' },
         { task: 'T1', field: 'status', from: 'in_progress', to: 'done', at: '2026-01-01T03:00:00.000Z' }
     ];
     const { stages } = aggregateWorkspaceStats([
@@ -303,10 +406,14 @@ test('aggregateWorkspaceStats topByTime/topByTokens carry a project field and ra
     const now = new Date('2026-01-01T10:00:00.000Z');
     const eventsSmall = [
         { task: 'T1', field: 'status', from: null, to: 'in_progress', at: '2026-01-01T00:00:00.000Z' },
+        { task: 'T1', field: 'running', from: false, to: true, at: '2026-01-01T00:00:00.000Z' },
+        { task: 'T1', field: 'running', from: true, to: false, at: '2026-01-01T01:00:00.000Z' },
         { task: 'T1', field: 'status', from: 'in_progress', to: 'done', at: '2026-01-01T01:00:00.000Z' }
     ];
     const eventsBig = [
         { task: 'T1', field: 'status', from: null, to: 'in_progress', at: '2026-01-01T00:00:00.000Z' },
+        { task: 'T1', field: 'running', from: false, to: true, at: '2026-01-01T00:00:00.000Z' },
+        { task: 'T1', field: 'running', from: true, to: false, at: '2026-01-01T05:00:00.000Z' },
         { task: 'T1', field: 'status', from: 'in_progress', to: 'done', at: '2026-01-01T05:00:00.000Z' }
     ];
     const { stages } = aggregateWorkspaceStats([

@@ -229,23 +229,34 @@ test('GET /api/stats?project=<registered, no events.jsonl yet> returns 200 with 
     });
 });
 
-test('GET /api/stats reflects real status-change events from a seeded task', async () => {
+test('GET /api/stats times a stage from the running events the server writes, not from the status change', async () => {
     const { ws, dir } = workspaceWith('Test Project');
     await withServer(ws, async (base) => {
         const task = await seed(base, dir, { status: 'backlog' });
         await put(base, dir, task.id, { status: 'in_progress' });
 
-        const res = await fetch(`${base}/api/stats?project=${encodeURIComponent(dir)}`);
-        assert.equal(res.status, 200);
-        const body = await res.json();
-        const stats = body.tasks[task.id];
-        assert.ok(stats, 'stats for seeded task present');
+        // The status change alone is a visit, not a duration: nobody ran yet.
+        let body = await (await fetch(`${base}/api/stats?project=${encodeURIComponent(dir)}`)).json();
+        let stats = body.tasks[task.id];
         assert.ok(stats.stages.backlog);
         assert.ok(stats.stages.in_progress);
         assert.equal(stats.stages.backlog.totalMs, undefined);
-        assert.equal(stats.stages.backlog.ongoing, undefined);
+        assert.equal(stats.stages.in_progress.totalMs, undefined);
+
+        // Raising the flag opens the agent's interval, still running.
+        await put(base, dir, task.id, { running: true });
+        body = await (await fetch(`${base}/api/stats?project=${encodeURIComponent(dir)}`)).json();
+        stats = body.tasks[task.id];
         assert.ok(stats.stages.in_progress.totalMs >= 0);
         assert.equal(stats.stages.in_progress.ongoing, true);
+
+        // Clearing it closes the interval; backlog never gets a duration.
+        await put(base, dir, task.id, { running: false });
+        body = await (await fetch(`${base}/api/stats?project=${encodeURIComponent(dir)}`)).json();
+        stats = body.tasks[task.id];
+        assert.ok(stats.stages.in_progress.totalMs >= 0);
+        assert.equal(stats.stages.in_progress.ongoing, false);
+        assert.equal(stats.stages.backlog.totalMs, undefined);
     });
 });
 
