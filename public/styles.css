@@ -1793,6 +1793,13 @@ body:not([data-view="dashboard"]) #error-container {
     color: #d4d4d8;
 }
 
+/* Acceptance criteria quote file paths and grep lines — single tokens longer
+   than the panel, which otherwise scroll it sideways instead of wrapping. */
+.task-results-list li,
+.task-modal-desc-box {
+    overflow-wrap: anywhere;
+}
+
 /* Spec Viewer & Markdown */
 .tm-spec-path-label {
     font-size: 0.78rem;
@@ -1858,7 +1865,12 @@ body:not([data-view="dashboard"]) #error-container {
     color: #c7d2fe;
     border-radius: 0 4px 4px 0;
 }
-.markdown-body code {
+/* Inline code: the spec viewer's markdown, and the task text (acceptance
+   criteria and description) that renderInlineCode turns into <code>. One rule
+   so task text and spec text look like the same product. */
+.markdown-body code,
+.task-results-list code,
+.task-modal-desc-box code {
     font-family: 'JetBrains Mono', Consolas, Monaco, monospace;
     font-size: 0.85em;
     background: rgba(255, 255, 255, 0.08);

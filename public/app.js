@@ -1491,7 +1491,7 @@ function renderTaskModalData(task, specContent, mockPath, hasMock) {
     const descBox = document.getElementById('tm-desc');
     if (descSection && descBox) {
         if (task.justification && task.justification.trim()) {
-            descBox.textContent = task.justification;
+            descBox.innerHTML = renderInlineCode(task.justification);
             descSection.classList.remove('hidden');
         } else {
             descSection.classList.add('hidden');
@@ -1503,7 +1503,7 @@ function renderTaskModalData(task, specContent, mockPath, hasMock) {
     const resultsList = document.getElementById('tm-results-list');
     if (resultsSection && resultsList) {
         if (task.expected_results && task.expected_results.length > 0) {
-            resultsList.innerHTML = task.expected_results.map(r => `<li>${escapeHtml(r)}</li>`).join('');
+            resultsList.innerHTML = task.expected_results.map(r => `<li>${renderInlineCode(r)}</li>`).join('');
             resultsSection.classList.remove('hidden');
         } else {
             resultsSection.classList.add('hidden');
@@ -2188,6 +2188,28 @@ function escapeHtml(str) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+}
+
+// Inline `code` spans for task text. lib/inline-markdown.js is the source of
+// truth and carries the reasoning — change both. Deliberately not `marked`:
+// over raw text it would render HTML the task contains, and over escaped text
+// it would escape a span's contents twice, printing `Array<T>` as the literal
+// `Array&lt;T&gt;`.
+const CODE_SPAN = /`([^`\n]+)`/g;
+
+function renderInlineCode(text) {
+    if (text === null || text === undefined) return '';
+    const src = String(text);
+    let out = '';
+    let last = 0;
+    CODE_SPAN.lastIndex = 0;
+    let match;
+    while ((match = CODE_SPAN.exec(src)) !== null) {
+        out += escapeHtml(src.slice(last, match.index));
+        out += `<code>${escapeHtml(match[1])}</code>`;
+        last = match.index + match[0].length;
+    }
+    return out + escapeHtml(src.slice(last));
 }
 
 // Every agent this codebase dispatches through the plugin is named
