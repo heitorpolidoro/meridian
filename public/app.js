@@ -1411,6 +1411,42 @@ window.openTaskModal = async function(taskId, projectPath) {
     }
 };
 
+// Two states over the same text: the rendered box for reading (which is what
+// gives `code` spans their formatting) and a textarea for writing. The Edit
+// button swaps to the second; `Save` in the footer swaps back.
+function renderTaskDescription(text, editing) {
+    const box = document.getElementById('tm-desc');
+    const input = document.getElementById('tm-desc-input');
+    const editBtn = document.getElementById('tm-edit-desc-btn');
+    if (!box || !input) return;
+
+    if (editing) {
+        input.value = text;
+        input.classList.remove('hidden');
+        box.classList.add('hidden');
+        if (editBtn) editBtn.classList.add('hidden');
+        return;
+    }
+
+    input.classList.add('hidden');
+    box.classList.remove('hidden');
+    if (editBtn) editBtn.classList.remove('hidden');
+    if (text.trim()) {
+        box.innerHTML = renderInlineCode(text);
+        box.classList.remove('task-modal-desc-empty');
+    } else {
+        box.textContent = 'No context recorded for this task.';
+        box.classList.add('task-modal-desc-empty');
+    }
+}
+
+// True only while the textarea is open, so Save knows whether the operator
+// actually edited the text or was just reading it.
+function isEditingDescription() {
+    const input = document.getElementById('tm-desc-input');
+    return Boolean(input && !input.classList.contains('hidden'));
+}
+
 function formatSpecMarkdown(content, projectPath) {
     if (!content) return '';
     let html = '';
@@ -1451,8 +1487,8 @@ function renderTaskModalData(task, specContent, mockPath, hasMock) {
 
     const priorityEl = document.getElementById('tm-priority');
     if (priorityEl) {
-        priorityEl.textContent = (task.priority || 'medium').toUpperCase();
-        priorityEl.className = `task-priority-badge priority-${task.priority || 'medium'}`;
+        priorityEl.value = task.priority || 'medium';
+        priorityEl.className = `task-priority-badge task-priority-select priority-${task.priority || 'medium'}`;
     }
 
     const projectEl = document.getElementById('tm-project');
@@ -1468,17 +1504,11 @@ function renderTaskModalData(task, specContent, mockPath, hasMock) {
     const titleEl = document.getElementById('tm-title');
     if (titleEl) titleEl.innerHTML = renderInlineCode(task.title || '');
 
-    // Description / Justification
-    const descSection = document.getElementById('tm-desc-section');
-    const descBox = document.getElementById('tm-desc');
-    if (descSection && descBox) {
-        if (task.justification && task.justification.trim()) {
-            descBox.innerHTML = renderInlineCode(task.justification);
-            descSection.classList.remove('hidden');
-        } else {
-            descSection.classList.add('hidden');
-        }
-    }
+    // Context & Description. The section is always present: a task with no
+    // context is exactly the one that needs somewhere to type it, and hiding
+    // the field left a freshly created task with no way in and no hint the
+    // field existed. Empty opens straight into the editor.
+    renderTaskDescription(task.justification || '', !(task.justification || '').trim());
 
     // Expected Results
     const resultsSection = document.getElementById('tm-results-section');
@@ -1657,35 +1687,89 @@ window.closeTaskModal = function(updateUrl = true) {
 };
 
 // Event listeners for task modal
+const tmEditDescBtn = document.getElementById('tm-edit-desc-btn');
+if (tmEditDescBtn) {
+    tmEditDescBtn.addEventListener('click', () => {
+        renderTaskDescription((currentModalTask && currentModalTask.justification) || '', true);
+        const input = document.getElementById('tm-desc-input');
+        if (input) input.focus();
+    });
+}
+
+// Priority is a single discrete value, so it saves on change rather than
+// waiting for Save — the same immediacy as dragging a card to a new column.
+const tmPrioritySelect = document.getElementById('tm-priority');
+if (tmPrioritySelect) {
+    tmPrioritySelect.addEventListener('change', async () => {
+        if (!currentModalTask || !currentModalProjPath) return;
+        const previous = currentModalTask.priority || 'medium';
+        const next = tmPrioritySelect.value;
+        if (next === previous) return;
+        tmPrioritySelect.disabled = true;
+        try {
+            const res = await fetch(`/api/projects/tasks/${currentModalTask.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ projectPath: currentModalProjPath, priority: next })
+            });
+            if (res.ok) {
+                currentModalTask.priority = next;
+                tmPrioritySelect.className = `task-priority-badge task-priority-select priority-${next}`;
+                showFlashMessage(`Priority set to ${next}`, 'success');
+                refreshProjectView();
+            } else {
+                const errData = await res.json().catch(() => ({}));
+                tmPrioritySelect.value = previous;
+                showFlashMessage(errData.error || 'Error saving priority', 'error');
+            }
+        } catch (err) {
+            tmPrioritySelect.value = previous;
+            showFlashMessage('Network error saving priority', 'error');
+        } finally {
+            tmPrioritySelect.disabled = false;
+        }
+    });
+}
+
 if (tmSaveAnswersBtn) {
     tmSaveAnswersBtn.addEventListener('click', async () => {
         if (!currentModalTask || !currentModalProjPath) return;
         const updatedQuestions = collectQuestionsFromModal();
         currentModalTask.questions = updatedQuestions;
+
+        // Only send the description when the editor is open: a PUT that always
+        // carried it would rewrite the field every time somebody saved an
+        // answer, and `justification` is also written by the agents.
+        const editingDesc = isEditingDescription();
+        const descInput = document.getElementById('tm-desc-input');
+        const payload = { projectPath: currentModalProjPath, questions: updatedQuestions };
+        if (editingDesc && descInput) payload.justification = descInput.value.trim();
+
         try {
             tmSaveAnswersBtn.disabled = true;
             tmSaveAnswersBtn.textContent = 'Saving...';
             const res = await fetch(`/api/projects/tasks/${currentModalTask.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    projectPath: currentModalProjPath,
-                    questions: updatedQuestions
-                })
+                body: JSON.stringify(payload)
             });
             if (res.ok) {
-                showFlashMessage('Answers saved successfully!', 'success');
+                showFlashMessage('Saved successfully!', 'success');
                 renderTaskQuestions(updatedQuestions);
+                if (editingDesc) {
+                    currentModalTask.justification = payload.justification;
+                    renderTaskDescription(payload.justification, false);
+                }
                 refreshProjectView();
             } else {
                 const errData = await res.json().catch(() => ({}));
-                showFlashMessage(errData.error || 'Error saving answers', 'error');
+                showFlashMessage(errData.error || 'Error saving task', 'error');
             }
         } catch (err) {
-            showFlashMessage('Network error saving answers', 'error');
+            showFlashMessage('Network error saving task', 'error');
         } finally {
             tmSaveAnswersBtn.disabled = false;
-            tmSaveAnswersBtn.textContent = 'Save Answers';
+            tmSaveAnswersBtn.textContent = 'Save';
         }
     });
 }

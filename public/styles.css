@@ -1550,6 +1550,58 @@ body:not([data-view="dashboard"]) #error-container {
 .task-priority-badge.priority-medium { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.35); }
 .task-priority-badge.priority-low { background: rgba(107, 114, 128, 0.2); color: #9ca3af; border: 1px solid rgba(107, 114, 128, 0.35); }
 
+/* The modal's priority badge is a <select>: same pill, minus the native
+   chrome, so changing priority reads as editing the badge itself. The colour
+   classes above still drive it. */
+.task-priority-select {
+    /* The global `select` rule sets width:100%, which would stretch the pill
+       across the header row; the badge class wins on padding and font-size by
+       specificity, but width has to be reclaimed here. */
+    width: auto;
+    flex: 0 0 auto;
+    appearance: none;
+    -webkit-appearance: none;
+    font-family: inherit;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    padding-right: 1.35rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5L6 8l3-3.5' fill='none' stroke='%23ffffff' stroke-opacity='.65' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.4rem center;
+    background-size: 10px;
+}
+.task-priority-select:disabled { opacity: 0.6; cursor: progress; }
+.task-priority-select option {
+    background: #18181b;
+    color: #fafafa;
+}
+
+/* The description editor mirrors the answer textarea so the modal has one
+   writing surface, not two that look almost alike. */
+.task-modal-desc-input {
+    width: 100%;
+    box-sizing: border-box;
+    font-family: inherit;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    padding: 0.6rem;
+    border-radius: 6px;
+    border: 1px solid #33333e;
+    background: #0a0a0d;
+    color: #fafafa;
+    resize: vertical;
+    min-height: 110px;
+    transition: border-color 0.2s ease;
+}
+.task-modal-desc-input:focus {
+    outline: none;
+    border-color: #6366f1;
+}
+.task-modal-desc-empty {
+    color: var(--text-secondary, #8b8b96);
+    font-style: italic;
+}
+
 .task-modal-body {
     flex: 1;
     overflow-y: auto;

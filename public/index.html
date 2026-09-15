@@ -217,7 +217,12 @@
                     <div class="task-modal-tags">
                         <span id="tm-id" class="task-id-code"></span>
                         <span id="tm-status" class="task-status-badge"></span>
-                        <span id="tm-priority" class="task-priority-badge"></span>
+                        <select id="tm-priority" class="task-priority-badge task-priority-select" aria-label="Task priority">
+                            <option value="critical">CRITICAL</option>
+                            <option value="high">HIGH</option>
+                            <option value="medium">MEDIUM</option>
+                            <option value="low">LOW</option>
+                        </select>
                         <span id="tm-project" class="project-tag-badge"></span>
                     </div>
                     <h2 id="tm-title">Task Title</h2>
@@ -227,9 +232,14 @@
 
             <div class="task-modal-body">
                 <!-- Description / Justification -->
-                <div id="tm-desc-section" class="task-modal-section hidden">
-                    <h4 class="task-modal-section-title">Context & Description</h4>
+                <div id="tm-desc-section" class="task-modal-section">
+                    <div class="task-modal-section-header">
+                        <h4 class="task-modal-section-title">Context &amp; Description</h4>
+                        <button type="button" id="tm-edit-desc-btn" class="secondary-btn tm-small-btn">Edit</button>
+                    </div>
                     <div id="tm-desc" class="task-modal-desc-box"></div>
+                    <textarea id="tm-desc-input" class="task-modal-desc-input hidden" rows="5"
+                        placeholder="Why this task exists: what was asked for, the decision behind it, constraints worth knowing. Markdown `code` spans render."></textarea>
                 </div>
 
                 <!-- Questions & Answers -->
@@ -301,7 +311,7 @@
             <div class="task-modal-footer">
                 <div class="tm-footer-left">
                     <button type="button" class="secondary-btn" id="tm-close-footer-btn">Close</button>
-                    <button type="button" class="secondary-btn" id="tm-save-answers-btn">Save Answers</button>
+                    <button type="button" class="secondary-btn" id="tm-save-answers-btn">Save</button>
                 </div>
                 <div class="tm-footer-right">
                     <button type="button" class="secondary-btn tm-action-btn hidden" id="tm-request-changes-btn" style="border-color: #f59e0b; color: #fbbf24;">Request AI Revision ↩</button>
