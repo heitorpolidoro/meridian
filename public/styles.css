@@ -1128,40 +1128,6 @@ body:not([data-view="dashboard"]) #error-container {
     color: var(--accent);
 }
 
-.task-justification-toggle {
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-    font-size: 0.78rem;
-    color: #ef4444;
-    cursor: pointer;
-    user-select: none;
-    margin-top: 0.35rem;
-    opacity: 0.85;
-    transition: opacity 0.15s;
-}
-.task-justification-toggle:hover { opacity: 1; }
-.task-justification-toggle .toggle-arrow {
-    font-style: normal;
-    font-size: 0.65rem;
-    transition: transform 0.2s;
-    display: inline-block;
-}
-.task-justification-toggle.open .toggle-arrow { transform: rotate(90deg); }
-
-.task-justification {
-    font-size: 0.8rem;
-    color: #ef4444;
-    font-style: italic;
-    background: rgba(239, 68, 68, 0.1);
-    padding: 0.4rem;
-    border-radius: 4px;
-    border-left: 2px solid #ef4444;
-    margin-top: 0.3rem;
-    display: none;
-}
-.task-justification.visible { display: block; }
-
 /* Dashboard Task List Preview */
 .dashboard-tasks-preview {
     margin-top: 1rem;
@@ -1338,8 +1304,6 @@ body:not([data-view="dashboard"]) #error-container {
 .stats-error {
     color: #fca5a5;
 }
-
-
 
 .column-highlight {
     animation: pulseBorder 1.2s ease;

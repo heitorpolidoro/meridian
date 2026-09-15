@@ -968,9 +968,9 @@ function renderRunningTickets(tasks) {
             : '';
         const projPathAttr = task.projectPath ? task.projectPath.replace(/\\/g, '\\\\').replace(/'/g, "\\'") : '';
         return `
-            <div class="running-ticket-card" title="${task.title}" onclick="openTaskModal('${task.id}', '${projPathAttr}')" style="cursor: pointer;">
+            <div class="running-ticket-card" title="${escapeHtml(task.title)}" onclick="openTaskModal('${task.id}', '${projPathAttr}')" style="cursor: pointer;">
                 <div class="running-ticket-id">${task.id || ''}</div>
-                <div class="running-ticket-title">${task.title}</div>
+                <div class="running-ticket-title">${escapeHtml(task.title)}</div>
                 <div class="running-ticket-meta">
                     <span class="running-ticket-status">${statusLabel(task.status)}</span>
                     ${projBadge}
@@ -1021,7 +1021,7 @@ function renderTaskCardHtml(task, allTasks) {
     }
     return `
         <div class="task-card${runningClass}" onclick="handleTaskCardClick(event, '${task.id}', '${projPathAttr}')">
-            <div class="task-title">${runningBadge}${projectBadge}${parentBadgeHtml}${progressChipHtml}${mockBadge}${questionsBadge}<span class="task-id-code">${taskIdDisplay}</span>${task.title}</div>
+            <div class="task-title">${runningBadge}${projectBadge}${parentBadgeHtml}${progressChipHtml}${mockBadge}${questionsBadge}<span class="task-id-code">${taskIdDisplay}</span>${escapeHtml(task.title)}</div>
             ${(() => {
                 const move = manualTransition(task.status);
                 if (!move) return '';
@@ -1043,7 +1043,6 @@ function captureBoardState(board) {
     const state = {
         boardScrollLeft: board.scrollLeft,
         columnScrollTop: {},
-        openDetails: new Set(),
         revealedHidden: new Set(),
         expandedRails: new Set(expandedRails)
     };
@@ -1054,9 +1053,6 @@ function captureBoardState(board) {
         const group = col.querySelector('.done-hidden-tasks');
         if (group && !group.classList.contains('hidden')) state.revealedHidden.add(id);
     });
-    board.querySelectorAll('.task-justification.visible').forEach(el => {
-        if (el.id) state.openDetails.add(el.id);
-    });
     return state;
 }
 
@@ -1066,13 +1062,6 @@ function captureBoardState(board) {
 // changes the column's scrollHeight.
 function restoreBoardState(board, state) {
     if (!state) return;
-    state.openDetails.forEach(uid => {
-        const el = board.querySelector(`#${CSS.escape(uid)}`);
-        if (!el) return;
-        el.classList.add('visible');
-        const toggle = el.previousElementSibling;
-        if (toggle && toggle.classList.contains('task-justification-toggle')) toggle.classList.add('open');
-    });
     state.revealedHidden.forEach(id => {
         const col = board.querySelector(`.kanban-column[data-status-id="${id}"]`);
         if (!col) return;
@@ -1247,13 +1236,6 @@ function renderKanbanBoard(tasks) {
 
     restoreBoardState(board, boardState);
 }
-
-window.toggleJustification = function(uid, toggleEl) {
-    const content = document.getElementById(uid);
-    if (!content) return;
-    const isOpen = content.classList.toggle('visible');
-    toggleEl.classList.toggle('open', isOpen);
-};
 
 window.scrollToKanbanColumn = function(statusId) {
     const col = document.querySelector(`.kanban-column[data-status-id="${statusId}"]`);
