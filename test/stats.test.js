@@ -41,13 +41,14 @@ test('two separate visits to the same stage sum into one totalMs with visits:2',
     assert.equal(tasks['X'].stages.done.ongoing, undefined);
 });
 
-// --- MERID-11: untimed stages (backlog, done, nope) --------------------------
+// --- untimed stages: everything the pipeline does not enter to dispatch ------
 
-test('UNTIMED_STATUSES is exactly backlog, done, nope', () => {
-    assert.deepEqual([...UNTIMED_STATUSES].sort(), ['backlog', 'done', 'nope']);
+test('UNTIMED_STATUSES is every stage but in_progress, code_review and qa_review', () => {
+    assert.deepEqual([...UNTIMED_STATUSES].sort(),
+        ['backlog', 'blocked', 'done', 'nope', 'ready_todo', 'spec_approval', 'spec_review']);
 });
 
-for (const untimed of ['backlog', 'done', 'nope']) {
+for (const untimed of ['backlog', 'spec_review', 'spec_approval', 'ready_todo', 'blocked', 'done', 'nope']) {
     test(`a task's per-task stage entry for ${untimed} has no totalMs and is never ongoing, even as the last open interval`, () => {
         const t0 = new Date('2026-01-01T00:00:00.000Z');
         const now = new Date('2026-01-01T05:00:00.000Z');

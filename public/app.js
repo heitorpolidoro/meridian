@@ -2166,7 +2166,7 @@ function formatDuration(ms) {
 
 // A duration-bearing cell (stage avgMs/maxMs, or a per-task "time in stage")
 // renders the neutral placeholder instead of calling formatDuration when the
-// value is absent — an untimed stage (backlog/done/nope, per MERID-11) never
+// value is absent — an untimed stage never
 // carries a duration at all, and "undefined ms" must not be mistaken for
 // "0m". Detected from the data itself (an absent/non-finite value), never
 // from a hardcoded stage-name list — the frontend has no access to the
