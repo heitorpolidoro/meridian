@@ -970,7 +970,7 @@ function renderRunningTickets(tasks) {
         return `
             <div class="running-ticket-card" title="${escapeHtml(task.title)}" onclick="openTaskModal('${task.id}', '${projPathAttr}')" style="cursor: pointer;">
                 <div class="running-ticket-id">${task.id || ''}</div>
-                <div class="running-ticket-title">${escapeHtml(task.title)}</div>
+                <div class="running-ticket-title">${renderInlineCode(task.title)}</div>
                 <div class="running-ticket-meta">
                     <span class="running-ticket-status">${statusLabel(task.status)}</span>
                     ${projBadge}
@@ -1021,7 +1021,7 @@ function renderTaskCardHtml(task, allTasks) {
     }
     return `
         <div class="task-card${runningClass}" onclick="handleTaskCardClick(event, '${task.id}', '${projPathAttr}')">
-            <div class="task-title">${runningBadge}${projectBadge}${parentBadgeHtml}${progressChipHtml}${mockBadge}${questionsBadge}<span class="task-id-code">${taskIdDisplay}</span>${escapeHtml(task.title)}</div>
+            <div class="task-title">${runningBadge}${projectBadge}${parentBadgeHtml}${progressChipHtml}${mockBadge}${questionsBadge}<span class="task-id-code">${taskIdDisplay}</span>${renderInlineCode(task.title)}</div>
             ${(() => {
                 const move = manualTransition(task.status);
                 if (!move) return '';
@@ -1466,7 +1466,7 @@ function renderTaskModalData(task, specContent, mockPath, hasMock) {
     }
 
     const titleEl = document.getElementById('tm-title');
-    if (titleEl) titleEl.textContent = task.title || '';
+    if (titleEl) titleEl.innerHTML = renderInlineCode(task.title || '');
 
     // Description / Justification
     const descSection = document.getElementById('tm-desc-section');

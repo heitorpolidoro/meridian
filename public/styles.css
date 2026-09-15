@@ -1834,7 +1834,10 @@ body:not([data-view="dashboard"]) #error-container {
    so task text and spec text look like the same product. */
 .markdown-body code,
 .task-results-list code,
-.task-modal-desc-box code {
+.task-modal-desc-box code,
+.task-title code,
+.running-ticket-title code,
+#tm-title code {
     font-family: 'JetBrains Mono', Consolas, Monaco, monospace;
     font-size: 0.85em;
     background: rgba(255, 255, 255, 0.08);
