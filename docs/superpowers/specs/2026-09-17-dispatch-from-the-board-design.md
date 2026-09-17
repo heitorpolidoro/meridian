@@ -168,10 +168,24 @@ information there.
 A dispatch that fails must say so on the board. Three properties, each learned
 from a probe rather than assumed:
 
-**The exit code is not enough.** `agy -p` printed *"no output produced — a tool
-required the 'command' permission that headless mode cannot prompt for, so it
-was auto-denied"* and **exited 0**. A run is judged by its output as well as
-its status, and a run that produced nothing is a failure whatever the code says.
+**The exit code is not enough, and neither CLI has a flag to change that.**
+`agy -p` printed *"no output produced — a tool required the 'command'
+permission that headless mode cannot prompt for, so it was auto-denied"* and
+**exited 0**.
+
+So dispatch does not run in text mode. Both CLIs accept
+`--output-format stream-json`, which gives the live event stream the board
+already renders *and* a structured final result — one mechanism serving both
+the log and the verdict, instead of scraping prose for failure. Text matching
+survives only as the fallback for output that arrives unstructured. A run that
+produced no result at all is a failure whatever the exit code says.
+
+**The print-mode timeout must be raised.** `agy --print-timeout` defaults to
+**5m0s**, while the measured median agent run is 11-15 minutes in
+`in_progress` alone and a full `work` chains several stages. Left at the
+default, nearly every dispatch would be cut off mid-flight — and cut off in
+the shape this section calls a failure, with no output. The dispatch sets it
+explicitly, well above the longest observed run.
 
 **Two failure shapes are recognised and translated**, because both are silent
 and both have a specific remedy:
