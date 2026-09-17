@@ -163,6 +163,38 @@ and `Interactive Mockup`. Not on the card: there are 73 cards on the largest
 board, and the running badge the card already draws is the right amount of
 information there.
 
+## Failures are shown, never swallowed
+
+A dispatch that fails must say so on the board. Three properties, each learned
+from a probe rather than assumed:
+
+**The exit code is not enough.** `agy -p` printed *"no output produced — a tool
+required the 'command' permission that headless mode cannot prompt for, so it
+was auto-denied"* and **exited 0**. A run is judged by its output as well as
+its status, and a run that produced nothing is a failure whatever the code says.
+
+**Two failure shapes are recognised and translated**, because both are silent
+and both have a specific remedy:
+
+| Detected in the output | Shown to the operator |
+|---|---|
+| `Failed to authenticate` / `OAuth session expired` | CLI not authenticated — run `claude auth login` |
+| `permission that headless mode cannot prompt for` | Run stopped: a command is outside the allowlist |
+
+Anything else is surfaced verbatim, trimmed to the last lines. A translation
+table that swallows what it does not recognise is worse than no table.
+
+**What is recorded.** Per project, in memory: the last run's task id, tool,
+start and end time, exit code and, on failure, a one-line reason. It rides in
+`GET /api/status` so the board can render it. The full output is already in
+`.meridian/runs/<task-id>-<timestamp>.log`, which is what the operator opens
+when the one-liner is not enough.
+
+**Where it shows.** The card carries a failure marker when the last run for
+that task failed, and the task modal's run tab leads with the reason above the
+log. A failure never silently leaves the task looking untouched: the queue
+moves on, but the reason stays visible until the next run of that task.
+
 ## Task field: `skip_auto_dispatch`
 
 A boolean on the task, absent meaning included. It excludes the task from
