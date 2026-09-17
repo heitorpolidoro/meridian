@@ -1798,10 +1798,16 @@ if (confirmRevisionBtn) {
         const feedbackText = tmRevisionFeedbackInput ? tmRevisionFeedbackInput.value.trim() : '';
 
         if (feedbackText) {
+            // `question` is always what the author wrote and `answer` is always
+            // the other side's reply. A revision request is the operator
+            // writing, so it is the question, and the AI's reply fills the
+            // answer later. Putting the feedback in `answer` labelled the
+            // operator's own words "AI Answer:" and left `question` showing a
+            // constant string.
             updatedQuestions.push({
                 id: 'rev-' + Date.now(),
-                question: 'Operator Revision Request',
-                answer: feedbackText,
+                question: feedbackText,
+                answer: '',
                 by: 'Operator',
                 created_at: new Date().toISOString()
             });

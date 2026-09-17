@@ -38,9 +38,10 @@ truncate the file, and never write it from an empty in-memory list.
 | `title` | string, short imperative | agent, on create and via update |
 | `status` | string, one of the ten below | agent / human |
 | `priority` | string, one of the four below | agent (defaults to `medium`) |
-| `justification` | string — why the task is blocked, or why it exists | agent |
+| `justification` | string — the task's context: why it exists, what was asked for, or why it is blocked. The board calls it *Context & Description* and the operator edits it there | agent / human |
 | `expected_results` | array of strings — concrete, mechanically verifiable outcomes | agent — detail file, not present in `GET /api/status` |
-| `questions` | array of objects: `[{ id, question, answer, by, created_at, answered_at }]` | agent / human |
+| `questions` | array of objects — a thread of exchanges, one entry per exchange. See **The questions array** below | agent / human |
+| `operator_feedback` | string — the text of the operator's most recent revision request, also recorded as a `questions` entry | board, on Request AI Revision |
 | `blockedBy` | array of task ids that must reach `done` first | agent |
 | `parent` | string, id of another task on the same board, optional | agent |
 | `spec_path` | string, e.g. `docs/tasks/MERID-1-spec.md` | agent |
@@ -87,6 +88,41 @@ in `pipeline.md` are what notice. Create where reality is; let the pipeline fill
 the gaps.
 
 Never delete a task. Move it to `nope` instead.
+
+## The questions array
+
+`questions` is a thread between the operator and the agents. Each entry is one
+exchange:
+
+```json
+{
+  "id": "q-1789355006724",
+  "by": "Operator",
+  "question": "Why does the header count say 7 when the list shows 3?",
+  "answer": "The count was hardcoded in the mock; four rows were missing.",
+  "created_at": "2026-09-15T16:42:00.000Z",
+  "answered_at": "2026-09-15T17:04:00.000Z"
+}
+```
+
+Two rules govern the pair, and the board's rendering depends on both:
+
+- **`question` is always what the author wrote.** `by` names that author —
+  `Operator` or `Agent`. Never put a label, a title or a summary there: the
+  board prints it as the message itself.
+- **`answer` is always the other side's reply**, and it starts empty. The
+  board renders an unanswered operator entry as *Awaiting AI answer* and an
+  unanswered agent entry as an input box for the operator.
+
+**To answer, fill the `answer` of the entry being answered.** Do not append a
+new entry for your reply. An agent that answers by creating its own
+`by: "Agent"` entry makes the board treat the reply as a fresh question *to*
+the operator, and the agent's own words land in the operator's input box.
+Set `answered_at` when you fill an answer.
+
+A revision request the operator sends from the board is an ordinary entry with
+`by: "Operator"` and the feedback in `question`; the same text is also stored
+in the task's `operator_feedback`.
 
 ## The ten statuses
 
