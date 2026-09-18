@@ -2,7 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const { deriveKey, nextTaskId, getTasks, getTask, saveTasks, deleteTaskDetail, stampNewTask, stampTaskUpdate, normalizeStatus, MalformedTasksError, LegacyTasksFileError } = require('./lib/tasks');
-const { TOOLS, PROBES, parsePluginState, parseReadiness, nextAction, commandFor } = require('./lib/tooling');
+const { TOOLS, PROBES, parsePluginState, parseReadiness, nextAction, commandFor, ptyWrap, needsPty } = require('./lib/tooling');
 const { ensureMeridianIgnored } = require('./lib/gitignore');
 const { registerProject } = require('./lib/projects');
 const { appendEvent } = require('./lib/events');
@@ -358,18 +358,34 @@ const PLUGIN_DIR = path.join(__dirname, 'plugin', 'plugins', 'meridian');
 // Runs one of the fixed probe commands and hands back its stdout and exit
 // code. A CLI that is not installed at all rejects with ENOENT, which reads
 // as "not installed / not ready" rather than crashing the request.
-function runTooling(argv, timeoutMs = 20000) {
+function runTooling(argv, timeoutMs = 20000, onChunk = null) {
     return new Promise(resolve => {
         const child = require('child_process').spawn(argv[0], argv.slice(1), {
             stdio: ['ignore', 'pipe', 'pipe']
         });
-        let out = '', err = '';
-        const timer = setTimeout(() => { try { child.kill('SIGKILL'); } catch (e) { /* already gone */ } }, timeoutMs);
-        child.stdout.on('data', d => { out += d; });
-        child.stderr.on('data', d => { err += d; });
-        child.on('error', e => { clearTimeout(timer); resolve({ stdout: '', stderr: e.message, code: 127 }); });
-        child.on('close', code => { clearTimeout(timer); resolve({ stdout: out, stderr: err, code }); });
+        let out = '', err = '', timedOut = false;
+        const timer = setTimeout(() => {
+            timedOut = true;
+            try { child.kill('SIGKILL'); } catch (e) { /* already gone */ }
+        }, timeoutMs);
+        const take = (buf, isErr) => {
+            const text = buf.toString();
+            if (isErr) err += text; else out += text;
+            if (onChunk) onChunk(text);
+        };
+        child.stdout.on('data', d => take(d, false));
+        child.stderr.on('data', d => take(d, true));
+        child.on('error', e => { clearTimeout(timer); resolve({ stdout: '', stderr: e.message, code: 127, timedOut }); });
+        child.on('close', code => { clearTimeout(timer); resolve({ stdout: out, stderr: err, code, timedOut }); });
     });
+}
+
+// Pushes a chunk of a running tooling command to every connected board, so the
+// settings screen can show the login URL while the command is still waiting
+// for its callback rather than only after it returns.
+function broadcastToolingOutput(cli, chunk) {
+    const payload = `data: ${JSON.stringify({ type: 'tooling-output', cli, chunk })}\n\n`;
+    clients.forEach(c => { try { c.write(payload); } catch (e) { /* client went away */ } });
 }
 
 // REST API: what the settings screen shows for each CLI — whether the plugin
@@ -416,16 +432,24 @@ app.post('/api/tooling/:cli/:action', async (req, res) => {
     if (!command) {
         return res.status(400).json({ error: `Unknown action ${cli}/${action}` });
     }
-    // Login opens a browser flow and waits for its callback, so it is not run
-    // here: the screen shows the command to run instead. Meridian never
-    // handles a credential or a token.
-    if (action === 'login') {
-        return res.status(400).json({ error: 'Login runs in your own terminal — copy the command.' });
-    }
+    // Login needs a real terminal — a plain spawn hands it pipes and it will
+    // not proceed — and it waits for a browser callback, so it gets a pty, a
+    // longer leash, and its output streamed while it waits. Meridian still
+    // never sees a credential: the CLI opens the browser and stores its own
+    // token.
+    const pty = needsPty(action);
+    const argv = pty ? ptyWrap(command.argv) : command.argv;
+    const timeoutMs = pty ? 300000 : 120000;
     try {
-        const result = await runTooling(command.argv, 120000);
+        const result = await runTooling(argv, timeoutMs, pty ? chunk => broadcastToolingOutput(cli, chunk) : null);
         const output = [result.stdout, result.stderr].filter(Boolean).join('\n').trim();
-        res.json({ ok: result.code === 0, code: result.code, command: command.display, output });
+        res.json({
+            ok: result.code === 0 && !result.timedOut,
+            code: result.code,
+            command: command.display,
+            timedOut: Boolean(result.timedOut),
+            output: result.timedOut ? `${output}\n\n[timed out after ${Math.round(timeoutMs / 1000)}s]`.trim() : output
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

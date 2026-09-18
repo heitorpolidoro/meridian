@@ -258,6 +258,13 @@ function connectSSE() {
                 renderProjects(parsed.data);
                 connectionStatus.textContent = "Live";
                 connectionStatus.className = "status-indicator connected";
+            } else if (parsed.type === 'tooling-output') {
+                const out = document.getElementById(`tooling-out-${parsed.cli}`);
+                if (out) {
+                    out.classList.remove('hidden');
+                    out.textContent += parsed.chunk;
+                    out.scrollTop = out.scrollHeight;
+                }
             } else if (parsed.type === 'fix-progress' && parsed.projectPath === document.getElementById('fix-proj-path').value) {
                 const status = parsed.data.status;
                 const msg = parsed.data.message;
@@ -929,11 +936,11 @@ function renderTooling(tools) {
             <div class="cmd-block">
                 <code class="cmd-text" data-raw="${escapeHtml(t.command || '')}">${highlightCommand(t.command || '')}</code>
                 <div class="cmd-actions">
-                    ${t.action === 'login' ? '' : `<button type="button" class="cmd-icon-btn" data-run="${escapeHtml(t.cli)}" data-action="${escapeHtml(t.action)}" title="Run here" aria-label="Run here">${ICON_RUN}</button>`}
+                    <button type="button" class="cmd-icon-btn" data-run="${escapeHtml(t.cli)}" data-action="${escapeHtml(t.action)}" title="Run here" aria-label="Run here">${ICON_RUN}</button>
                     <button type="button" class="cmd-icon-btn" data-copy="${escapeHtml(t.cli)}" title="Copy" aria-label="Copy command">${ICON_COPY}</button>
                 </div>
             </div>
-            ${t.action === 'login' ? '<p class="tooling-note">Login opens a browser flow — run it in your own terminal.</p>' : ''}
+            ${t.action === 'login' ? '<p class="tooling-note">Running it opens your browser to sign in. Meridian never sees the credential — the CLI stores its own.</p>' : ''}
             <pre class="tooling-output hidden" id="tooling-out-${escapeHtml(t.cli)}"></pre>
         </div>`;
     }).join('');
@@ -966,13 +973,20 @@ document.addEventListener('click', async (event) => {
     if (!runBtn) return;
     const cli = runBtn.dataset.run;
     const out = document.getElementById(`tooling-out-${cli}`);
+    const isLogin = runBtn.dataset.action === 'login';
     runBtn.disabled = true;
     runBtn.classList.add('is-running');
-    if (out) { out.classList.remove('hidden'); out.textContent = 'Running…'; }
+    if (out) {
+        out.classList.remove('hidden');
+        // Login streams over SSE while it waits for the browser callback, so
+        // the box starts empty and fills; the others only speak at the end.
+        out.textContent = isLogin ? 'Waiting for you to finish signing in…\n' : 'Running…';
+    }
     try {
         const res = await fetch(`/api/tooling/${cli}/${runBtn.dataset.action}`, { method: 'POST' });
         const data = await res.json();
-        if (out) out.textContent = data.output || data.error || '(no output)';
+        if (out && !isLogin) out.textContent = data.output || data.error || '(no output)';
+        if (out && isLogin && data.error) out.textContent += `\n${data.error}`;
         showFlashMessage(data.ok ? 'Done' : (data.error || 'Command failed'), data.ok ? 'success' : 'error');
         // The state the screen shows was read before this ran, so re-read it.
         loadTooling();

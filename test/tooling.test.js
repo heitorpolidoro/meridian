@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
-    TOOLS, parsePluginState, parseReadiness, nextAction, commandFor
+    TOOLS, parsePluginState, parseReadiness, nextAction, commandFor, ptyWrap, needsPty
 } = require('../lib/tooling');
 
 test('the two supported CLIs carry a label and an icon', () => {
@@ -124,4 +124,35 @@ test('an unknown cli or action yields no command', () => {
     assert.equal(commandFor('agy', 'login', {}), null);
     assert.equal(commandFor('bash', 'install', {}), null);
     assert.equal(commandFor('claude', '', {}), null);
+});
+
+// --- allocating a terminal ---------------------------------------------------
+//
+// `claude auth login` refuses to behave without a TTY, and a plain spawn gives
+// pipes. `script` is a system tool on both platforms, so no dependency is
+// added — but its syntax differs, and the repo runs on macOS while CI is Linux.
+
+test('on macOS the command is wrapped in BSD script syntax', () => {
+    assert.deepEqual(
+        ptyWrap(['claude', 'auth', 'login'], 'darwin'),
+        ['script', '-q', '/dev/null', 'claude', 'auth', 'login']
+    );
+});
+
+test('on Linux the command is wrapped in GNU script syntax, as one -c string', () => {
+    assert.deepEqual(
+        ptyWrap(['claude', 'auth', 'login'], 'linux'),
+        ['script', '-qec', 'claude auth login', '/dev/null']
+    );
+});
+
+test('only login needs a terminal; the plugin commands do not', () => {
+    assert.equal(needsPty('login'), true);
+    assert.equal(needsPty('install'), false);
+    assert.equal(needsPty('uninstall'), false);
+});
+
+test('login pre-answers the account prompt so no keystroke is needed', () => {
+    const cmd = commandFor('claude', 'login', {});
+    assert.deepEqual(cmd.argv, ['claude', 'auth', 'login', '--claudeai']);
 });
