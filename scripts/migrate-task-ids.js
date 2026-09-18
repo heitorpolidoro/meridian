@@ -144,6 +144,8 @@ function main() {
     console.log('\n✅ Migration complete.');
 }
 
-main();
+// Guarded: this module is also required for renameTaskDetails, and an
+// unguarded call ran a real migration — writes included — on import.
+if (require.main === module) main();
 
 module.exports = { renameTaskDetails };
