@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "node --test test/*.test.js",
-    "plugin:reload": "claude plugin uninstall meridian && claude plugin install meridian@meridian && node scripts/prune-plugin-cache.js"
+    "plugin:reload": "claude plugin update meridian@meridian && agy plugin install plugin/plugins/meridian && node scripts/prune-plugin-cache.js"
   },
   "keywords": [],
   "author": "",

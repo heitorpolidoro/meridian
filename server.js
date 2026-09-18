@@ -2,7 +2,8 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const { deriveKey, nextTaskId, getTasks, getTask, saveTasks, deleteTaskDetail, stampNewTask, stampTaskUpdate, normalizeStatus, MalformedTasksError, LegacyTasksFileError } = require('./lib/tasks');
-const { TOOLS, PROBES, parsePluginState, parseReadiness, nextAction, commandFor, ptyWrap, needsPty } = require('./lib/tooling');
+const { TOOLS, PROBES, AGY_INSTALL_DIR, parsePluginState, parseReadiness, nextAction, commandFor, ptyWrap, needsPty } = require('./lib/tooling');
+const { comparePluginTrees } = require('./lib/plugin-sync');
 const { ensureMeridianIgnored } = require('./lib/gitignore');
 const { registerProject } = require('./lib/projects');
 const { appendEvent } = require('./lib/events');
@@ -388,6 +389,19 @@ function broadcastToolingOutput(cli, chunk) {
     clients.forEach(c => { try { c.write(payload); } catch (e) { /* client went away */ } });
 }
 
+// Claude reports where it put the copy; Antigravity always uses one path.
+// A null means the copy cannot be located, and the screen then says nothing
+// about drift rather than guessing.
+function installedPluginDir(cli, pluginListStdout) {
+    if (cli === 'agy') return AGY_INSTALL_DIR;
+    try {
+        const entry = JSON.parse(pluginListStdout).find(p => String(p.id).split('@')[0] === 'meridian');
+        return entry && entry.installPath ? entry.installPath : null;
+    } catch (err) {
+        return null;
+    }
+}
+
 // REST API: what the settings screen shows for each CLI — whether the plugin
 // is installed, whether the CLI could actually run a dispatch, and the single
 // action that follows from that, rendered as the exact command it will run.
@@ -402,7 +416,21 @@ app.get('/api/tooling', async (req, res) => {
             ]);
             const plugin = parsePluginState(cli, pluginOut.stdout);
             const readiness = parseReadiness(cli, readyOut.stdout || readyOut.stderr, readyOut.code);
-            const action = nextAction(cli, { installed: plugin.installed, ready: readiness.ready });
+
+            // Neither CLI reports a version that moves when a file changes, so
+            // "is it current" is answered by comparing content with this repo.
+            let sync = { current: null, drifted: 0 };
+            if (plugin.installed) {
+                const installedDir = installedPluginDir(cli, pluginOut.stdout);
+                if (installedDir) {
+                    const cmp = comparePluginTrees(PLUGIN_DIR, installedDir);
+                    sync = { current: cmp.current, drifted: cmp.differing.length + cmp.missing.length };
+                }
+            }
+
+            const action = nextAction(cli, {
+                installed: plugin.installed, ready: readiness.ready, current: sync.current
+            });
             const command = commandFor(cli, action, { pluginDir: PLUGIN_DIR });
             tools.push({
                 cli,
@@ -412,6 +440,8 @@ app.get('/api/tooling', async (req, res) => {
                 version: plugin.version,
                 ready: readiness.ready,
                 reason: readiness.reason,
+                current: sync.current,
+                drifted: sync.drifted,
                 action,
                 command: command ? command.display : null
             });

@@ -893,7 +893,7 @@ const ICON_COPY = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="
 // from the server, built from the same table the server executes, so the two
 // cannot drift; the client posts an action name and never a command.
 
-const ACTION_LABELS = { install: 'Install plugin', uninstall: 'Uninstall plugin', login: 'Login' };
+const ACTION_LABELS = { install: 'Install plugin', uninstall: 'Uninstall plugin', update: 'Update plugin', login: 'Login' };
 
 async function loadTooling() {
     const list = document.getElementById('tooling-list');
@@ -912,8 +912,13 @@ function renderTooling(tools) {
     const list = document.getElementById('tooling-list');
     if (!list) return;
     list.innerHTML = tools.map(t => {
+        // Installed and current are separate facts: a copy can be installed and
+        // still be the version from before this morning's edit, which is the
+        // failure the operator cannot otherwise see.
         const pluginBadge = t.installed
-            ? `<span class="tooling-pill tooling-pill--on">Plugin installed${t.version ? ` · ${escapeHtml(t.version)}` : ''}</span>`
+            ? (t.current === false
+                ? `<span class="tooling-pill tooling-pill--warn">Outdated · ${t.drifted} file${t.drifted === 1 ? '' : 's'} differ from this repo</span>`
+                : `<span class="tooling-pill tooling-pill--on">Plugin installed${t.version ? ` · ${escapeHtml(t.version)}` : ''}</span>`)
             : '<span class="tooling-pill tooling-pill--off">Plugin not installed</span>';
         // Readiness and the plugin are separate facts: Antigravity has no login
         // action at all, so its state is reported rather than actioned.

@@ -156,3 +156,25 @@ test('login pre-answers the account prompt so no keystroke is needed', () => {
     const cmd = commandFor('claude', 'login', {});
     assert.deepEqual(cmd.argv, ['claude', 'auth', 'login', '--claudeai']);
 });
+
+// --- the installed copy drifting from the repository -------------------------
+
+test('an installed copy that no longer matches the repo offers update', () => {
+    assert.equal(nextAction('claude', { installed: true, ready: true, current: false }), 'update');
+    assert.equal(nextAction('agy', { installed: true, ready: true, current: false }), 'update');
+});
+
+test('uninstall returns once the copy matches again', () => {
+    assert.equal(nextAction('claude', { installed: true, ready: true, current: true }), 'uninstall');
+});
+
+// Login still outranks drift: updating a plugin into a CLI that cannot run is
+// busywork.
+test('an unauthenticated claude still asks for login before update', () => {
+    assert.equal(nextAction('claude', { installed: true, ready: false, current: false }), 'login');
+});
+
+test('update resolves to a command for both CLIs', () => {
+    assert.deepEqual(commandFor('claude', 'update', {}).argv, ['claude', 'plugin', 'update', 'meridian@meridian']);
+    assert.deepEqual(commandFor('agy', 'update', { pluginDir: '/ws/p' }).argv, ['agy', 'plugin', 'install', '/ws/p']);
+});
