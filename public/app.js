@@ -911,6 +911,15 @@ async function loadTooling() {
 function renderTooling(tools) {
     const list = document.getElementById('tooling-list');
     if (!list) return;
+
+    // The lede promises a command to copy or run. With no CLI on the machine
+    // there is no command on the screen at all, so the promise is false and
+    // the sentence goes away. One CLI present is enough to keep it true.
+    const lede = document.getElementById('settings-lede');
+    if (lede) {
+        const noneRunnable = tools.length > 0 && tools.every(t => t.present === false);
+        lede.classList.toggle('hidden', noneRunnable);
+    }
     list.innerHTML = tools.map(t => {
         // A CLI that is not on this machine gets no action and no command:
         // installing one is a platform-specific `curl | sh`, which Meridian
