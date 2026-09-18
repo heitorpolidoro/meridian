@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { deriveKey, nextTaskId, getTasks, getTask, saveTasks, deleteTaskDetail, stampNewTask, stampTaskUpdate, normalizeStatus, MalformedTasksError, LegacyTasksFileError } = require('./lib/tasks');
 const { TOOLS, PROBES, AGY_INSTALL_DIR, parsePluginState, parseReadiness, nextAction, commandFor, ptyWrap, needsPty } = require('./lib/tooling');
-const { comparePluginTrees } = require('./lib/plugin-sync');
+const { comparePluginTrees, readInstalledVersion } = require('./lib/plugin-sync');
 const { ensureMeridianIgnored } = require('./lib/gitignore');
 const { registerProject } = require('./lib/projects');
 const { appendEvent } = require('./lib/events');
@@ -420,11 +420,16 @@ app.get('/api/tooling', async (req, res) => {
             // Neither CLI reports a version that moves when a file changes, so
             // "is it current" is answered by comparing content with this repo.
             let sync = { current: null, drifted: 0 };
+            // The version the CLI reports is not the one the plugin declares:
+            // Antigravity reports none and Claude reports the revision it
+            // installed from. The copy's own manifest is the honest answer.
+            let declaredVersion = null;
             if (plugin.installed) {
                 const installedDir = installedPluginDir(cli, pluginOut.stdout);
                 if (installedDir) {
                     const cmp = comparePluginTrees(PLUGIN_DIR, installedDir);
                     sync = { current: cmp.current, drifted: cmp.differing.length + cmp.missing.length };
+                    declaredVersion = readInstalledVersion(installedDir);
                 }
             }
 
@@ -437,7 +442,7 @@ app.get('/api/tooling', async (req, res) => {
                 label: meta.label,
                 icon: meta.icon,
                 installed: plugin.installed,
-                version: plugin.version,
+                version: declaredVersion || plugin.version,
                 ready: readiness.ready,
                 reason: readiness.reason,
                 current: sync.current,

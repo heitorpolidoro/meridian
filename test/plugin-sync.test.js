@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { comparePluginTrees } = require('../lib/plugin-sync');
+const { comparePluginTrees, readInstalledVersion } = require('../lib/plugin-sync');
 
 function tree(files) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'meridian-sync-'));
@@ -72,4 +72,34 @@ test('nested files are compared, not just the top level', () => {
     const a = tree({ 'skills/work/references/deep.md': 'one' });
     const b = tree({ 'skills/work/references/deep.md': 'two' });
     assert.deepEqual(comparePluginTrees(a, b).differing, ['skills/work/references/deep.md']);
+});
+
+// --- the version the installed copy declares ---------------------------------
+//
+// Neither CLI reports it usefully: Antigravity reports none at all, and Claude
+// reports the marketplace revision it installed from. The copy itself carries
+// the manifest, so that is where the declared version comes from.
+
+test('the version is read from the canonical manifest', () => {
+    const dir = tree({ '.claude-plugin/plugin.json': '{"name":"meridian","version":"0.1.0"}' });
+    assert.equal(readInstalledVersion(dir), '0.1.0');
+});
+
+test('the root manifest is used when there is no .claude-plugin one', () => {
+    const dir = tree({ 'plugin.json': '{"name":"meridian","version":"0.2.0"}' });
+    assert.equal(readInstalledVersion(dir), '0.2.0');
+});
+
+test('the canonical manifest wins when both are present', () => {
+    const dir = tree({
+        '.claude-plugin/plugin.json': '{"version":"0.1.0"}',
+        'plugin.json': '{"version":"9.9.9"}'
+    });
+    assert.equal(readInstalledVersion(dir), '0.1.0');
+});
+
+test('a manifest without a version, unreadable, or absent yields null', () => {
+    assert.equal(readInstalledVersion(tree({ 'plugin.json': '{"name":"meridian"}' })), null);
+    assert.equal(readInstalledVersion(tree({ 'plugin.json': 'not json' })), null);
+    assert.equal(readInstalledVersion(path.join(os.tmpdir(), 'absent-' + Date.now())), null);
 });
