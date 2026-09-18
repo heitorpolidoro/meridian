@@ -125,6 +125,7 @@ const expandedRails = new Set();
 
 // Mirrors lib/routes.js#resolveRoute — that file is the source of truth.
 const GLOBAL_SLUGS = ['tickets', 'all-tickets', 'global'];
+const SETTINGS_SLUG = 'settings';
 
 function resolveRoute(pathname, projects) {
     let slug = String(pathname || '').replace(/^\/+|\/+$/g, '');
@@ -133,6 +134,7 @@ function resolveRoute(pathname, projects) {
 
     const lower = slug.toLowerCase();
     if (GLOBAL_SLUGS.includes(lower)) return { view: 'global' };
+    if (lower === SETTINGS_SLUG) return { view: 'settings' };
 
     const proj = (projects || []).find(p => {
         const rel = p.relativePath || String(p.path || '').split('/').pop() || '';
@@ -710,6 +712,9 @@ function handleUrlRouting() {
         case 'global':
             showGlobalTicketsView(false);
             break;
+        case 'settings':
+            showSettingsView(false);
+            break;
         case 'project':
             showProjectView(route.path, false);
             break;
@@ -732,12 +737,24 @@ function handleUrlRouting() {
 // nothing is shown before the first SSE message has picked a route, so a deep
 // link never flashes the dashboard. The leaving view hides at once; the
 // entering one replays the view-enter animation.
+// Three screens now share one slot, so this switches over a map rather than
+// the two-way ternary it used to be: adding a fourth must not mean rewriting
+// the condition again.
 function activateView(name) {
     if (viewLoading) viewLoading.remove();
-    const entering = name === 'dashboard' ? dashboardView : projectView;
-    const leaving = name === 'dashboard' ? projectView : dashboardView;
-    leaving.classList.add('hidden');
-    leaving.classList.remove('view--active');
+    const settingsView = document.getElementById('settings-view');
+    const views = {
+        dashboard: dashboardView,
+        global: projectView,
+        project: projectView,
+        settings: settingsView
+    };
+    const entering = views[name] || dashboardView;
+    for (const el of new Set(Object.values(views))) {
+        if (!el || el === entering) continue;
+        el.classList.add('hidden');
+        el.classList.remove('view--active');
+    }
     entering.classList.remove('hidden');
     entering.classList.add('view--active');
     document.body.dataset.view = name;
@@ -832,6 +849,123 @@ window.showGlobalTicketsView = function(pushState = true) {
 const globalTicketsBtn = document.getElementById('global-tickets-btn');
 if (globalTicketsBtn) {
     globalTicketsBtn.addEventListener('click', () => showGlobalTicketsView(true));
+}
+
+window.showSettingsView = function(pushState = true) {
+    activateView('settings');
+    setBreadcrumb('Settings');
+    document.title = 'Settings · Meridian';
+    loadTooling();
+    if (pushState && window.location.pathname !== '/settings') {
+        history.pushState(null, '', '/settings');
+    }
+};
+
+// --- Settings: the CLIs that can run the pipeline ---------------------------
+//
+// Every action shows the exact command before it runs. The command text comes
+// from the server, built from the same table the server executes, so the two
+// cannot drift; the client posts an action name and never a command.
+
+const ACTION_LABELS = { install: 'Install plugin', uninstall: 'Uninstall plugin', login: 'Login' };
+
+async function loadTooling() {
+    const list = document.getElementById('tooling-list');
+    if (!list) return;
+    list.innerHTML = '<div class="tooling-loading">Checking your CLIs…</div>';
+    try {
+        const res = await fetch('/api/tooling');
+        const data = await res.json();
+        renderTooling(data.tools || []);
+    } catch (err) {
+        list.innerHTML = '<div class="tooling-loading">Could not reach the Meridian server.</div>';
+    }
+}
+
+function renderTooling(tools) {
+    const list = document.getElementById('tooling-list');
+    if (!list) return;
+    list.innerHTML = tools.map(t => {
+        const pluginBadge = t.installed
+            ? `<span class="tooling-pill tooling-pill--on">Plugin installed${t.version ? ` · ${escapeHtml(t.version)}` : ''}</span>`
+            : '<span class="tooling-pill tooling-pill--off">Plugin not installed</span>';
+        // Readiness and the plugin are separate facts: Antigravity has no login
+        // action at all, so its state is reported rather than actioned.
+        const readyBadge = t.ready
+            ? '<span class="tooling-pill tooling-pill--on">Ready to run</span>'
+            : `<span class="tooling-pill tooling-pill--warn">${escapeHtml(t.reason || 'Not ready')}</span>`;
+        return `
+        <div class="tooling-card" data-cli="${escapeHtml(t.cli)}">
+            <img class="tooling-icon" src="${escapeHtml(t.icon)}" alt="" width="40" height="40">
+            <div class="tooling-body">
+                <div class="tooling-name">${escapeHtml(t.label)}</div>
+                <div class="tooling-pills">${pluginBadge}${readyBadge}</div>
+            </div>
+            <button type="button" class="secondary-btn tooling-action-btn"
+                data-cli="${escapeHtml(t.cli)}" data-action="${escapeHtml(t.action)}">
+                ${escapeHtml(ACTION_LABELS[t.action] || t.action)}
+            </button>
+        </div>
+        <div class="tooling-command hidden" id="tooling-cmd-${escapeHtml(t.cli)}">
+            <code>${escapeHtml(t.command || '')}</code>
+            <div class="tooling-command-actions">
+                <button type="button" class="secondary-btn tm-small-btn" data-copy="${escapeHtml(t.cli)}">Copy</button>
+                ${t.action === 'login'
+                    ? '<span class="tooling-note">Login opens a browser flow — run it in your own terminal.</span>'
+                    : `<button type="button" class="primary-btn tm-small-btn" data-run="${escapeHtml(t.cli)}" data-action="${escapeHtml(t.action)}">Run here</button>`}
+            </div>
+            <pre class="tooling-output hidden" id="tooling-out-${escapeHtml(t.cli)}"></pre>
+        </div>`;
+    }).join('');
+}
+
+document.addEventListener('click', async (event) => {
+    const toggle = event.target.closest('.tooling-action-btn');
+    if (toggle) {
+        const box = document.getElementById(`tooling-cmd-${toggle.dataset.cli}`);
+        if (box) box.classList.toggle('hidden');
+        return;
+    }
+
+    const copyBtn = event.target.closest('[data-copy]');
+    if (copyBtn) {
+        const box = document.getElementById(`tooling-cmd-${copyBtn.dataset.copy}`);
+        const text = box ? box.querySelector('code').textContent : '';
+        try {
+            await navigator.clipboard.writeText(text);
+            showFlashMessage('Command copied', 'success');
+        } catch (err) {
+            showFlashMessage('Could not copy — select the text instead', 'error');
+        }
+        return;
+    }
+
+    const runBtn = event.target.closest('[data-run]');
+    if (!runBtn) return;
+    const cli = runBtn.dataset.run;
+    const out = document.getElementById(`tooling-out-${cli}`);
+    runBtn.disabled = true;
+    runBtn.textContent = 'Running…';
+    if (out) { out.classList.remove('hidden'); out.textContent = 'Running…'; }
+    try {
+        const res = await fetch(`/api/tooling/${cli}/${runBtn.dataset.action}`, { method: 'POST' });
+        const data = await res.json();
+        if (out) out.textContent = data.output || data.error || '(no output)';
+        showFlashMessage(data.ok ? 'Done' : (data.error || 'Command failed'), data.ok ? 'success' : 'error');
+        // The state the screen shows was read before this ran, so re-read it.
+        loadTooling();
+    } catch (err) {
+        if (out) out.textContent = String(err);
+        showFlashMessage('Network error', 'error');
+    } finally {
+        runBtn.disabled = false;
+        runBtn.textContent = 'Run here';
+    }
+});
+
+const settingsBtn = document.getElementById('settings-btn');
+if (settingsBtn) {
+    settingsBtn.addEventListener('click', () => showSettingsView(true));
 }
 
 const headerTitle = document.querySelector('header h1');

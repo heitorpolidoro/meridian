@@ -2,6 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const { deriveKey, nextTaskId, getTasks, getTask, saveTasks, deleteTaskDetail, stampNewTask, stampTaskUpdate, normalizeStatus, MalformedTasksError, LegacyTasksFileError } = require('./lib/tasks');
+const { TOOLS, PROBES, parsePluginState, parseReadiness, nextAction, commandFor } = require('./lib/tooling');
 const { ensureMeridianIgnored } = require('./lib/gitignore');
 const { registerProject } = require('./lib/projects');
 const { appendEvent } = require('./lib/events');
@@ -347,6 +348,87 @@ app.get('/api/status', (req, res) => {
         workable: req.query.workable === '1' || undefined,
         limit: Number.isInteger(limit) && limit > 0 ? limit : undefined
     }));
+});
+
+// The plugin directory the Antigravity install command points at. Resolved
+// here rather than sent by the client: the client names an action, never a
+// path, and never a command.
+const PLUGIN_DIR = path.join(__dirname, 'plugin', 'plugins', 'meridian');
+
+// Runs one of the fixed probe commands and hands back its stdout and exit
+// code. A CLI that is not installed at all rejects with ENOENT, which reads
+// as "not installed / not ready" rather than crashing the request.
+function runTooling(argv, timeoutMs = 20000) {
+    return new Promise(resolve => {
+        const child = require('child_process').spawn(argv[0], argv.slice(1), {
+            stdio: ['ignore', 'pipe', 'pipe']
+        });
+        let out = '', err = '';
+        const timer = setTimeout(() => { try { child.kill('SIGKILL'); } catch (e) { /* already gone */ } }, timeoutMs);
+        child.stdout.on('data', d => { out += d; });
+        child.stderr.on('data', d => { err += d; });
+        child.on('error', e => { clearTimeout(timer); resolve({ stdout: '', stderr: e.message, code: 127 }); });
+        child.on('close', code => { clearTimeout(timer); resolve({ stdout: out, stderr: err, code }); });
+    });
+}
+
+// REST API: what the settings screen shows for each CLI — whether the plugin
+// is installed, whether the CLI could actually run a dispatch, and the single
+// action that follows from that, rendered as the exact command it will run.
+app.get('/api/tooling', async (req, res) => {
+    try {
+        const tools = [];
+        for (const [cli, meta] of Object.entries(TOOLS)) {
+            const probes = PROBES[cli];
+            const [pluginOut, readyOut] = await Promise.all([
+                runTooling(probes.plugin),
+                runTooling(probes.ready)
+            ]);
+            const plugin = parsePluginState(cli, pluginOut.stdout);
+            const readiness = parseReadiness(cli, readyOut.stdout || readyOut.stderr, readyOut.code);
+            const action = nextAction(cli, { installed: plugin.installed, ready: readiness.ready });
+            const command = commandFor(cli, action, { pluginDir: PLUGIN_DIR });
+            tools.push({
+                cli,
+                label: meta.label,
+                icon: meta.icon,
+                installed: plugin.installed,
+                version: plugin.version,
+                ready: readiness.ready,
+                reason: readiness.reason,
+                action,
+                command: command ? command.display : null
+            });
+        }
+        res.json({ tools, generatedAt: new Date().toISOString() });
+    } catch (err) {
+        console.error('Error reading tooling state:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Runs one of the fixed actions. The body names `cli` and `action`; anything
+// that does not resolve in the command table is refused, which is what keeps
+// this endpoint from being a shell.
+app.post('/api/tooling/:cli/:action', async (req, res) => {
+    const { cli, action } = req.params;
+    const command = commandFor(cli, action, { pluginDir: PLUGIN_DIR });
+    if (!command) {
+        return res.status(400).json({ error: `Unknown action ${cli}/${action}` });
+    }
+    // Login opens a browser flow and waits for its callback, so it is not run
+    // here: the screen shows the command to run instead. Meridian never
+    // handles a credential or a token.
+    if (action === 'login') {
+        return res.status(400).json({ error: 'Login runs in your own terminal — copy the command.' });
+    }
+    try {
+        const result = await runTooling(command.argv, 120000);
+        const output = [result.stdout, result.stderr].filter(Boolean).join('\n').trim();
+        res.json({ ok: result.code === 0, code: result.code, command: command.display, output });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // REST API: on-demand stats aggregated from events.jsonl. Never cached —

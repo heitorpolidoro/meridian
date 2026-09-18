@@ -61,3 +61,14 @@ test('a project entry missing name and relativePath is matched by nothing but ne
     const projects = [{ path: '' }];
     assert.deepEqual(resolveRoute('/anything', projects), { view: 'unknown', slug: 'anything' });
 });
+
+test('/settings resolves to the settings view', () => {
+    assert.deepEqual(resolveRoute('/settings', []), { view: 'settings' });
+    assert.deepEqual(resolveRoute('/Settings/', []), { view: 'settings' });
+});
+
+// A project whose slug is literally "settings" would be unreachable, which is
+// worth knowing rather than discovering later.
+test('the settings slug wins over a project of the same name', () => {
+    assert.deepEqual(resolveRoute('/settings', [{ path: '/ws/settings', relativePath: 'settings' }]), { view: 'settings' });
+});

@@ -25,6 +25,7 @@
             <div class="header-actions">
                 <div id="connection-status" class="status-indicator">Connecting...</div>
                 <button id="global-tickets-btn" class="secondary-btn">🎫 All Tickets</button>
+                <button id="settings-btn" class="secondary-btn">⚙️ Settings</button>
                 <button id="fix-all-btn" class="primary-btn fix-all-btn hidden">Fix All 🪄</button>
                 <button id="open-add-modal-btn" class="primary-btn">+ Register Project</button>
             </div>
@@ -38,6 +39,14 @@
             <!-- Project Cards Grid -->
             <div id="projects-container">
                 <!-- Projects will be rendered dynamically here -->
+            </div>
+        </main>
+
+        <main id="settings-view" class="view hidden">
+            <h2 class="settings-title">Settings</h2>
+            <p class="settings-lede">The command each button runs is shown before it runs. Copy it to run yourself, or run it here.</p>
+            <div id="tooling-list" class="tooling-list">
+                <div class="tooling-loading">Checking your CLIs…</div>
             </div>
         </main>
 

@@ -1,0 +1,127 @@
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const {
+    TOOLS, parsePluginState, parseReadiness, nextAction, commandFor
+} = require('../lib/tooling');
+
+test('the two supported CLIs carry a label and an icon', () => {
+    assert.deepEqual(Object.keys(TOOLS).sort(), ['agy', 'claude']);
+    for (const cli of Object.keys(TOOLS)) {
+        assert.ok(TOOLS[cli].label, `${cli} has a label`);
+        assert.match(TOOLS[cli].icon, /^\/icons\/.+\.png$/);
+    }
+});
+
+// --- plugin state ------------------------------------------------------------
+
+const CLAUDE_LIST = JSON.stringify([
+    { id: 'claude-md-management@claude-plugins-official', version: '1.0.0', enabled: true },
+    { id: 'meridian@meridian', version: '0.1.0', scope: 'user', enabled: true }
+]);
+
+test('claude: the meridian entry is found by its id prefix, with its version', () => {
+    assert.deepEqual(parsePluginState('claude', CLAUDE_LIST), { installed: true, version: '0.1.0' });
+});
+
+test('claude: a list without meridian reads as not installed', () => {
+    const other = JSON.stringify([{ id: 'code-simplifier@claude-plugins-official', version: '1.0.0' }]);
+    assert.deepEqual(parsePluginState('claude', other), { installed: false, version: null });
+});
+
+// agy reports a different shape: an `imports` array of names, no versions.
+test('agy: the meridian entry is found in imports', () => {
+    const list = JSON.stringify({ imports: [{ name: 'conductor' }, { name: 'meridian' }] });
+    assert.deepEqual(parsePluginState('agy', list), { installed: true, version: null });
+});
+
+test('agy: a list without meridian reads as not installed', () => {
+    const list = JSON.stringify({ imports: [{ name: 'conductor' }] });
+    assert.deepEqual(parsePluginState('agy', list), { installed: false, version: null });
+});
+
+// A CLI that is missing, erroring or printing a banner must not read as
+// "installed" — the screen would then offer Uninstall for something absent.
+test('unparseable output reads as not installed rather than throwing', () => {
+    for (const junk of ['', 'command not found', '<html>502</html>', null, undefined]) {
+        assert.deepEqual(parsePluginState('claude', junk), { installed: false, version: null });
+        assert.deepEqual(parsePluginState('agy', junk), { installed: false, version: null });
+    }
+});
+
+// --- readiness ---------------------------------------------------------------
+
+test('claude: loggedIn true is ready, false carries the reason', () => {
+    assert.deepEqual(
+        parseReadiness('claude', JSON.stringify({ loggedIn: true, authMethod: 'claudeai' }), 0),
+        { ready: true, reason: null }
+    );
+    const out = parseReadiness('claude', JSON.stringify({ loggedIn: false, authMethod: 'none' }), 0);
+    assert.equal(out.ready, false);
+    assert.match(out.reason, /not authenticated/i);
+});
+
+// Antigravity has no auth verb at all, so readiness is whether `agy models`
+// could reach the service — it needs working credentials and costs nothing.
+test('agy: a zero exit from the models probe is ready', () => {
+    assert.deepEqual(parseReadiness('agy', 'gemini-3.8-flash-high\tGemini', 0), { ready: true, reason: null });
+});
+
+test('agy: a non-zero exit is not ready and reports what came back', () => {
+    const out = parseReadiness('agy', 'Error: could not fetch models', 1);
+    assert.equal(out.ready, false);
+    assert.match(out.reason, /could not fetch models/);
+});
+
+test('claude: unparseable auth output is not ready rather than optimistically ready', () => {
+    const out = parseReadiness('claude', 'zsh: command not found: claude', 127);
+    assert.equal(out.ready, false);
+    assert.ok(out.reason);
+});
+
+// --- which action the button offers ------------------------------------------
+
+test('claude: not authenticated asks for login before anything else', () => {
+    assert.equal(nextAction('claude', { installed: false, ready: false }), 'login');
+    assert.equal(nextAction('claude', { installed: true, ready: false }), 'login');
+});
+
+test('authenticated and missing offers install; present offers uninstall', () => {
+    assert.equal(nextAction('claude', { installed: false, ready: true }), 'install');
+    assert.equal(nextAction('claude', { installed: true, ready: true }), 'uninstall');
+});
+
+// agy has no login action to offer, so readiness never changes its button —
+// the screen reports the reason separately instead of offering a dead button.
+test('agy never offers login, whatever its readiness', () => {
+    assert.equal(nextAction('agy', { installed: false, ready: false }), 'install');
+    assert.equal(nextAction('agy', { installed: true, ready: false }), 'uninstall');
+    assert.equal(nextAction('agy', { installed: false, ready: true }), 'install');
+});
+
+// --- the command shown is the command run ------------------------------------
+
+test('every action resolves to an argv and a display string built from it', () => {
+    const opts = { pluginDir: '/ws/meridian/plugin/plugins/meridian' };
+    for (const [cli, actions] of [['claude', ['install', 'uninstall', 'login']], ['agy', ['install', 'uninstall']]]) {
+        for (const action of actions) {
+            const cmd = commandFor(cli, action, opts);
+            assert.ok(Array.isArray(cmd.argv) && cmd.argv.length > 0, `${cli}/${action} has argv`);
+            assert.equal(cmd.argv[0], cli);
+            assert.equal(cmd.display, cmd.argv.join(' '));
+        }
+    }
+});
+
+test('agy install carries the plugin directory it was given', () => {
+    const cmd = commandFor('agy', 'install', { pluginDir: '/ws/meridian/plugin/plugins/meridian' });
+    assert.ok(cmd.argv.includes('/ws/meridian/plugin/plugins/meridian'));
+});
+
+// The client sends an action name, never a command. Anything unknown must
+// resolve to nothing at all, or this screen becomes a remote shell.
+test('an unknown cli or action yields no command', () => {
+    assert.equal(commandFor('claude', 'rm -rf /', {}), null);
+    assert.equal(commandFor('agy', 'login', {}), null);
+    assert.equal(commandFor('bash', 'install', {}), null);
+    assert.equal(commandFor('claude', '', {}), null);
+});
