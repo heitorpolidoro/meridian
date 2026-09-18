@@ -11,13 +11,12 @@ JSON indentado lido e reescrito inteiro a cada mudança. Medições do workspace
 
 | Projeto | Bytes | Tasks |
 |---|---:|---:|
-| `project_e` | 695.896 | 73 |
-| `project_b` | 226.943 | 56 |
-| `project_a` | 185.930 | 70 |
+| `project_e` | [redacted] | [redacted] |
+| `project_b` | [redacted] | [redacted] |
+| `project_a` | [redacted] | [redacted] |
 | `meridian` | 30.160 | 11 |
 
-No maior arquivo, `expected_results` sozinho ocupa 620.204 bytes — **89% do
-total**. Uma única task chega a 35KB. Disso decorrem três custos:
+No maior arquivo, `expected_results` sozinho ocupa **89% do total**. Disso decorrem três custos:
 
 1. **Leitura.** Os agentes leem `tasks.json` cru (autorizado por
    `references/preamble.md:136` e `references/schema.md:198`). Ver o board custa
@@ -57,7 +56,7 @@ por vez, no dispatch de developer e QA (`references/stages.md:89` e
 
 - **`tasks.jsonl`** — JSON compacto por linha (sem indentação), uma linha por
   task, ordem igual à do array atual, newline final. Sem `expected_results`, os
-  73 tasks do `project_e` ficam em ~76KB, ~1KB por linha:
+  as tasks do maior board ficam em ~1KB por linha:
   `grep '"id":"PE-42"' tasks.jsonl` devolve a task inteira barata e `wc -l` dá a
   contagem sem parsear.
 - **`tasks/<id>.json`**, em JSON e não em Markdown — `expected_results` é array

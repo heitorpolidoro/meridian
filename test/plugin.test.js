@@ -16,10 +16,12 @@ test('the Antigravity plugin.json copy matches the Claude Code one', () => {
 
 // hooks.json also exists twice, but NOT as copies: hooks/hooks.json is Claude
 // Code's format (events at top level, ${CLAUDE_PLUGIN_ROOT}); hooks.json at the
-// plugin root is Antigravity's (named hooks, absolute command paths — no
-// plugin-root variable is documented there, and the install is a symlink to
-// this checkout, so the absolute path is deliberate). What must stay true in
-// both: every command points at the same running-flag.sh, and it exists.
+// plugin root is Antigravity's (named hooks, and an absolute command path,
+// because it documents no plugin-root variable). That absolute path belongs to
+// one machine, so the tracked file carries a placeholder that
+// scripts/render-agy-hooks.js writes into the installed copy — see
+// test/agy-hooks.test.js. What must stay true in both: every command points at
+// the same running-flag.sh, and it exists.
 test('both hook manifests drive the same script, and it exists', () => {
     const root = path.join(__dirname, '..', 'plugin', 'plugins', 'meridian');
     const script = path.join(root, 'scripts', 'running-flag.sh');

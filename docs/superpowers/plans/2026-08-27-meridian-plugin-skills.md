@@ -364,7 +364,7 @@ Body:
 
 - [ ] **Step 2: Behavioral verification**
 
-Invoke `meridian:status` in `~/workspace/project_a` (47 tasks, 36 done, 7 blocked, one task with `running: true`). Assert the output caps each status at five, names the running task, and reports the consistency line. Read-only — this must not write anything.
+Invoke `meridian:status` in `~/workspace/project_a` (a board with a task carrying `running: true`). Assert the output caps each status at five, names the running task, and reports the consistency line. Read-only — this must not write anything.
 
 - [ ] **Step 3: Commit**
 
@@ -579,7 +579,7 @@ Mirror the `hideEmptyColumns` pattern exactly (declaration near line 31, wiring 
 
 - [ ] **Step 7: Verify in the browser**
 
-Start the server on 3399, load the board, and confirm against `project_a` (36 `done` tasks, 36 stamped): the default 7-day window shows only recently completed cards, the `+N concluídas` chip reports the remainder, switching the selector to `All` shows all 36, the choice survives a reload, and the other eight columns are untouched. Take a screenshot for the report. Stop the server.
+Start the server on 3399, load the board, and confirm against `project_a` (every `done` task stamped): the default 7-day window shows only recently completed cards, the `+N concluídas` chip reports the remainder, switching the selector to `All` shows all 36, the choice survives a reload, and the other eight columns are untouched. Take a screenshot for the report. Stop the server.
 
 - [ ] **Step 8: Commit**
 

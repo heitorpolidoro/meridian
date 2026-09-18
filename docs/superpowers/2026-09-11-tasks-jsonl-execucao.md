@@ -132,7 +132,7 @@ Varredura grep independente do revisor: zero menções remanescentes a tasks.jso
 plugin/agents/prompts fora de tasks.json.migrated. Nada sob .meridian/reports/ tocado.
 Task 6: Ruling: o "89% do payload" em schema.md entra em fix, mas a premissa do
 revisor está errada — o número não foi inventado, eu medi em 2026-09-11 (620.204 de
-695.896 bytes no project_e). A conclusão vale por outro motivo: um documento
+bytes no maior board). A conclusão vale por outro motivo: um documento
 que se declara fonte única da verdade não deve carregar uma medição que envelhece
 sozinha. Trocar por formulação qualitativa. Custo se errado: nenhum — a prosa fica
 menos específica e nada no comportamento muda.
@@ -152,7 +152,7 @@ Task 6: complete (commits bb744ed..31dbe90, review clean)
 Veredito: pronto para mesclar, 0 Critical, 7 Important, 6 Minor. Suíte 230/230
 confirmada independentemente. O revisor copiou os seis boards reais para o temp e
 migrou as cópias: seis ok, comparação campo a campo escrita fora do sameTask não
-achou perda. project_e 695.897 -> 61.968 bytes. Entrada real verificada em
+achou perda. O maior board encolheu uma ordem de grandeza. Entrada real verificada em
 modo leitura: zero tasks sem id, zero ids duplicados, zero ids com separador ou "..",
 zero expected_results não-array, nenhum tasks.jsonl ou tasks/ preexistente.
 Todos os rulings do controller confirmados corretos; a única nota é que a medição de

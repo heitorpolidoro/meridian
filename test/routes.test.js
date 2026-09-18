@@ -26,7 +26,7 @@ test('a slug matching relativePath resolves to that project path', () => {
 });
 
 test('a slug matching the project name resolves too', () => {
-    assert.deepEqual(resolveRoute('/Cash%20Lens', PROJECTS), { view: 'project', path: '/ws/project_d' });
+    assert.deepEqual(resolveRoute('/Project%20D', PROJECTS), { view: 'project', path: '/ws/project_d' });
 });
 
 test('matching is case-insensitive', () => {

@@ -18,7 +18,7 @@ board, without deleting anything.
 
 | Fact | Value |
 |---|---|
-| Registered projects | 6 (`project_a`, `project_b`, `project_c`, `project_d`, `meridian`, `project_e`) |
+| Registered projects | 6 (`meridian` plus five other boards on this workspace) |
 | Tasks across all projects | 92 |
 | Tasks in `done` | 56 (61%) |
 | `done` tasks carrying `updated_at` | 43 of 56 |
@@ -73,7 +73,7 @@ The PM stops orchestrating and takes the one job nothing else covers:
   mis-wired dependencies, and `blocked` entries with no `blockedBy`.
 
 It never dispatches and never writes production code, which fits its existing
-tool grant exactly. This addresses a measured gap: 28 of 92 tasks have no
+tool grant exactly. This addresses a measured gap: roughly a third of tasks have no
 `expected_results`, and the `qa` agent receives *only* `expected_results` — so
 roughly a third of the backlog cannot be QA'd today.
 
@@ -299,7 +299,7 @@ returning everything, including in the aggregated global view.
   id number (`app.js:777`) as a recency proxy. With `completed_at` present it
   sorts by actual completion date.
 
-Effect on today's data: `project_a` drops from 31 visible `done` cards to only
+Effect on today's data: the largest board drops from its full `done` column to only
 those completed in the last week.
 
 ## Implementation Order

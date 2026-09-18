@@ -156,7 +156,7 @@ HTTP 400.
 ## Task ids
 
 Ids follow the format `<KEY>-<N>`, where `KEY` comes from the project's
-`.meridian/project-info.json` (e.g. `PROJ-1`, `PE-4`, `MERID-12`) and `N` is
+`.meridian/project-info.json` (e.g. `PROJ-1`, `WEB-4`, `MERID-12`) and `N` is
 the next free integer for that key.
 
 **The server generates the id.** Never compute one client-side, never guess the

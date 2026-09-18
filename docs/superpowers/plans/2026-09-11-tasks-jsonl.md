@@ -1024,7 +1024,7 @@ Expected: `ok <projeto>: migrated N tasks` para cada um dos seis projetos com bo
 cd ~/workspace && for f in */.meridian/tasks.jsonl; do printf "%-44s %8s bytes %4s linhas\n" "$f" "$(wc -c <"$f"|tr -d ' ')" "$(wc -l <"$f"|tr -d ' ')"; done
 ```
 
-Expected: `project_e` em torno de 76KB com 73 linhas (era 695.896 bytes), e as contagens de linha iguais às contagens de tasks de antes: 73, 56, 70, 11, 3, 1.
+Expected: o maior board cai uma ordem de grandeza, e as contagens de linha de cada board ficam iguais às contagens de tasks medidas antes.
 
 - [ ] **Step 5: Religar o servidor e validar o board**
 

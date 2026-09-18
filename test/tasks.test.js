@@ -15,7 +15,7 @@ test('deriveKey: multi-word takes the initials', () => {
 });
 
 test('deriveKey: underscores and hyphens split like spaces', () => {
-    assert.equal(deriveKey('project_d'), 'CL');
+    assert.equal(deriveKey('project_d'), 'PD');
     assert.equal(deriveKey('audit-processor'), 'AP');
 });
 

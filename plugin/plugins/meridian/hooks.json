@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/workspace/meridian/plugin/plugins/meridian/scripts/running-flag.sh pre",
+            "command": "__MERIDIAN_PLUGIN_DIR__/scripts/running-flag.sh pre",
             "timeout": 10
           }
         ]
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/workspace/meridian/plugin/plugins/meridian/scripts/allow-meridian.sh",
+            "command": "__MERIDIAN_PLUGIN_DIR__/scripts/allow-meridian.sh",
             "timeout": 10
           }
         ]
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/workspace/meridian/plugin/plugins/meridian/scripts/running-flag.sh post",
+            "command": "__MERIDIAN_PLUGIN_DIR__/scripts/running-flag.sh post",
             "timeout": 10
           }
         ]
@@ -37,7 +37,7 @@
     "Stop": [
       {
         "type": "command",
-        "command": "~/workspace/meridian/plugin/plugins/meridian/scripts/running-flag.sh stop",
+        "command": "__MERIDIAN_PLUGIN_DIR__/scripts/running-flag.sh stop",
         "timeout": 10
       }
     ]
