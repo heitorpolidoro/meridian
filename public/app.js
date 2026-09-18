@@ -861,6 +861,25 @@ window.showSettingsView = function(pushState = true) {
     }
 };
 
+// Syntax highlighting for the settings screen's one-line commands.
+// lib/command-highlight.js is the source of truth — change both. Not a shell
+// parser: these come from a fixed table, so four token classes cover them.
+function highlightCommand(text) {
+    if (typeof text !== 'string') return '';
+    const tokens = text.trim().split(/\s+/).filter(Boolean);
+    if (tokens.length === 0) return '';
+    return tokens.map((tok, i) => {
+        const cls = i === 0 ? 'tok-bin'
+            : tok.startsWith('-') ? 'tok-flag'
+            : tok.includes('/') ? 'tok-path'
+            : 'tok-sub';
+        return `<span class="${cls}">${escapeHtml(tok)}</span>`;
+    }).join(' ');
+}
+
+const ICON_RUN = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M5 3.5v9l7-4.5-7-4.5z" fill="currentColor"/></svg>';
+const ICON_COPY = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M10.5 3.5h-7a1 1 0 0 0-1 1v7" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>';
+
 // --- Settings: the CLIs that can run the pipeline ---------------------------
 //
 // Every action shows the exact command before it runs. The command text comes
@@ -907,13 +926,14 @@ function renderTooling(tools) {
             </button>
         </div>
         <div class="tooling-command hidden" id="tooling-cmd-${escapeHtml(t.cli)}">
-            <code>${escapeHtml(t.command || '')}</code>
-            <div class="tooling-command-actions">
-                <button type="button" class="secondary-btn tm-small-btn" data-copy="${escapeHtml(t.cli)}">Copy</button>
-                ${t.action === 'login'
-                    ? '<span class="tooling-note">Login opens a browser flow — run it in your own terminal.</span>'
-                    : `<button type="button" class="primary-btn tm-small-btn" data-run="${escapeHtml(t.cli)}" data-action="${escapeHtml(t.action)}">Run here</button>`}
+            <div class="cmd-block">
+                <code class="cmd-text" data-raw="${escapeHtml(t.command || '')}">${highlightCommand(t.command || '')}</code>
+                <div class="cmd-actions">
+                    ${t.action === 'login' ? '' : `<button type="button" class="cmd-icon-btn" data-run="${escapeHtml(t.cli)}" data-action="${escapeHtml(t.action)}" title="Run here" aria-label="Run here">${ICON_RUN}</button>`}
+                    <button type="button" class="cmd-icon-btn" data-copy="${escapeHtml(t.cli)}" title="Copy" aria-label="Copy command">${ICON_COPY}</button>
+                </div>
             </div>
+            ${t.action === 'login' ? '<p class="tooling-note">Login opens a browser flow — run it in your own terminal.</p>' : ''}
             <pre class="tooling-output hidden" id="tooling-out-${escapeHtml(t.cli)}"></pre>
         </div>`;
     }).join('');
@@ -930,7 +950,9 @@ document.addEventListener('click', async (event) => {
     const copyBtn = event.target.closest('[data-copy]');
     if (copyBtn) {
         const box = document.getElementById(`tooling-cmd-${copyBtn.dataset.copy}`);
-        const text = box ? box.querySelector('code').textContent : '';
+        // The rendered text carries the highlight spans; the raw command is
+        // kept on the element so a copy never ships markup or lost spacing.
+        const text = box ? (box.querySelector('.cmd-text').dataset.raw || '') : '';
         try {
             await navigator.clipboard.writeText(text);
             showFlashMessage('Command copied', 'success');
@@ -945,7 +967,7 @@ document.addEventListener('click', async (event) => {
     const cli = runBtn.dataset.run;
     const out = document.getElementById(`tooling-out-${cli}`);
     runBtn.disabled = true;
-    runBtn.textContent = 'Running…';
+    runBtn.classList.add('is-running');
     if (out) { out.classList.remove('hidden'); out.textContent = 'Running…'; }
     try {
         const res = await fetch(`/api/tooling/${cli}/${runBtn.dataset.action}`, { method: 'POST' });
@@ -959,7 +981,7 @@ document.addEventListener('click', async (event) => {
         showFlashMessage('Network error', 'error');
     } finally {
         runBtn.disabled = false;
-        runBtn.textContent = 'Run here';
+        runBtn.classList.remove('is-running');
     }
 });
 

@@ -2161,16 +2161,53 @@ body:not([data-view="dashboard"]) #error-container {
     border-top: none;
     border-radius: 0 0 10px 10px;
 }
-.tooling-command code {
-    display: block;
+/* The command reads as one object: the text and the actions that apply to it
+   share a border, the way a shell snippet does, instead of the button row
+   floating below as a separate thing. */
+.cmd-block {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.6rem 0.5rem 0.85rem;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid #33333e;
+    border-radius: 8px;
+}
+.cmd-text {
+    flex: 1 1 auto;
+    min-width: 0;
     font-family: 'JetBrains Mono', Consolas, Monaco, monospace;
     font-size: 0.82rem;
-    color: #e0e7ff;
+    line-height: 1.5;
     overflow-wrap: anywhere;
-    margin-bottom: 0.6rem;
 }
-.tooling-command-actions { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
-.tooling-note { font-size: 0.78rem; color: var(--text-secondary); }
+.tok-bin { color: #7dd3fc; }
+.tok-sub { color: #86efac; }
+.tok-flag { color: #c4b5fd; }
+.tok-path { color: #fcd34d; }
+
+.cmd-actions { display: flex; gap: 0.15rem; flex: 0 0 auto; }
+.cmd-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-secondary, #8b8b96);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+.cmd-icon-btn:hover { background: rgba(255, 255, 255, 0.08); color: #fafafa; }
+.cmd-icon-btn:disabled { cursor: progress; opacity: 0.5; }
+/* The run button is an icon, so progress is shown by pulsing it rather than
+   by replacing a label that does not exist. */
+.cmd-icon-btn.is-running { animation: cmd-pulse 1s ease-in-out infinite; }
+@keyframes cmd-pulse { 50% { opacity: 0.35; } }
+.tooling-note { font-size: 0.78rem; color: var(--text-secondary); margin: 0.5rem 0 0; }
 .tooling-output {
     margin: 0.7rem 0 0;
     padding: 0.6rem;
