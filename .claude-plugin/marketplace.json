@@ -10,7 +10,7 @@
   "plugins": [
     {
       "name": "meridian",
-      "source": "./plugins/meridian",
+      "source": "./plugin/plugins/meridian",
       "description": "Read, create, and advance Meridian tasks for the project in the current directory."
     }
   ]
