@@ -2,7 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const { deriveKey, nextTaskId, getTasks, getTask, saveTasks, deleteTaskDetail, stampNewTask, stampTaskUpdate, normalizeStatus, MalformedTasksError, LegacyTasksFileError } = require('./lib/tasks');
-const { TOOLS, PROBES, AGY_INSTALL_DIR, parsePluginState, parseReadiness, nextAction, commandFor, ptyWrap, needsPty } = require('./lib/tooling');
+const { TOOLS, PROBES, AGY_INSTALL_DIR, parsePluginState, parseReadiness, isCliMissing, nextAction, commandFor, ptyWrap, needsPty } = require('./lib/tooling');
 const { comparePluginTrees, readInstalledVersion } = require('./lib/plugin-sync');
 const { ensureMeridianIgnored } = require('./lib/gitignore');
 const { registerProject } = require('./lib/projects');
@@ -414,8 +414,15 @@ app.get('/api/tooling', async (req, res) => {
                 runTooling(probes.plugin),
                 runTooling(probes.ready)
             ]);
+            // A CLI that is not on this machine is its own state. Without it
+            // the screen reports "plugin not installed" and prints the spawn
+            // error as a readiness reason, and the button offers an action
+            // against a binary that does not exist.
+            const missing = isCliMissing(pluginOut, readyOut);
             const plugin = parsePluginState(cli, pluginOut.stdout);
-            const readiness = parseReadiness(cli, readyOut.stdout || readyOut.stderr, readyOut.code);
+            const readiness = missing
+                ? { ready: false, reason: null }
+                : parseReadiness(cli, readyOut.stdout || readyOut.stderr, readyOut.code);
 
             // Neither CLI reports a version that moves when a file changes, so
             // "is it current" is answered by comparing content with this repo.
@@ -424,7 +431,7 @@ app.get('/api/tooling', async (req, res) => {
             // Antigravity reports none and Claude reports the revision it
             // installed from. The copy's own manifest is the honest answer.
             let declaredVersion = null;
-            if (plugin.installed) {
+            if (plugin.installed && !missing) {
                 const installedDir = installedPluginDir(cli, pluginOut.stdout);
                 if (installedDir) {
                     const cmp = comparePluginTrees(PLUGIN_DIR, installedDir);
@@ -434,13 +441,15 @@ app.get('/api/tooling', async (req, res) => {
             }
 
             const action = nextAction(cli, {
-                installed: plugin.installed, ready: readiness.ready, current: sync.current
+                present: !missing, installed: plugin.installed, ready: readiness.ready, current: sync.current
             });
             const command = commandFor(cli, action, { pluginDir: PLUGIN_DIR });
             tools.push({
                 cli,
                 label: meta.label,
                 icon: meta.icon,
+                present: !missing,
+                installUrl: meta.installUrl,
                 installed: plugin.installed,
                 version: declaredVersion || plugin.version,
                 ready: readiness.ready,

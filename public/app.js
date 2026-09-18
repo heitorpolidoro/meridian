@@ -912,6 +912,27 @@ function renderTooling(tools) {
     const list = document.getElementById('tooling-list');
     if (!list) return;
     list.innerHTML = tools.map(t => {
+        // A CLI that is not on this machine gets no action and no command:
+        // installing one is a platform-specific `curl | sh`, which Meridian
+        // has no business running. The card links to the vendor's own page
+        // and shows the destination in full, so the operator sees where the
+        // link goes before clicking it.
+        if (t.present === false) {
+            return `
+        <div class="tooling-card" data-cli="${escapeHtml(t.cli)}">
+            <img class="tooling-icon tooling-icon--off" src="${escapeHtml(t.icon)}" alt="" width="40" height="40">
+            <div class="tooling-body">
+                <div class="tooling-name">${escapeHtml(t.label)}</div>
+                <div class="tooling-pills">
+                    <span class="tooling-pill tooling-pill--off">CLI not installed</span>
+                </div>
+            </div>
+            <a class="secondary-btn tooling-install-link" href="${escapeHtml(t.installUrl)}"
+               target="_blank" rel="noopener noreferrer">Install guide ↗</a>
+        </div>
+        <p class="tooling-link-target">Opens <code>${escapeHtml(t.installUrl)}</code></p>`;
+        }
+
         // Installed and current are separate facts: a copy can be installed and
         // still be the version from before this morning's edit, which is the
         // failure the operator cannot otherwise see.

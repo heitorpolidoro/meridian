@@ -2208,6 +2208,24 @@ body:not([data-view="dashboard"]) #error-container {
 .cmd-icon-btn.is-running { animation: cmd-pulse 1s ease-in-out infinite; }
 @keyframes cmd-pulse { 50% { opacity: 0.35; } }
 .tooling-note { font-size: 0.78rem; color: var(--text-secondary); margin: 0.5rem 0 0; }
+
+/* A CLI that is not installed: the icon is dimmed, and the destination of the
+   install link is spelled out under the card rather than hidden behind it. */
+.tooling-icon--off { opacity: 0.45; filter: grayscale(1); }
+.tooling-install-link { text-decoration: none; white-space: nowrap; }
+.tooling-link-target {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin: -0.1rem 0 0.35rem;
+    padding-left: 3.6rem;
+}
+.tooling-link-target code {
+    font-size: 0.75rem;
+    background: rgba(127, 127, 127, 0.12);
+    padding: 0.05rem 0.3rem;
+    border-radius: 4px;
+    word-break: break-all;
+}
 .tooling-output {
     margin: 0.7rem 0 0;
     padding: 0.6rem;

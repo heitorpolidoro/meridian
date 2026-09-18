@@ -178,3 +178,62 @@ test('update resolves to a command for both CLIs', () => {
     assert.deepEqual(commandFor('claude', 'update', {}).argv, ['claude', 'plugin', 'update', 'meridian@meridian']);
     assert.deepEqual(commandFor('agy', 'update', { pluginDir: '/ws/p' }).argv, ['agy', 'plugin', 'install', '/ws/p']);
 });
+
+// --- the CLI itself not being installed --------------------------------------
+//
+// Every state above assumes the binary exists. When it does not, the probes
+// fail at spawn and the old model fell through to its nearest branch: Claude
+// offered "Login" for a binary that is not there, and the readiness pill
+// printed a raw Node error. Absence is its own state, and it outranks the
+// rest — nothing can be installed into, or logged into, a CLI that is absent.
+
+const { isCliMissing } = require('../lib/tooling');
+
+const ENOENT = { stdout: '', stderr: 'spawn claude ENOENT', code: 127 };
+const WORKED = { stdout: '[]', stderr: '', code: 0 };
+
+test('both probes failing to spawn means the CLI is not installed', () => {
+    assert.equal(isCliMissing(ENOENT, { ...ENOENT, stderr: 'spawn agy ENOENT' }), true);
+});
+
+// A binary that exists cannot ENOENT, so one working probe settles it. This
+// keeps a CLI that is merely erroring from being reported as absent.
+test('a CLI that answers either probe is present, however badly it answered', () => {
+    assert.equal(isCliMissing(WORKED, ENOENT), false);
+    assert.equal(isCliMissing(ENOENT, WORKED), false);
+    assert.equal(isCliMissing({ stdout: '', stderr: 'boom', code: 1 }, { stdout: '', stderr: 'boom', code: 1 }), false);
+});
+
+test('missing probe results do not read as an absent CLI', () => {
+    assert.equal(isCliMissing(null, null), false);
+    assert.equal(isCliMissing(undefined, ENOENT), false);
+});
+
+test('an absent CLI outranks every other action, including login', () => {
+    assert.equal(nextAction('claude', { present: false, installed: false, ready: false }), 'missing');
+    assert.equal(nextAction('agy', { present: false, installed: false, ready: false }), 'missing');
+    // Login would otherwise win here; a binary that is not there cannot log in.
+    assert.equal(nextAction('claude', { present: false, installed: true, ready: false, current: false }), 'missing');
+});
+
+test('a present CLI behaves exactly as before', () => {
+    assert.equal(nextAction('claude', { present: true, installed: true, ready: true, current: true }), 'uninstall');
+    // Absent `present` means the caller did not probe for it — not absence.
+    assert.equal(nextAction('claude', { installed: true, ready: true, current: true }), 'uninstall');
+});
+
+// There is no command to offer: installing a CLI is a platform-specific
+// `curl | sh` that Meridian has no business running. The screen links to the
+// vendor's own instructions instead.
+test('the missing state resolves to no runnable command', () => {
+    assert.equal(commandFor('claude', 'missing', {}), null);
+    assert.equal(commandFor('agy', 'missing', {}), null);
+});
+
+test('each CLI carries the official installation page it links to', () => {
+    for (const cli of Object.keys(TOOLS)) {
+        assert.match(TOOLS[cli].installUrl, /^https:\/\//, `${cli} links over https`);
+    }
+    assert.equal(TOOLS.claude.installUrl, 'https://code.claude.com/docs/en/setup');
+    assert.equal(TOOLS.agy.installUrl, 'https://antigravity.google/docs/getting-started?tab=cli');
+});
