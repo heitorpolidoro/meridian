@@ -19,10 +19,13 @@ and the git verbs the pipeline uses to stage and commit its own work.
 reaches a network service that can act on the operator's behalf. Publishing is
 a human act; the pipeline stops at the commit.
 
-`git add` is allowed only with an explicit pathspec. These repositories carry
-unrelated open work in committed branches, and a run that stages everything
-with `git add -A`, `git add .`, `git add --all`, `git add -u`, or `git add --update`
-would commit someone else's WIP to the repo.
+`git add` is allowed only with an explicit pathspec. All flag-shaped invocations
+of `git add` (anything beginning with a dash) are denied as a class by a single
+rule. This is why `git add` is safe to allow at all: a pathspec does not start
+with a dash, so legitimate invocations like `git add src/foo.js` pass through
+while all dangerous forms are blocked. These repositories carry unrelated open
+work in committed branches, and the class-level deny ensures no combination of
+flags can stage everything.
 
 ## Extending it per project
 
@@ -37,16 +40,15 @@ log names the tool call. Add the specific verb, not a wildcard.
 
 ## What this list does not protect against
 
-Claude Code splits compound commands on `&&`, `||`, `;`, `|`, and newlines,
-then matches each subcommand independently against the rules. Deny rules fire
-when any subcommand matches, including inside a subshell or command substitution.
-This means an agent cannot escape the list by wrapping a dangerous command in
-`echo ... | sh` or similar.
+Claude Code splits compound commands on `&&`, `||`, `;`, `|`, `|&`, `&`, and
+newlines, then matches each subcommand independently against the rules. Deny rules
+fire when any subcommand matches, including inside a subshell or command
+substitution. This means an agent cannot escape the list by wrapping a dangerous
+command in `echo ... | sh` or similar.
 
-The real limitation is that the list is only as good as the forms enumerated
-in it. The deny entries name specific dangerous flags (`-A`, `-am`, `-u`, etc.)
-rather than relying on the allow list alone, because a pattern like `git add:*`
-cannot express "git add only with a pathspec". This is why missing a single flag
-variant can open the whole boundary: `git commit -a:*` does not match `git commit -am msg`
-because `-am` is a different token. The list therefore requires maintenance as
-new dangerous flag combinations are discovered.
+The real limitation is that enumeration is what covers `git commit`. For `git add`,
+a single pattern denies all flag-shaped forms. But `git commit` needs the `-m` flag
+to work, so its dangerous forms must be enumerated: `-a`, `-am`, `--amend`, etc.
+Enumeration is only as good as the forms named. A pattern like `git commit -a:*`
+does not match `git commit -am msg` because `-am` is a different token. The list
+therefore requires maintenance as new dangerous flag combinations are discovered.

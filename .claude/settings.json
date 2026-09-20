@@ -21,6 +21,7 @@
       "Bash(git add .:*)",
       "Bash(git add -u:*)",
       "Bash(git add --update:*)",
+      "Bash(git add -*)",
       "Bash(git commit --amend:*)",
       "Bash(git commit -a:*)",
       "Bash(git commit --all:*)",
