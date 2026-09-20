@@ -8,6 +8,11 @@ const { ensureMeridianIgnored } = require('./lib/gitignore');
 const { registerProject } = require('./lib/projects');
 const { appendEvent } = require('./lib/events');
 const { computeProjectStats, computeWorkspaceStats } = require('./lib/stats');
+const {
+    createDispatchState, enqueue, dequeue, queueFor, setAuto, isAuto
+} = require('./lib/dispatch-queue');
+const { backgroundSessionFor } = require('./lib/dispatch-sessions');
+const { dispatchCommand } = require('./lib/dispatch-command');
 
 const app = express();
 const PORT = process.env.PORT || 3333;
@@ -324,7 +329,11 @@ function getStatusData(options = {}) {
                     missingMeridianRules: missingMeridianRules,
                     outdatedMeridianRules: outdatedMeridianRules,
                     missingStack: stackArray.length === 0,
-                    missingDescription: !info.description || info.description.trim() === ''
+                    missingDescription: !info.description || info.description.trim() === '',
+                    queue: queueFor(dispatchState, projPath),
+                    autoDispatch: isAuto(dispatchState, projPath),
+                    dispatchBlockedReason: null, // filled by the loop in Task 8
+                    lastRun: lastRun.get(projPath) || null
                 });
             }
 
@@ -379,6 +388,14 @@ function runTooling(argv, timeoutMs = 20000, onChunk = null) {
         child.on('error', e => { clearTimeout(timer); resolve({ stdout: '', stderr: e.message, code: 127, timedOut }); });
         child.on('close', code => { clearTimeout(timer); resolve({ stdout: out, stderr: err, code, timedOut }); });
     });
+}
+
+// The live background session for a project, or null. Derived on demand from
+// the CLI rather than tracked, so a process that died releases the lock by
+// disappearing.
+async function liveSessionFor(projectPath) {
+    const probe = await runTooling(['claude', 'agents', '--json'], 10000);
+    return backgroundSessionFor(probe.stdout, projectPath);
 }
 
 // Pushes a chunk of a running tooling command to every connected board, so the
@@ -498,6 +515,79 @@ app.post('/api/tooling/:cli/:action', async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+
+// Dispatch: the client names a project, a task and a tool. It never sends a
+// command — lib/dispatch-command.js owns that, the same way lib/tooling.js
+// owns the settings screen's commands.
+//
+// Registration is checked with isRegisteredProject (defined below, hoisted)
+// rather than a second copy of the same lookup.
+
+app.post('/api/projects/dispatch', (req, res) => {
+    const { projectPath, taskId, tool } = req.body || {};
+    if (!projectPath || !taskId || !tool) {
+        return res.status(400).json({ error: 'projectPath, taskId and tool are required' });
+    }
+    if (!isRegisteredProject(projectPath)) {
+        return res.status(400).json({ error: `Unknown project ${projectPath}` });
+    }
+    // Validating here rather than at spawn time means an unknown tool or a
+    // malformed id is rejected before it can sit in the queue.
+    if (!dispatchCommand(tool, taskId)) {
+        return res.status(400).json({ error: `Cannot dispatch ${taskId} with ${tool}` });
+    }
+
+    // The queue stores the task id alone. It becomes { taskId, tool } once a
+    // tool selector lands in the UI; today every run uses `claude`, so the
+    // validated-but-unused `tool` above is intentionally dropped here rather
+    // than threaded through for a picker that does not exist yet.
+    const added = enqueue(dispatchState, projectPath, taskId);
+    broadcastUpdate();
+    runDispatchLoop(projectPath);
+    res.json({ ok: true, added, queue: queueFor(dispatchState, projectPath) });
+});
+
+app.delete('/api/projects/dispatch/:taskId', (req, res) => {
+    const projectPath = req.query.project;
+    if (!isRegisteredProject(projectPath)) {
+        return res.status(400).json({ error: `Unknown project ${projectPath}` });
+    }
+    const removed = dequeue(dispatchState, projectPath, req.params.taskId);
+    broadcastUpdate();
+    res.json({ ok: true, removed, queue: queueFor(dispatchState, projectPath) });
+});
+
+app.post('/api/projects/dispatch/auto', (req, res) => {
+    const { projectPath, enabled } = req.body || {};
+    if (!isRegisteredProject(projectPath)) {
+        return res.status(400).json({ error: `Unknown project ${projectPath}` });
+    }
+    // Disabling clears the queue — `Stop queue` discards rather than suspends.
+    setAuto(dispatchState, projectPath, Boolean(enabled));
+    broadcastUpdate();
+    if (enabled) runDispatchLoop(projectPath);
+    res.json({ ok: true, autoDispatch: isAuto(dispatchState, projectPath) });
+});
+
+app.post('/api/projects/dispatch/stop', async (req, res) => {
+    const { projectPath } = req.body || {};
+    if (!isRegisteredProject(projectPath)) {
+        return res.status(400).json({ error: `Unknown project ${projectPath}` });
+    }
+    const stopped = await stopDispatch(projectPath);
+    broadcastUpdate();
+    res.json({ ok: true, stopped });
+});
+
+// Implemented in Task 8: this will spawn dispatchCommand's argv through
+// runTooling, stream its output over SSE, and pull the next queued task on
+// completion. Until then it is a no-op so the endpoints above are testable
+// on their own.
+function runDispatchLoop(projectPath) { /* no-op until the runner lands */ }
+
+// Implemented in Task 8: this will kill the live background session (see
+// liveSessionFor) for the project. Until then there is nothing to stop.
+async function stopDispatch(projectPath) { return false; }
 
 // REST API: on-demand stats aggregated from events.jsonl. Never cached —
 // every request re-reads and re-aggregates the file from scratch.
@@ -1237,6 +1327,11 @@ function broadcastUpdate() {
         clients.forEach(client => client.write(payload));
     }, 100);
 }
+
+// The dispatch queue, the auto flag and the last run per project. All in
+// memory: see lib/dispatch-queue.js for why none of it is persisted.
+const dispatchState = createDispatchState();
+const lastRun = new Map();
 
 // File watching logic
 const watchers = new Map();
