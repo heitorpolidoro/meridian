@@ -119,6 +119,38 @@ function parentBadge(task) {
     return task && task.parent ? `↳ ${task.parent}` : null;
 }
 
+// Mirrors lib/board.js#dispatchButton — that file is the source of truth.
+// One button whose label says which of the three situations the task is in.
+// Running outranks queued: a task cannot honestly be both, and if the state
+// ever disagrees the useful button is the one that can stop a process.
+const NO_DISPATCH = ['done', 'nope'];
+
+function dispatchButton(task, { queue, runningTaskId }) {
+    if (!task || NO_DISPATCH.includes(task.status)) return null;
+    if (task.id === runningTaskId) {
+        return { action: 'stop', label: 'Stop', title: 'Signal the running session (SIGTERM)' };
+    }
+    if ((queue || []).includes(task.id)) {
+        return { action: 'unqueue', label: 'Remove from queue', title: 'Drop this task from the queue' };
+    }
+    return { action: 'dispatch', label: 'Dispatch', title: 'Queue this task; runs at once if the repo is free' };
+}
+
+// The dispatch state (queue, running task, blocked reason) for the project
+// that owns `task`. A task in the global view carries its own projectPath
+// (refreshProjectView tags it); a task in a single project's board does not,
+// so this falls back to the view currently open.
+function dispatchContextFor(projectPath) {
+    const proj = currentProjectsData.find(p => p.path === projectPath);
+    if (!proj) return { queue: [], runningTaskId: null, dispatchBlockedReason: null };
+    const runningTask = (proj.tasks || []).find(t => t.running === true);
+    return {
+        queue: proj.queue || [],
+        runningTaskId: runningTask ? runningTask.id : null,
+        dispatchBlockedReason: proj.dispatchBlockedReason || null
+    };
+}
+
 // Rails the operator expanded this session. Not persisted: a reload collapses
 // every empty column again.
 const expandedRails = new Set();
@@ -215,7 +247,7 @@ function renderProjects(data) {
                         ${proj.outdatedMeridianRules && !proj.missingAgentsMd ? '<span class="outdated-agents-badge" title="Meridian Instructions block is outdated">⚠️ Outdated Meridian Rules</span>' : ''}
                         ${proj.missingStack ? '<span class="missing-stack-badge" title="Missing Stack">⚠️ Missing Stack</span>' : ''}
                         ${proj.missingDescription ? '<span class="missing-desc-badge" title="Missing Description">⚠️ Missing Description</span>' : ''}
-                        ${needsFix 
+                        ${needsFix
                             ? `<button class="fix-ai-btn" onclick="openFixModal('${proj.path.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}', '${proj.name.replace(/'/g, "\\'")}', this, ${proj.missingAgentsMd}, ${proj.missingStack}, ${proj.missingDescription}, ${proj.missingMeridianRules}, ${proj.outdatedMeridianRules}); event.stopPropagation();">Fix 🪄</button>`
                             : ''}
                     </div>
@@ -981,6 +1013,42 @@ function renderTooling(tools) {
     }).join('');
 }
 
+// Registered on the capture phase: a dispatch button lives inside a
+// `.task-card` that itself opens the task modal on click. Capturing here and
+// stopping propagation keeps the click from also bubbling into the card's
+// own handler and popping the modal open behind the request.
+document.addEventListener('click', async (event) => {
+    const btn = event.target.closest('[data-dispatch-action]');
+    if (!btn) return;
+    event.stopPropagation();
+    const { dispatchAction: action, taskId, project } = btn.dataset;
+    btn.disabled = true;
+    try {
+        if (action === 'dispatch') {
+            await fetch('/api/projects/dispatch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ projectPath: project, taskId, tool: 'claude' })
+            });
+        } else if (action === 'unqueue') {
+            await fetch(`/api/projects/dispatch/${encodeURIComponent(taskId)}?project=${encodeURIComponent(project)}`,
+                { method: 'DELETE' });
+        } else if (action === 'stop') {
+            await fetch('/api/projects/dispatch/stop', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ projectPath: project, taskId })
+            });
+        }
+    } catch (err) {
+        showFlashMessage('Could not reach the server', 'error');
+    } finally {
+        btn.disabled = false;
+    }
+    // The SSE broadcast re-renders; no optimistic update, so the board never
+    // shows a queue position the server does not have.
+}, true);
+
 document.addEventListener('click', async (event) => {
     const toggle = event.target.closest('.tooling-action-btn');
     if (toggle) {
@@ -1058,7 +1126,7 @@ function refreshProjectView() {
         document.getElementById('pv-title').textContent = 'Global Tickets View 🌐';
         document.getElementById('pv-desc').textContent = 'Aggregated Kanban view of tasks across all monitored workspace projects.';
         document.getElementById('pv-stack').innerHTML = `<span class="stack-badge" style="background: rgba(99, 102, 241, 0.2); color: #a5b4fc; border-color: rgba(99, 102, 241, 0.4);">All ${currentProjectsData.length} Projects</span>`;
-        
+
         btnEdit.classList.add('hidden');
         addTaskForm.classList.add('hidden');
 
@@ -1224,16 +1292,42 @@ function renderTaskCardHtml(task, allTasks) {
             stampHtml = `<div class="task-stamp" title="${task.status === 'done' ? 'Completed' : 'Dismissed'} ${d.toLocaleString()}">${label}</div>`;
         }
     }
+
+    // Dispatch context is looked up by the project that owns this task, not
+    // by whatever view is currently open — the global board tags every task
+    // with its own projectPath, and a single-project board falls back to it.
+    const dispatchProjectPath = task.projectPath || currentProjectViewPath;
+    const dispatchCtx = dispatchContextFor(dispatchProjectPath);
+    const btn = dispatchButton(task, dispatchCtx);
+    let dispatchBtnHtml = '';
+    let queueBadgeHtml = '';
+    if (btn) {
+        dispatchBtnHtml = `<button type="button" class="card-dispatch-btn card-dispatch-btn--${btn.action}"
+            data-dispatch-action="${btn.action}" data-task-id="${escapeHtml(task.id)}"
+            data-project="${escapeHtml(dispatchProjectPath || '')}" title="${escapeHtml(btn.title)}">${btn.label}</button>`;
+    }
+    // A queued task can sit idle — auth is missing, or another session holds
+    // the repo — and the queue is deliberately kept rather than discarded.
+    // The card says so, with the blocked reason when the server has one,
+    // instead of just looking stuck.
+    if (btn && btn.action === 'unqueue') {
+        const position = dispatchCtx.queue.indexOf(task.id) + 1;
+        const waiting = dispatchCtx.dispatchBlockedReason
+            ? ` — waiting: ${dispatchCtx.dispatchBlockedReason}` : '';
+        queueBadgeHtml = `<span class="task-queue-badge" title="${escapeHtml(`Queued at position ${position}, waiting to run${waiting}`)}">Queued #${position}</span>`;
+    }
+
     return `
         <div class="task-card${runningClass}" onclick="handleTaskCardClick(event, '${task.id}', '${projPathAttr}')">
             <div class="task-title">${runningBadge}${projectBadge}${parentBadgeHtml}${progressChipHtml}${mockBadge}${questionsBadge}<span class="task-id-code">${taskIdDisplay}</span>${renderInlineCode(task.title)}</div>
+            ${queueBadgeHtml ? `<div class="task-queue-row">${queueBadgeHtml}</div>` : ''}
             ${(() => {
                 const move = manualTransition(task.status);
-                if (!move) return '';
-                return `
-            <div class="task-actions">
-                <button class="task-move-btn task-move-${move.to}" onclick="changeTaskStatus('${task.id}', '${move.to}', '${projPathAttr}')" title="Move this task to ${move.to}">${move.label}</button>
-            </div>`;
+                const moveBtnHtml = move
+                    ? `<button class="task-move-btn task-move-${move.to}" onclick="changeTaskStatus('${task.id}', '${move.to}', '${projPathAttr}')" title="Move this task to ${move.to}">${move.label}</button>`
+                    : '';
+                if (!moveBtnHtml && !dispatchBtnHtml) return '';
+                return `<div class="task-actions">${moveBtnHtml}${dispatchBtnHtml}</div>`;
             })()}
             ${stampHtml}
         </div>

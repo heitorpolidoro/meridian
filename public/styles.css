@@ -1128,6 +1128,69 @@ body:not([data-view="dashboard"]) #error-container {
     color: var(--accent);
 }
 
+.card-dispatch-btn {
+    background: rgba(99, 102, 241, 0.15);
+    border: 1px solid rgba(99, 102, 241, 0.35);
+    color: #a5b4fc;
+    padding: 0.3rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-left: auto;
+}
+
+.card-dispatch-btn:hover {
+    background: rgba(99, 102, 241, 0.3);
+    border-color: rgba(99, 102, 241, 0.6);
+}
+
+.card-dispatch-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.card-dispatch-btn--stop {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.35);
+    color: #fca5a5;
+}
+
+.card-dispatch-btn--stop:hover {
+    background: rgba(239, 68, 68, 0.3);
+    border-color: rgba(239, 68, 68, 0.6);
+}
+
+.card-dispatch-btn--unqueue {
+    background: rgba(234, 179, 8, 0.15);
+    border-color: rgba(234, 179, 8, 0.35);
+    color: #fde68a;
+}
+
+.card-dispatch-btn--unqueue:hover {
+    background: rgba(234, 179, 8, 0.3);
+    border-color: rgba(234, 179, 8, 0.6);
+}
+
+/* Queue-position badge: a queued task can sit idle (auth missing, or another
+   session holds the repo) while the queue is deliberately preserved — this
+   says the task is queued and waiting rather than looking stuck. */
+.task-queue-row {
+    margin-top: 0.4rem;
+}
+
+.task-queue-badge {
+    display: inline-block;
+    background: rgba(234, 179, 8, 0.15);
+    color: #fde68a;
+    border: 1px solid rgba(234, 179, 8, 0.3);
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.1rem 0.45rem;
+}
+
 /* Dashboard Task List Preview */
 .dashboard-tasks-preview {
     margin-top: 1rem;

@@ -206,3 +206,39 @@ test('parentBadge returns null for a task without a parent', () => {
 test('parentBadge returns ↳ <id> for a task with a parent', () => {
     assert.equal(parentBadge({ id: 'T-2', parent: 'T-1' }), '↳ T-1');
 });
+
+// --- the card's tri-state dispatch button ---
+
+const { dispatchButton } = require('../lib/board');
+
+test('a task that is neither queued nor running offers dispatch', () => {
+    const out = dispatchButton({ id: 'T-1', status: 'ready_todo' }, { queue: [], runningTaskId: null });
+    assert.equal(out.action, 'dispatch');
+    assert.match(out.label, /dispatch/i);
+});
+
+test('the running task offers stop', () => {
+    const out = dispatchButton({ id: 'T-1', status: 'in_progress' }, { queue: [], runningTaskId: 'T-1' });
+    assert.equal(out.action, 'stop');
+    assert.match(out.label, /stop/i);
+});
+
+test('a queued task offers removal from the queue', () => {
+    const out = dispatchButton({ id: 'T-2', status: 'backlog' }, { queue: ['T-2'], runningTaskId: 'T-1' });
+    assert.equal(out.action, 'unqueue');
+    assert.match(out.label, /queue/i);
+});
+
+// Running outranks queued: a task cannot be both, and if the state is ever
+// inconsistent the honest button is the one that can stop the process.
+test('running wins over queued', () => {
+    const out = dispatchButton({ id: 'T-1' }, { queue: ['T-1'], runningTaskId: 'T-1' });
+    assert.equal(out.action, 'stop');
+});
+
+// Terminal tasks have nothing to dispatch, and a button there is noise on a
+// board with dozens of finished cards.
+test('done and nope carry no button', () => {
+    assert.equal(dispatchButton({ id: 'T-3', status: 'done' }, { queue: [], runningTaskId: null }), null);
+    assert.equal(dispatchButton({ id: 'T-4', status: 'nope' }, { queue: [], runningTaskId: null }), null);
+});
