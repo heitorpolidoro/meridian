@@ -777,6 +777,24 @@ body:not([data-view="dashboard"]) #error-container {
     margin-top: 0.5rem;
 }
 
+.dispatch-header-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0 1rem;
+}
+
+.dispatch-row-btn {
+    font-size: 0.7rem;
+    padding: 0.25rem 0.6rem;
+    margin-left: 0.5rem;
+}
+
+.dispatch-row-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 .kanban-toolbar {
     display: flex;
     justify-content: space-between;

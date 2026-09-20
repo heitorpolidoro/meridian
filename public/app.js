@@ -232,6 +232,17 @@ function renderProjects(data) {
             // Convert legacy stack string to array if needed
             let stackArray = Array.isArray(proj.stack) ? proj.stack : (proj.stack ? proj.stack.split(',').map(s => s.trim()).filter(Boolean) : []);
             const stackHtml = stackArray.map(tech => `<span class="stack-badge">${tech}</span>`).join('');
+            const escapedPath = proj.path.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+
+            // The global view has no single project to arm, so it arms every
+            // project with its own control, one per row — bound to that
+            // row's project path, never to whatever project is open elsewhere.
+            const dispatchRowHtml = proj.autoDispatch
+                ? `<button type="button" class="secondary-btn dispatch-row-btn" title="Disarm auto-dispatch and discard the queue"
+                        onclick="setAutoDispatch('${escapedPath}', false); event.stopPropagation();">Stop queue${(proj.queue || []).length > 0 ? ` (${proj.queue.length})` : ''}</button>`
+                : `<button type="button" class="secondary-btn dispatch-row-btn" ${proj.dispatchBlockedReason ? 'disabled' : ''}
+                        title="${escapeHtml(proj.dispatchBlockedReason || 'Arm automatic dispatch for this project')}"
+                        onclick="setAutoDispatch('${escapedPath}', true); event.stopPropagation();">Dispatch all</button>`;
 
             return `
             <div class="project-card" onclick="showProjectView('${proj.path.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}')">
@@ -250,6 +261,7 @@ function renderProjects(data) {
                         ${needsFix
                             ? `<button class="fix-ai-btn" onclick="openFixModal('${proj.path.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}', '${proj.name.replace(/'/g, "\\'")}', this, ${proj.missingAgentsMd}, ${proj.missingStack}, ${proj.missingDescription}, ${proj.missingMeridianRules}, ${proj.outdatedMeridianRules}); event.stopPropagation();">Fix 🪄</button>`
                             : ''}
+                        ${dispatchRowHtml}
                     </div>
                     <p class="project-purpose">${proj.description}</p>
                     <div class="project-stack">${stackHtml}</div>
@@ -1119,6 +1131,54 @@ btnEdit.addEventListener('click', () => {
     }
 });
 
+// `Stop queue` is named for what it does: it discards the queue rather than
+// suspending it. A button labelled "Pause" that threw away queued work would
+// be a trap.
+async function setAutoDispatch(projectPath, enabled) {
+    try {
+        await fetch('/api/projects/dispatch/auto', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectPath, enabled })
+        });
+    } catch (err) {
+        showFlashMessage('Could not reach the server', 'error');
+    }
+    // The SSE broadcast re-renders both the header controls and any per-row
+    // controls in the global view; no optimistic update here.
+}
+
+// Renders exactly one of `Dispatch all` / `Stop queue` in the project view's
+// header, from the project's own status fields — never invented client-side
+// state. A blocked `Dispatch all` states its reason in the title rather than
+// swallowing the click.
+function updateDispatchHeaderControls(proj) {
+    const dispatchBtn = document.getElementById('dispatch-all-btn');
+    const stopBtn = document.getElementById('stop-queue-btn');
+    if (!dispatchBtn || !stopBtn) return;
+
+    if (!proj) {
+        dispatchBtn.classList.add('hidden');
+        stopBtn.classList.add('hidden');
+        return;
+    }
+
+    if (proj.autoDispatch) {
+        dispatchBtn.classList.add('hidden');
+        stopBtn.classList.remove('hidden');
+        const queueLen = (proj.queue || []).length;
+        stopBtn.textContent = queueLen > 0 ? `Stop queue (${queueLen})` : 'Stop queue';
+        stopBtn.title = 'Disarm auto-dispatch and discard the queue';
+        stopBtn.onclick = () => setAutoDispatch(proj.path, false);
+    } else {
+        dispatchBtn.classList.remove('hidden');
+        stopBtn.classList.add('hidden');
+        dispatchBtn.disabled = Boolean(proj.dispatchBlockedReason);
+        dispatchBtn.title = proj.dispatchBlockedReason || 'Arm automatic dispatch for this project';
+        dispatchBtn.onclick = () => setAutoDispatch(proj.path, true);
+    }
+}
+
 function refreshProjectView() {
     if (!currentProjectViewPath) return;
 
@@ -1129,6 +1189,10 @@ function refreshProjectView() {
 
         btnEdit.classList.add('hidden');
         addTaskForm.classList.add('hidden');
+        // `Dispatch all` in the header arms one project; the global view has
+        // none of its own, so it disappears here — the per-project controls
+        // live in each project's dashboard card instead.
+        updateDispatchHeaderControls(null);
 
         let allTasks = [];
         currentProjectsData.forEach(proj => {
@@ -1162,7 +1226,9 @@ function refreshProjectView() {
     
     const stackArray = Array.isArray(proj.stack) ? proj.stack : (proj.stack ? proj.stack.split(',').map(s => s.trim()).filter(Boolean) : []);
     document.getElementById('pv-stack').innerHTML = stackArray.map(tech => `<span class="stack-badge">${tech}</span>`).join('');
-    
+
+    updateDispatchHeaderControls(proj);
+
     // Render Kanban
     renderKanbanBoard(proj.tasks || []);
 }
