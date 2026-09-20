@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
-    createDispatchState, enqueue, dequeue, pullNext,
+    createDispatchState, enqueue, dequeue, pullNext, requeueFront,
     queueFor, clearQueue, setAuto, isAuto
 } = require('../lib/dispatch-queue');
 
@@ -54,6 +54,43 @@ test('pullNext takes from the front and empties down to null', () => {
     assert.equal(pullNext(s, A), 'T-1');
     assert.equal(pullNext(s, A), 'T-2');
     assert.equal(pullNext(s, A), null);
+});
+
+// The runner cannot know whether a task may run until it has pulled it. When
+// the refusal turns out to be about the machine rather than the task, the
+// pull must be undone exactly, not approximated by enqueueing again — that
+// would move the operator's first task to the back.
+test('requeueFront undoes a pull, restoring the position', () => {
+    const s = createDispatchState();
+    enqueue(s, A, 'T-1');
+    enqueue(s, A, 'T-2');
+    assert.equal(pullNext(s, A), 'T-1');
+    assert.equal(requeueFront(s, A, 'T-1'), true);
+    assert.deepEqual(queueFor(s, A), ['T-1', 'T-2']);
+});
+
+test('requeueFront on an empty queue leaves just that task', () => {
+    const s = createDispatchState();
+    assert.equal(requeueFront(s, A, 'T-1'), true);
+    assert.deepEqual(queueFor(s, A), ['T-1']);
+});
+
+// Two passes racing to restore the same task must not queue it twice, the
+// same guarantee enqueue gives a double click.
+test('requeueFront is idempotent when the id is already queued', () => {
+    const s = createDispatchState();
+    enqueue(s, A, 'T-1');
+    enqueue(s, A, 'T-2');
+    assert.equal(requeueFront(s, A, 'T-2'), false);
+    assert.deepEqual(queueFor(s, A), ['T-1', 'T-2'], 'it did not move or duplicate');
+});
+
+test('requeueFront is per project like everything else here', () => {
+    const s = createDispatchState();
+    enqueue(s, B, 'T-9');
+    requeueFront(s, A, 'T-1');
+    assert.deepEqual(queueFor(s, A), ['T-1']);
+    assert.deepEqual(queueFor(s, B), ['T-9']);
 });
 
 // The returned array must be a copy: the caller renders it and must not be

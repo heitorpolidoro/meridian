@@ -25,12 +25,14 @@ test('an unauthenticated CLI is refused with the command that fixes it', () => {
     assert.equal(out.ok, false);
     assert.match(out.reason, /not authenticated/i);
     assert.match(out.reason, /claude auth login/);
+    assert.equal(out.scope, 'environment');
 });
 
 test('a live session in the repo refuses, naming the lock', () => {
     const out = dispatchEligibility(ok({ liveSession: { pid: 123, kind: 'background' } }));
     assert.equal(out.ok, false);
     assert.match(out.reason, /already running/i);
+    assert.equal(out.scope, 'environment');
 });
 
 test('authentication outranks the repo lock', () => {
@@ -42,11 +44,14 @@ test('a task that left the board is refused by id', () => {
     const out = dispatchEligibility(ok({ taskId: 'T-404' }));
     assert.equal(out.ok, false);
     assert.match(out.reason, /T-404/);
+    assert.equal(out.scope, 'task');
 });
 
 test('done and nope are not dispatchable', () => {
     assert.match(dispatchEligibility(ok({ taskId: 'T-3' })).reason, /already done/i);
     assert.match(dispatchEligibility(ok({ taskId: 'T-4' })).reason, /dropped/i);
+    assert.equal(dispatchEligibility(ok({ taskId: 'T-3' })).scope, 'task');
+    assert.equal(dispatchEligibility(ok({ taskId: 'T-4' })).scope, 'task');
 });
 
 // The spec allows queueing a blocked task behind its blocker; this is the
@@ -55,6 +60,7 @@ test('an unmet blocker is refused, naming which one', () => {
     const out = dispatchEligibility(ok({ taskId: 'T-2' }));
     assert.equal(out.ok, false);
     assert.equal(out.reason, 'T-2 still blocked by T-1');
+    assert.equal(out.scope, 'task');
 });
 
 test('a blocked task whose blocker reached done is eligible', () => {
@@ -66,6 +72,7 @@ test('several unmet blockers are all named', () => {
                    { id: 'A', status: 'backlog' }, { id: 'B', status: 'done' }];
     const out = dispatchEligibility(ok({ taskId: 'X', tasks }));
     assert.equal(out.reason, 'X still blocked by A');
+    assert.equal(out.scope, 'task');
 });
 
 // A blocker id that is not on the board cannot be shown to be done, so it
@@ -75,6 +82,7 @@ test('a blocker that is not on the board still blocks', () => {
     const tasks = [{ id: 'X', status: 'backlog', blockedBy: ['GHOST'] }];
     const out = dispatchEligibility(ok({ taskId: 'X', tasks }));
     assert.equal(out.reason, 'X still blocked by GHOST');
+    assert.equal(out.scope, 'task');
 });
 
 test('spec_approval is dispatchable — the operator asked for it explicitly', () => {
@@ -84,4 +92,31 @@ test('spec_approval is dispatchable — the operator asked for it explicitly', (
 test('a missing or malformed board refuses rather than throwing', () => {
     assert.equal(dispatchEligibility(ok({ tasks: null })).ok, false);
     assert.equal(dispatchEligibility(ok({ tasks: 'nope' })).ok, false);
+    assert.equal(dispatchEligibility(ok({ tasks: null })).scope, 'task');
+});
+
+// The whole point of the scope: an environment refusal is about the machine
+// and lifts for the entire queue at once, so the runner keeps the queue. A
+// task refusal is about that one task and may never lift, so it is
+// discarded. Anything new must land on one side of this line deliberately.
+test('authentication and the repo lock are environment; everything else is task', () => {
+    const environment = [
+        dispatchEligibility(ok({ authenticated: false })),
+        dispatchEligibility(ok({ liveSession: { pid: 1 } }))
+    ];
+    const task = [
+        dispatchEligibility(ok({ tasks: null })),
+        dispatchEligibility(ok({ taskId: 'T-404' })),
+        dispatchEligibility(ok({ taskId: 'T-3' })),
+        dispatchEligibility(ok({ taskId: 'T-4' })),
+        dispatchEligibility(ok({ taskId: 'T-2' }))
+    ];
+    assert.deepEqual(environment.map(r => r.scope), ['environment', 'environment']);
+    assert.deepEqual(task.map(r => r.scope), ['task', 'task', 'task', 'task', 'task']);
+});
+
+// Success carries no scope: there is nothing to classify, and a caller that
+// switches on scope must not find one on a verdict that passed.
+test('an eligible task carries ok alone', () => {
+    assert.deepEqual(Object.keys(dispatchEligibility(ok())), ['ok']);
 });

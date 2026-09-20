@@ -9,7 +9,7 @@ const { registerProject } = require('./lib/projects');
 const { appendEvent } = require('./lib/events');
 const { computeProjectStats, computeWorkspaceStats } = require('./lib/stats');
 const {
-    createDispatchState, enqueue, dequeue, pullNext, queueFor, setAuto, isAuto
+    createDispatchState, enqueue, dequeue, pullNext, requeueFront, queueFor, setAuto, isAuto
 } = require('./lib/dispatch-queue');
 const { backgroundSessionFor } = require('./lib/dispatch-sessions');
 const { dispatchCommand, DISPATCH_TIMEOUT_MS } = require('./lib/dispatch-command');
@@ -699,7 +699,27 @@ async function dispatchOnePass(projectPath) {
     const { tasks } = getTasks(projectPath);
     const verdict = dispatchEligibility({ taskId, tasks, authenticated, liveSession });
     if (!verdict.ok) {
+        if (verdict.scope === 'environment') {
+            // Transient and global: a logged-out CLI or a session holding
+            // the repository says nothing about this task and applies
+            // identically to every other one queued behind it. It lifts for
+            // the whole queue at once — one `claude auth login`, or the
+            // running session ending — so the queue the operator built is
+            // kept exactly as it was. pullNext already took this task, so
+            // put it back at the front rather than at the back: its
+            // position was the operator's decision too.
+            if (fromQueue) requeueFront(dispatchState, projectPath, taskId);
+            refuseDispatch(projectPath, taskId, verdict.reason);
+            // Never retry here. Nothing the next pass would read has
+            // changed — with the task restored, it would pull the same one,
+            // refuse it the same way and recurse forever, for a queued task
+            // just as much as for an auto-pulled one.
+            return false;
+        }
         refuseDispatch(projectPath, taskId, verdict.reason);
+        // Task-scoped: this one task may never become eligible, so it stays
+        // discarded with its reason visible, and the pass moves on.
+        //
         // Retry immediately ONLY for a queued task. pullNext has already
         // removed it, so the next pass sees a strictly shorter queue and the
         // chain is bounded by the queue's length.

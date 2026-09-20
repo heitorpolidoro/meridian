@@ -92,59 +92,71 @@ test('status carries an empty queue and auto off before anything is dispatched',
     });
 });
 
-// Waits for the loop to record a run for this task. The loop is async: an
-// assertion made right after the POST is a race, which is how the three
-// tests below used to pass against a CLI that was merely slow.
-async function runFor(base, dir, taskId) {
+// Waits for the loop to record a run, then for it to go quiet. The loop is
+// async: an assertion made right after the POST is a race, which is how the
+// queue-shape tests below used to pass against a CLI that was merely slow.
+// A pass is milliseconds long here — the probes fail with ENOENT — so once a
+// refusal is recorded and nothing changes for a further beat, the queue has
+// settled and can be asserted on exactly.
+async function settled(base, dir) {
     for (let i = 0; i < 200; i++) {
         const p = projectIn(await json(base, '/api/status'), dir);
-        if (p.lastRun && p.lastRun.taskId === taskId) return p;
+        if (p.lastRun) break;
         await new Promise(r => setTimeout(r, 50));
     }
-    throw new Error(`no run was ever recorded for ${taskId}`);
+    await new Promise(r => setTimeout(r, 300));
+    const p = projectIn(await json(base, '/api/status'), dir);
+    assert.ok(p.lastRun, 'the loop never recorded a run');
+    return p;
 }
 
-// These three replace Task 7's "the queue shows in status, in order", "the
-// same task twice queues it once" and "DELETE removes one from the queue".
-// Those were written against a no-op loop and cannot hold now that the real
-// one runs: with no CLI reachable every task is pulled and refused within
-// milliseconds, so the queue is never observably non-empty through the API.
-// That drain is the designed behaviour — see lib/dispatch-eligibility.js —
-// not a defect, and it is what these assert instead. Ordering, idempotency
-// and removal are covered where they are deterministic, in
-// test/dispatch-queue.test.js.
-test('a dispatched task is pulled and refused with a visible reason', async () => {
-    const { ws, dir } = workspaceWith(TASKS);
-    await withServer(ws, async base => {
-        await post(base, '/api/projects/dispatch', { projectPath: dir, taskId: 'TST-1', tool: 'claude' });
-        const p = await runFor(base, dir, 'TST-1');
-        assert.equal(p.lastRun.ok, false);
-        assert.match(p.lastRun.reason, /authenticated/);
-        assert.deepEqual(p.queue, []);
-    });
-});
-
-test('every dispatched task is accounted for, none left queued', async () => {
+// The ruling these three depend on: with no CLI reachable the refusal is
+// `environment`-scoped, so the loop puts the task back at the front and
+// leaves the queue exactly as the operator built it. If an environment
+// refusal ever starts draining the queue again, all three fail here rather
+// than in front of an operator who lost their queue to a logged-out CLI.
+test('POST dispatch enqueues and the queue shows in status, in order', async () => {
     const { ws, dir } = workspaceWith(TASKS);
     await withServer(ws, async base => {
         await post(base, '/api/projects/dispatch', { projectPath: dir, taskId: 'TST-1', tool: 'claude' });
         await post(base, '/api/projects/dispatch', { projectPath: dir, taskId: 'TST-2', tool: 'claude' });
-        const p = await runFor(base, dir, 'TST-2');
-        assert.deepEqual(p.queue, [], 'the loop drained both rather than leaving one behind');
+        assert.deepEqual((await settled(base, dir)).queue, ['TST-1', 'TST-2']);
     });
 });
 
-test('DELETE answers 200 for a task the loop already took', async () => {
+test('dispatching the same task twice queues it once', async () => {
     const { ws, dir } = workspaceWith(TASKS);
     await withServer(ws, async base => {
         await post(base, '/api/projects/dispatch', { projectPath: dir, taskId: 'TST-1', tool: 'claude' });
-        await runFor(base, dir, 'TST-1');
-        const res = await fetch(`${base}/api/projects/dispatch/TST-1?project=${encodeURIComponent(dir)}`,
+        await post(base, '/api/projects/dispatch', { projectPath: dir, taskId: 'TST-1', tool: 'claude' });
+        assert.deepEqual((await settled(base, dir)).queue, ['TST-1']);
+    });
+});
+
+test('DELETE removes one task from the queue', async () => {
+    const { ws, dir } = workspaceWith(TASKS);
+    await withServer(ws, async base => {
+        await post(base, '/api/projects/dispatch', { projectPath: dir, taskId: 'TST-1', tool: 'claude' });
+        await post(base, '/api/projects/dispatch', { projectPath: dir, taskId: 'TST-2', tool: 'claude' });
+        await settled(base, dir);
+        await fetch(`${base}/api/projects/dispatch/TST-1?project=${encodeURIComponent(dir)}`,
             { method: 'DELETE' });
-        assert.equal(res.status, 200);
-        const body = await res.json();
-        assert.equal(body.removed, false, 'it was already pulled, so there was nothing to remove');
-        assert.deepEqual(body.queue, []);
+        assert.deepEqual(projectIn(await json(base, '/api/status'), dir).queue, ['TST-2']);
+    });
+});
+
+// Kept from fix round 1: it is the only test that pins what the operator
+// actually sees when a dispatch cannot run — a reason, not silence — and the
+// only one asserting that the refused task survives its own refusal.
+test('an unrunnable dispatch is refused with a visible reason and keeps its place', async () => {
+    const { ws, dir } = workspaceWith(TASKS);
+    await withServer(ws, async base => {
+        await post(base, '/api/projects/dispatch', { projectPath: dir, taskId: 'TST-1', tool: 'claude' });
+        const p = await settled(base, dir);
+        assert.equal(p.lastRun.taskId, 'TST-1');
+        assert.equal(p.lastRun.ok, false);
+        assert.match(p.lastRun.reason, /authenticated/);
+        assert.deepEqual(p.queue, ['TST-1'], 'an environment refusal must not cost the operator the queue');
     });
 });
 
