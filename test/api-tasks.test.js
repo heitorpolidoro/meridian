@@ -35,7 +35,10 @@ async function withServer(ws, fn) {
     try {
         const start = Date.now();
         let ready = false;
-        for (let i = 0; i < 50; i++) {
+        // Server startup budget: generous 25 seconds. These tests spawn a real server process,
+        // node --test runs files in parallel, and several servers starting at once can exceed 5s.
+        // The budget is a ceiling, not a delay; servers answering in 200ms still take 200ms.
+        for (let i = 0; i < 250; i++) {
             try { await fetch(`http://localhost:${port}/api/status`); ready = true; break; }
             catch { await new Promise(r => setTimeout(r, 100)); }
         }
