@@ -9,10 +9,13 @@ const { registerProject } = require('./lib/projects');
 const { appendEvent } = require('./lib/events');
 const { computeProjectStats, computeWorkspaceStats } = require('./lib/stats');
 const {
-    createDispatchState, enqueue, dequeue, queueFor, setAuto, isAuto
+    createDispatchState, enqueue, dequeue, pullNext, queueFor, setAuto, isAuto
 } = require('./lib/dispatch-queue');
 const { backgroundSessionFor } = require('./lib/dispatch-sessions');
-const { dispatchCommand } = require('./lib/dispatch-command');
+const { dispatchCommand, DISPATCH_TIMEOUT_MS } = require('./lib/dispatch-command');
+const { dispatchEligibility } = require('./lib/dispatch-eligibility');
+const { dispatchOutcome } = require('./lib/dispatch-outcome');
+const { runLogPath, appendRunLog } = require('./lib/run-log');
 
 const app = express();
 const PORT = process.env.PORT || 3333;
@@ -332,7 +335,9 @@ function getStatusData(options = {}) {
                     missingDescription: !info.description || info.description.trim() === '',
                     queue: queueFor(dispatchState, projPath),
                     autoDispatch: isAuto(dispatchState, projPath),
-                    dispatchBlockedReason: null, // filled by the loop in Task 8
+                    dispatchBlockedReason: running.has(projPath)
+                        ? `a run is in flight (${running.get(projPath).taskId})`
+                        : null,
                     lastRun: lastRun.get(projPath) || null
                 });
             }
@@ -604,15 +609,177 @@ app.post('/api/projects/dispatch/stop', async (req, res) => {
     res.json({ ok: true, stopped });
 });
 
-// Implemented in Task 8: this will spawn dispatchCommand's argv through
-// runTooling, stream its output over SSE, and pull the next queued task on
-// completion. Until then it is a no-op so the endpoints above are testable
-// on their own.
-function runDispatchLoop(projectPath) { /* no-op until the runner lands */ }
+// One in-flight run per project: { child, taskId, tool, startedAt, logFile }.
+const running = new Map();
 
-// Implemented in Task 8: this will kill the live background session (see
-// liveSessionFor) for the project. Until then there is nothing to stop.
-async function stopDispatch(projectPath) { return false; }
+// A pass that has begun but has not yet spawned anything. `running` cannot
+// carry this: it is only filled after two awaited probes, and two clicks
+// arriving inside that window would otherwise start two passes, pull two
+// tasks and spawn two children for one repository.
+const startingDispatch = new Set();
+
+// SIGTERM lets the CLI end its session, which fires SessionEnd, which runs
+// running-flag.sh, which clears `running` on the task and leaves a
+// resume_context note. That is the same observable result as interrupting a
+// session by hand — the behaviour the operator already knows. SIGKILL is
+// strictly worse: no hook, so `running` stays stuck and no note is left. It
+// is the fallback only.
+const SIGKILL_GRACE_MS = 10000;
+
+async function stopDispatch(projectPath) {
+    const run = running.get(projectPath);
+    if (!run) return false;
+    try {
+        run.child.kill('SIGTERM');
+    } catch (err) {
+        return false;
+    }
+    setTimeout(() => {
+        if (running.get(projectPath) === run) {
+            try { run.child.kill('SIGKILL'); } catch (e) { /* already gone */ }
+        }
+    }, SIGKILL_GRACE_MS);
+    return true;
+}
+
+function sendDispatch(payload) {
+    const line = `data: ${JSON.stringify({ type: 'dispatch', ...payload })}\n\n`;
+    clients.forEach(c => { try { c.write(line); } catch (e) { /* gone */ } });
+}
+
+function refuseDispatch(projectPath, taskId, reason) {
+    // Discarded with a visible reason, never re-queued at the back: a task
+    // whose blocker never lands would spin forever, and re-enqueueing is
+    // one click.
+    lastRun.set(projectPath, { taskId, ok: false, reason, endedAt: new Date().toISOString() });
+    sendDispatch({ projectPath, taskId, state: 'refused', reason });
+    broadcastUpdate();
+}
+
+// Pulls one task and runs it. Returns true when the caller should try again
+// straight away — see the refusal below for the one case where that is safe.
+async function dispatchOnePass(projectPath) {
+    const authProbe = await runTooling(PROBES.claude.ready, 10000);
+    const authenticated = parseReadiness('claude', authProbe.stdout || authProbe.stderr, authProbe.code).ready;
+    const liveSession = await liveSessionFor(projectPath);
+
+    let taskId = pullNext(dispatchState, projectPath);
+    // Where the task came from decides what a refusal may do below, so it is
+    // recorded here rather than inferred later from the queue's contents —
+    // by then the queue has already been changed by this very pull.
+    let fromQueue = taskId !== null;
+    if (!taskId && isAuto(dispatchState, projectPath)) {
+        // Pulled at dispatch time, not snapshotted when auto was armed: a
+        // task created a minute ago has to be able to join.
+        const { tasks } = getTasks(projectPath);
+        taskId = (workableTasks(tasks).find(t => !t.skip_auto_dispatch) || {}).id || null;
+        fromQueue = false;
+    }
+    if (!taskId) return false;
+
+    const { tasks } = getTasks(projectPath);
+    const verdict = dispatchEligibility({ taskId, tasks, authenticated, liveSession });
+    if (!verdict.ok) {
+        refuseDispatch(projectPath, taskId, verdict.reason);
+        // Retry immediately ONLY for a queued task. pullNext has already
+        // removed it, so the next pass sees a strictly shorter queue and the
+        // chain is bounded by the queue's length.
+        //
+        // A task the auto mode picked is in no queue: refusing it changes
+        // nothing that the next selection reads, so the same task would be
+        // chosen again, refused again, and the loop would never end — it
+        // would hang the server on its own stack. A `backlog` task with an
+        // unmet blockedBy reaches exactly this path today, because
+        // workableTasks() excludes `blocked` by status and nothing else.
+        // Ending the pass is correct: the next broadcastUpdate, enqueue or
+        // auto toggle starts a fresh one, by which time the board may have
+        // changed. Do not "simplify" this back into an unconditional retry.
+        return fromQueue;
+    }
+
+    const tool = 'claude';
+    const command = dispatchCommand(tool, taskId);
+    if (!command) {
+        // Only reachable through the auto path: the endpoints validate the
+        // id before it can be queued, but a board may hold an id that is not
+        // safe to put in an argv or a filename. Refuse it the same way
+        // rather than let runLogPath throw inside the loop.
+        refuseDispatch(projectPath, taskId, `${taskId} cannot be dispatched with ${tool}`);
+        return fromQueue;
+    }
+    const startedAt = new Date();
+    const logFile = runLogPath(projectPath, taskId, startedAt);
+
+    // argv, no shell: the task id never reaches a shell to be interpreted.
+    const child = require('child_process').spawn(command.argv[0], command.argv.slice(1), {
+        cwd: projectPath,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env, FORCE_COLOR: '0', CI: '1' }
+    });
+
+    const run = { child, taskId, tool, startedAt, logFile };
+    running.set(projectPath, run);
+    appendRunLog(logFile, `$ ${command.display}\n\n`);
+    sendDispatch({ projectPath, taskId, state: 'started', command: command.display });
+    broadcastUpdate();
+
+    let stdout = '';
+    const take = chunk => {
+        const text = chunk.toString();
+        stdout += text;
+        appendRunLog(logFile, text);
+        sendDispatch({ projectPath, taskId, state: 'output', chunk: text });
+    };
+    child.stdout.on('data', take);
+    child.stderr.on('data', take);
+
+    const killer = setTimeout(() => stopDispatch(projectPath), DISPATCH_TIMEOUT_MS);
+
+    child.on('error', err => {
+        appendRunLog(logFile, `\n[spawn failed] ${err.message}\n`);
+    });
+
+    child.on('close', code => {
+        clearTimeout(killer);
+        running.delete(projectPath);
+        const outcome = dispatchOutcome({ stdout, code });
+        appendRunLog(logFile, `\n[${outcome.ok ? 'ok' : 'failed'}] ${outcome.reason || outcome.summary}\n`);
+        lastRun.set(projectPath, {
+            taskId, tool,
+            startedAt: startedAt.toISOString(),
+            endedAt: new Date().toISOString(),
+            exitCode: code,
+            ok: outcome.ok,
+            reason: outcome.reason
+        });
+        sendDispatch({ projectPath, taskId, state: outcome.ok ? 'done' : 'failed', reason: outcome.reason });
+        broadcastUpdate();
+        runDispatchLoop(projectPath);
+    });
+
+    // The run owns the repository from here; the next pass starts when the
+    // child closes, not now.
+    return false;
+}
+
+// Runs passes until there is nothing left to do. Re-entrant by design: every
+// path that can free the repository calls it, and the guards here make the
+// extra calls no-ops.
+async function runDispatchLoop(projectPath) {
+    if (running.has(projectPath) || startingDispatch.has(projectPath)) return;
+    startingDispatch.add(projectPath);
+    let again = false;
+    try {
+        again = await dispatchOnePass(projectPath);
+    } catch (err) {
+        console.error(`Dispatch loop failed for ${projectPath}:`, err.message);
+    } finally {
+        // Released before any retry: the guard above would otherwise turn
+        // this function's own recursive call into a no-op.
+        startingDispatch.delete(projectPath);
+    }
+    if (again) return runDispatchLoop(projectPath);
+}
 
 // REST API: on-demand stats aggregated from events.jsonl. Never cached —
 // every request re-reads and re-aggregates the file from scratch.
