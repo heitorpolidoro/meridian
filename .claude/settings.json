@@ -15,7 +15,13 @@
     "deny": [
       "Bash(git push:*)",
       "Bash(gh repo delete:*)",
-      "Bash(rm -rf:*)"
+      "Bash(rm -rf:*)",
+      "Bash(git add -A:*)",
+      "Bash(git add --all:*)",
+      "Bash(git add .:*)",
+      "Bash(git commit --amend:*)",
+      "Bash(git commit -a:*)",
+      "Bash(git commit --all:*)"
     ]
   }
 }

@@ -19,6 +19,11 @@ and the git verbs the pipeline uses to stage and commit its own work.
 reaches a network service that can act on the operator's behalf. Publishing is
 a human act; the pipeline stops at the commit.
 
+`git add` is allowed only with an explicit pathspec. These repositories carry
+unrelated open work in committed branches, and a run that stages everything
+with `git add -A`, `git add .`, or `git add --all` would commit someone else's
+WIP to the repo.
+
 ## Extending it per project
 
 Each project needs its own, because the test runner differs — `pytest`,
@@ -29,3 +34,12 @@ entries.
 
 The run tab shows *"Run stopped: a command is outside the allowlist"* and the
 log names the tool call. Add the specific verb, not a wildcard.
+
+## What this list does not protect against
+
+The entries are matched as **prefixes** by the Claude Code CLI, not by Meridian.
+Whether compound commands (`a && b`) are decomposed and checked per part has
+not been verified here. The allowlist is therefore a strong default that blocks
+the most dangerous operations, but it is not a sandbox. Do not claim it is
+bypassable, and do not claim it is airtight — it is a sound practical boundary
+for the stated purpose.
