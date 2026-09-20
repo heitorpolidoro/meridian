@@ -356,3 +356,16 @@ test('saveTasks: a task whose id escapes the tasks directory is refused, not wri
     );
     assert.equal(fs.existsSync(path.join(dir, '.meridian', 'escaped.json')), false);
 });
+
+const { isSafeTaskId } = require('../lib/tasks');
+
+// The safe-id rule has one home, here, so every caller (assertSafeId,
+// dispatch-command's spawn guard, and whatever Task 8 adds) agrees on it.
+test('isSafeTaskId: pins the one rule everyone else defers to', () => {
+    assert.equal(isSafeTaskId('MERID-12'), true);
+    assert.equal(isSafeTaskId('.'), false);
+    assert.equal(isSafeTaskId('..'), false);
+    assert.equal(isSafeTaskId('a/b'), false);
+    assert.equal(isSafeTaskId(''), false);
+    assert.equal(isSafeTaskId(42), false);
+});

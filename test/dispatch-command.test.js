@@ -48,7 +48,7 @@ test('neither CLI is given a permission mode that bypasses the allowlist', () =>
 // The task id reaches a spawn. Anything that is not an id must not get there,
 // and argv (no shell) plus this guard are the two layers that stop it.
 test('an id that is not a plain task id yields no command', () => {
-    for (const bad of ['T-1; rm -rf /', '$(whoami)', '../../etc/passwd', '', null]) {
+    for (const bad of ['T-1; rm -rf /', '$(whoami)', '../../etc/passwd', '', null, '.', '..']) {
         assert.equal(dispatchCommand('claude', bad), null, `refused: ${bad}`);
     }
 });
