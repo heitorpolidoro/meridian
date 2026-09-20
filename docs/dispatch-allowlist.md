@@ -21,8 +21,8 @@ a human act; the pipeline stops at the commit.
 
 `git add` is allowed only with an explicit pathspec. These repositories carry
 unrelated open work in committed branches, and a run that stages everything
-with `git add -A`, `git add .`, or `git add --all` would commit someone else's
-WIP to the repo.
+with `git add -A`, `git add .`, `git add --all`, `git add -u`, or `git add --update`
+would commit someone else's WIP to the repo.
 
 ## Extending it per project
 
@@ -37,9 +37,16 @@ log names the tool call. Add the specific verb, not a wildcard.
 
 ## What this list does not protect against
 
-The entries are matched as **prefixes** by the Claude Code CLI, not by Meridian.
-Whether compound commands (`a && b`) are decomposed and checked per part has
-not been verified here. The allowlist is therefore a strong default that blocks
-the most dangerous operations, but it is not a sandbox. Do not claim it is
-bypassable, and do not claim it is airtight — it is a sound practical boundary
-for the stated purpose.
+Claude Code splits compound commands on `&&`, `||`, `;`, `|`, and newlines,
+then matches each subcommand independently against the rules. Deny rules fire
+when any subcommand matches, including inside a subshell or command substitution.
+This means an agent cannot escape the list by wrapping a dangerous command in
+`echo ... | sh` or similar.
+
+The real limitation is that the list is only as good as the forms enumerated
+in it. The deny entries name specific dangerous flags (`-A`, `-am`, `-u`, etc.)
+rather than relying on the allow list alone, because a pattern like `git add:*`
+cannot express "git add only with a pathspec". This is why missing a single flag
+variant can open the whole boundary: `git commit -a:*` does not match `git commit -am msg`
+because `-am` is a different token. The list therefore requires maintenance as
+new dangerous flag combinations are discovered.
