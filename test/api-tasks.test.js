@@ -4,6 +4,13 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
+// Ports are allocated deterministically per file, from a base no other test
+// file uses. They used to be drawn at random from one shared 500-wide range,
+// which collided: a second server on a taken port never binds, never answers,
+// and times out no matter how long the startup budget is.
+const PORT_BASE = 3400;
+let nextPort = PORT_BASE;
+
 // Builds an isolated fixture workspace: a registry at <ws>/.meridian/projects.json
 // pointing at one project. The server is pointed here with MERIDIAN_RUNNING_DIR so
 // the tests never see the six real projects.
@@ -24,7 +31,7 @@ function workspaceWith(name) {
 }
 
 async function withServer(ws, fn) {
-    const port = 3400 + Math.floor(Math.random() * 500);
+    const port = nextPort++;
     const proc = require('node:child_process').spawn('node', ['server.js'], {
         env: { ...process.env, PORT: String(port), MERIDIAN_RUNNING_DIR: ws },
         cwd: path.join(__dirname, '..'),
