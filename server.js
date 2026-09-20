@@ -522,10 +522,23 @@ app.post('/api/tooling/:cli/:action', async (req, res) => {
 //
 // Registration is checked with isRegisteredProject (defined below, hoisted)
 // rather than a second copy of the same lookup.
+//
+// isRegisteredProject calls path.resolve on whatever it is given, which
+// throws a TypeError on anything but a string. Every route below must refuse
+// a missing or non-string project value before it reaches that call, not
+// after — this one guard is shared so a future endpoint cannot forget it.
+function missingProjectReason(field, value) {
+    if (typeof value !== 'string' || !value) return `${field} is required`;
+    return null;
+}
 
 app.post('/api/projects/dispatch', (req, res) => {
     const { projectPath, taskId, tool } = req.body || {};
-    if (!projectPath || !taskId || !tool) {
+    const projectError = missingProjectReason('projectPath', projectPath);
+    if (projectError) {
+        return res.status(400).json({ error: projectError });
+    }
+    if (!taskId || !tool) {
         return res.status(400).json({ error: 'projectPath, taskId and tool are required' });
     }
     if (!isRegisteredProject(projectPath)) {
@@ -549,6 +562,10 @@ app.post('/api/projects/dispatch', (req, res) => {
 
 app.delete('/api/projects/dispatch/:taskId', (req, res) => {
     const projectPath = req.query.project;
+    const projectError = missingProjectReason('project', projectPath);
+    if (projectError) {
+        return res.status(400).json({ error: projectError });
+    }
     if (!isRegisteredProject(projectPath)) {
         return res.status(400).json({ error: `Unknown project ${projectPath}` });
     }
@@ -559,6 +576,10 @@ app.delete('/api/projects/dispatch/:taskId', (req, res) => {
 
 app.post('/api/projects/dispatch/auto', (req, res) => {
     const { projectPath, enabled } = req.body || {};
+    const projectError = missingProjectReason('projectPath', projectPath);
+    if (projectError) {
+        return res.status(400).json({ error: projectError });
+    }
     if (!isRegisteredProject(projectPath)) {
         return res.status(400).json({ error: `Unknown project ${projectPath}` });
     }
@@ -571,6 +592,10 @@ app.post('/api/projects/dispatch/auto', (req, res) => {
 
 app.post('/api/projects/dispatch/stop', async (req, res) => {
     const { projectPath } = req.body || {};
+    const projectError = missingProjectReason('projectPath', projectPath);
+    if (projectError) {
+        return res.status(400).json({ error: projectError });
+    }
     if (!isRegisteredProject(projectPath)) {
         return res.status(400).json({ error: `Unknown project ${projectPath}` });
     }

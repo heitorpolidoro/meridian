@@ -135,6 +135,50 @@ test('a missing field is refused rather than half-applied', async () => {
     });
 });
 
+// Fix round 1: isRegisteredProject calls path.resolve unconditionally and
+// throws a TypeError on anything but a string, so a missing/non-string
+// project value must be refused before it reaches that call — on every
+// route, not just the one whose brief tests happened to cover it.
+test('DELETE with no ?project= is refused, not a 500', async () => {
+    const { ws } = workspaceWith(TASKS);
+    await withServer(ws, async base => {
+        const res = await fetch(`${base}/api/projects/dispatch/TST-1`, { method: 'DELETE' });
+        assert.equal(res.status, 400);
+    });
+});
+
+test('auto with no projectPath is refused, not a 500', async () => {
+    const { ws } = workspaceWith(TASKS);
+    await withServer(ws, async base => {
+        const res = await post(base, '/api/projects/dispatch/auto', { enabled: true });
+        assert.equal(res.status, 400);
+    });
+});
+
+test('stop with no projectPath is refused, not a 500', async () => {
+    const { ws } = workspaceWith(TASKS);
+    await withServer(ws, async base => {
+        const res = await post(base, '/api/projects/dispatch/stop', {});
+        assert.equal(res.status, 400);
+    });
+});
+
+test('dispatch with no projectPath is refused, not a 500', async () => {
+    const { ws } = workspaceWith(TASKS);
+    await withServer(ws, async base => {
+        const res = await post(base, '/api/projects/dispatch', { taskId: 'TST-1', tool: 'claude' });
+        assert.equal(res.status, 400);
+    });
+});
+
+test('a non-string projectPath is refused, not a 500', async () => {
+    const { ws } = workspaceWith(TASKS);
+    await withServer(ws, async base => {
+        const res = await post(base, '/api/projects/dispatch/auto', { projectPath: 42, enabled: true });
+        assert.equal(res.status, 400);
+    });
+});
+
 // The queue is in memory and nowhere else. Nothing here may touch the board.
 test('enqueueing writes nothing to tasks.jsonl', async () => {
     const { ws, dir } = workspaceWith(TASKS);
