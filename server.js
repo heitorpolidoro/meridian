@@ -604,9 +604,9 @@ app.post('/api/projects/dispatch/stop', async (req, res) => {
     if (!isRegisteredProject(projectPath)) {
         return res.status(400).json({ error: `Unknown project ${projectPath}` });
     }
-    const stopped = await stopDispatch(projectPath);
+    const { stopped, reason } = await stopDispatch(projectPath);
     broadcastUpdate();
-    res.json({ ok: true, stopped });
+    res.json({ ok: true, stopped, reason });
 });
 
 // One in-flight run per project: { child, taskId, tool, startedAt, logFile }.
@@ -626,20 +626,39 @@ const startingDispatch = new Set();
 // is the fallback only.
 const SIGKILL_GRACE_MS = 10000;
 
+// Stops the run Meridian started for this project, and nothing else.
+//
+// A session this server did not start — one the operator launched from their
+// own terminal, which liveSessionFor reports and which already blocks
+// dispatch — is deliberately left alone: killing a process the operator is
+// sitting in front of is not something a button on a board may do. The
+// honest answer goes back to the caller as a reason, so the button explains
+// itself instead of silently doing nothing.
+//
+// Returns { stopped, reason }.
 async function stopDispatch(projectPath) {
     const run = running.get(projectPath);
-    if (!run) return false;
+    if (!run) {
+        const session = await liveSessionFor(projectPath);
+        if (session) {
+            return {
+                stopped: false,
+                reason: 'a session is running in this repository that Meridian did not start — stop it where it was started'
+            };
+        }
+        return { stopped: false, reason: null };
+    }
     try {
         run.child.kill('SIGTERM');
     } catch (err) {
-        return false;
+        return { stopped: false, reason: `could not signal the run: ${err.message}` };
     }
     setTimeout(() => {
         if (running.get(projectPath) === run) {
             try { run.child.kill('SIGKILL'); } catch (e) { /* already gone */ }
         }
     }, SIGKILL_GRACE_MS);
-    return true;
+    return { stopped: true, reason: null };
 }
 
 function sendDispatch(payload) {

@@ -28,10 +28,31 @@ function workspaceWith(tasks) {
     return { ws, dir };
 }
 
+// A PATH that finds node and nothing else that matters: `claude` and `agy`
+// must be unreachable from the server these tests spawn.
+//
+// These tests drive the real dispatch endpoints, and those start the real
+// loop, which probes the CLI and — on a machine where `claude` is installed
+// and authenticated — would spawn an actual agent run inside the temp
+// fixture project. Today the suite only escapes that by winning a race: the
+// probes take about a second and the server is killed first. Making the CLI
+// unreachable is the only thing that prevents it reliably, and it does so
+// without a test-only switch in server.js: the production path still runs,
+// the probes fail with ENOENT, readiness reads false and eligibility
+// refuses.
+//
+// The cost is that the authenticated branch of the loop is not covered here.
+// It is not covered anywhere: the spawn, the signalling and the UI are
+// verified by hand against a scratch board in the last task of this plan.
+const NO_CLI_PATH = [
+    path.dirname(process.execPath),
+    '/usr/bin', '/bin', '/usr/sbin', '/sbin'
+].join(path.delimiter);
+
 async function withServer(ws, fn) {
     const port = nextPort++;
     const proc = require('node:child_process').spawn('node', ['server.js'], {
-        env: { ...process.env, PORT: String(port), MERIDIAN_RUNNING_DIR: ws },
+        env: { ...process.env, PATH: NO_CLI_PATH, PORT: String(port), MERIDIAN_RUNNING_DIR: ws },
         cwd: path.join(__dirname, '..'),
         stdio: ['ignore', 'ignore', 'pipe']
     });
@@ -71,32 +92,59 @@ test('status carries an empty queue and auto off before anything is dispatched',
     });
 });
 
-test('POST dispatch enqueues and the queue shows in status, in order', async () => {
+// Waits for the loop to record a run for this task. The loop is async: an
+// assertion made right after the POST is a race, which is how the three
+// tests below used to pass against a CLI that was merely slow.
+async function runFor(base, dir, taskId) {
+    for (let i = 0; i < 200; i++) {
+        const p = projectIn(await json(base, '/api/status'), dir);
+        if (p.lastRun && p.lastRun.taskId === taskId) return p;
+        await new Promise(r => setTimeout(r, 50));
+    }
+    throw new Error(`no run was ever recorded for ${taskId}`);
+}
+
+// These three replace Task 7's "the queue shows in status, in order", "the
+// same task twice queues it once" and "DELETE removes one from the queue".
+// Those were written against a no-op loop and cannot hold now that the real
+// one runs: with no CLI reachable every task is pulled and refused within
+// milliseconds, so the queue is never observably non-empty through the API.
+// That drain is the designed behaviour — see lib/dispatch-eligibility.js —
+// not a defect, and it is what these assert instead. Ordering, idempotency
+// and removal are covered where they are deterministic, in
+// test/dispatch-queue.test.js.
+test('a dispatched task is pulled and refused with a visible reason', async () => {
+    const { ws, dir } = workspaceWith(TASKS);
+    await withServer(ws, async base => {
+        await post(base, '/api/projects/dispatch', { projectPath: dir, taskId: 'TST-1', tool: 'claude' });
+        const p = await runFor(base, dir, 'TST-1');
+        assert.equal(p.lastRun.ok, false);
+        assert.match(p.lastRun.reason, /authenticated/);
+        assert.deepEqual(p.queue, []);
+    });
+});
+
+test('every dispatched task is accounted for, none left queued', async () => {
     const { ws, dir } = workspaceWith(TASKS);
     await withServer(ws, async base => {
         await post(base, '/api/projects/dispatch', { projectPath: dir, taskId: 'TST-1', tool: 'claude' });
         await post(base, '/api/projects/dispatch', { projectPath: dir, taskId: 'TST-2', tool: 'claude' });
-        assert.deepEqual(projectIn(await json(base, '/api/status'), dir).queue, ['TST-1', 'TST-2']);
+        const p = await runFor(base, dir, 'TST-2');
+        assert.deepEqual(p.queue, [], 'the loop drained both rather than leaving one behind');
     });
 });
 
-test('dispatching the same task twice queues it once', async () => {
+test('DELETE answers 200 for a task the loop already took', async () => {
     const { ws, dir } = workspaceWith(TASKS);
     await withServer(ws, async base => {
         await post(base, '/api/projects/dispatch', { projectPath: dir, taskId: 'TST-1', tool: 'claude' });
-        await post(base, '/api/projects/dispatch', { projectPath: dir, taskId: 'TST-1', tool: 'claude' });
-        assert.deepEqual(projectIn(await json(base, '/api/status'), dir).queue, ['TST-1']);
-    });
-});
-
-test('DELETE removes one task from the queue', async () => {
-    const { ws, dir } = workspaceWith(TASKS);
-    await withServer(ws, async base => {
-        await post(base, '/api/projects/dispatch', { projectPath: dir, taskId: 'TST-1', tool: 'claude' });
-        await post(base, '/api/projects/dispatch', { projectPath: dir, taskId: 'TST-2', tool: 'claude' });
-        await fetch(`${base}/api/projects/dispatch/TST-1?project=${encodeURIComponent(dir)}`,
+        await runFor(base, dir, 'TST-1');
+        const res = await fetch(`${base}/api/projects/dispatch/TST-1?project=${encodeURIComponent(dir)}`,
             { method: 'DELETE' });
-        assert.deepEqual(projectIn(await json(base, '/api/status'), dir).queue, ['TST-2']);
+        assert.equal(res.status, 200);
+        const body = await res.json();
+        assert.equal(body.removed, false, 'it was already pulled, so there was nothing to remove');
+        assert.deepEqual(body.queue, []);
     });
 });
 
@@ -159,6 +207,19 @@ test('auto with no projectPath is refused, not a 500', async () => {
     await withServer(ws, async base => {
         const res = await post(base, '/api/projects/dispatch/auto', { enabled: true });
         assert.equal(res.status, 400);
+    });
+});
+
+// Stop never signals a session Meridian did not start, so it can answer
+// "nothing stopped". With no CLI reachable there is no live session to
+// report either, so the reason is empty rather than invented.
+test('stop with nothing running answers honestly rather than pretending', async () => {
+    const { ws, dir } = workspaceWith(TASKS);
+    await withServer(ws, async base => {
+        const body = await (await post(base, '/api/projects/dispatch/stop', { projectPath: dir })).json();
+        assert.equal(body.ok, true);
+        assert.equal(body.stopped, false);
+        assert.equal(body.reason, null);
     });
 });
 
