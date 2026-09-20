@@ -28,31 +28,36 @@ function workspaceWith(tasks) {
     return { ws, dir };
 }
 
-// A PATH that finds node and nothing else that matters: `claude` and `agy`
-// must be unreachable from the server these tests spawn.
+// A PATH containing exactly one executable: node.
 //
 // These tests drive the real dispatch endpoints, and those start the real
 // loop, which probes the CLI and — on a machine where `claude` is installed
 // and authenticated — would spawn an actual agent run inside the temp
-// fixture project. Today the suite only escapes that by winning a race: the
-// probes take about a second and the server is killed first. Making the CLI
-// unreachable is the only thing that prevents it reliably, and it does so
-// without a test-only switch in server.js: the production path still runs,
-// the probes fail with ENOENT, readiness reads false and eligibility
-// refuses.
+// fixture project. Making the CLI unreachable by name is the only thing
+// that prevents that reliably, and it does so without a test-only switch in
+// server.js: the production path still runs, the probes fail with ENOENT,
+// readiness reads false and eligibility refuses.
 //
-// The cost is that the authenticated branch of the loop is not covered here.
-// It is not covered anywhere: the spawn, the signalling and the UI are
-// verified by hand against a scratch board in the last task of this plan.
-const NO_CLI_PATH = [
-    path.dirname(process.execPath),
-    '/usr/bin', '/bin', '/usr/sbin', '/sbin'
-].join(path.delimiter);
+// It is a directory of our own with node symlinked into it, not node's own
+// directory: `@anthropic-ai/claude-code` also ships on npm, and an
+// npm-global install puts `claude` right next to the node binary, which
+// would silently defeat a scrub that kept that directory on the PATH.
+// Nothing is reachable by name here except what we put in.
+//
+// The cost is that the authenticated branch of the loop is not covered
+// here. It is not covered anywhere: the spawn, the signalling and the UI
+// are verified by hand against a scratch board in the last task of this
+// plan.
+const NODE_ONLY_BIN = fs.mkdtempSync(path.join(os.tmpdir(), 'meridian-nodeonly-'));
+fs.symlinkSync(process.execPath, path.join(NODE_ONLY_BIN, 'node'));
+process.on('exit', () => {
+    try { fs.rmSync(NODE_ONLY_BIN, { recursive: true, force: true }); } catch { /* going away anyway */ }
+});
 
 async function withServer(ws, fn) {
     const port = nextPort++;
     const proc = require('node:child_process').spawn('node', ['server.js'], {
-        env: { ...process.env, PATH: NO_CLI_PATH, PORT: String(port), MERIDIAN_RUNNING_DIR: ws },
+        env: { ...process.env, PATH: NODE_ONLY_BIN, PORT: String(port), MERIDIAN_RUNNING_DIR: ws },
         cwd: path.join(__dirname, '..'),
         stdio: ['ignore', 'ignore', 'pipe']
     });

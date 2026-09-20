@@ -661,6 +661,27 @@ async function stopDispatch(projectPath) {
     return { stopped: true, reason: null };
 }
 
+// Appends to the run's log, and never lets that kill anything.
+//
+// Every caller is inside an EventEmitter listener, where a throw is an
+// uncaught exception and this process is a long-lived server. The log is
+// valuable — it is the only thing that answers "what did it do at 3am" —
+// but it is never worth the server for: a write that fails degrades this
+// run to streaming only, which continues regardless, and the operator still
+// sees every chunk over SSE. mkdirSync already heals a directory that went
+// missing; a permission or disk-space error does not heal, so it is
+// reported once per run rather than once per chunk, which on a full disk
+// would be once per line of agent output.
+function logRun(run, text) {
+    if (run.logBroken) return;
+    try {
+        appendRunLog(run.logFile, text);
+    } catch (err) {
+        run.logBroken = true;
+        console.error(`Run log for ${run.taskId} disabled (${run.logFile}): ${err.message}`);
+    }
+}
+
 function sendDispatch(payload) {
     const line = `data: ${JSON.stringify({ type: 'dispatch', ...payload })}\n\n`;
     clients.forEach(c => { try { c.write(line); } catch (e) { /* gone */ } });
@@ -758,31 +779,24 @@ async function dispatchOnePass(projectPath) {
 
     const run = { child, taskId, tool, startedAt, logFile };
     running.set(projectPath, run);
-    appendRunLog(logFile, `$ ${command.display}\n\n`);
-    sendDispatch({ projectPath, taskId, state: 'started', command: command.display });
-    broadcastUpdate();
 
     let stdout = '';
-    const take = chunk => {
-        const text = chunk.toString();
-        stdout += text;
-        appendRunLog(logFile, text);
-        sendDispatch({ projectPath, taskId, state: 'output', chunk: text });
-    };
-    child.stdout.on('data', take);
-    child.stderr.on('data', take);
-
     const killer = setTimeout(() => stopDispatch(projectPath), DISPATCH_TIMEOUT_MS);
 
+    // Registered before anything that could throw, and before the first log
+    // write in particular. The close handler is what deletes this project
+    // from `running`; a throw between the spawn and this line would leave an
+    // orphaned child, a project marked busy forever and no way back but a
+    // restart.
     child.on('error', err => {
-        appendRunLog(logFile, `\n[spawn failed] ${err.message}\n`);
+        logRun(run, `\n[spawn failed] ${err.message}\n`);
     });
 
     child.on('close', code => {
         clearTimeout(killer);
         running.delete(projectPath);
         const outcome = dispatchOutcome({ stdout, code });
-        appendRunLog(logFile, `\n[${outcome.ok ? 'ok' : 'failed'}] ${outcome.reason || outcome.summary}\n`);
+        logRun(run, `\n[${outcome.ok ? 'ok' : 'failed'}] ${outcome.reason || outcome.summary}\n`);
         lastRun.set(projectPath, {
             taskId, tool,
             startedAt: startedAt.toISOString(),
@@ -795,6 +809,19 @@ async function dispatchOnePass(projectPath) {
         broadcastUpdate();
         runDispatchLoop(projectPath);
     });
+
+    const take = chunk => {
+        const text = chunk.toString();
+        stdout += text;
+        logRun(run, text);
+        sendDispatch({ projectPath, taskId, state: 'output', chunk: text });
+    };
+    child.stdout.on('data', take);
+    child.stderr.on('data', take);
+
+    logRun(run, `$ ${command.display}\n\n`);
+    sendDispatch({ projectPath, taskId, state: 'started', command: command.display });
+    broadcastUpdate();
 
     // The run owns the repository from here; the next pass starts when the
     // child closes, not now.
