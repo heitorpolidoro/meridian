@@ -260,6 +260,20 @@ test('getTasks: backfill never overwrites an existing moved_at', () => {
     assert.equal(getTasks(dir).tasks[0].moved_at, '2026-08-01T00:00:00.000Z');
 });
 
+// Excluded from Dispatch all, never from the card's own Dispatch: the
+// operator's explicit act is not the same as the loop picking a task, the
+// same principle as the spec_approval gate a machine never crosses alone.
+test('skip_auto_dispatch survives a save and reload', () => {
+    const dir = tmpProject([{ id: 'T-1', status: 'backlog', skip_auto_dispatch: true }]);
+    const { tasks } = getTasks(dir);
+    assert.equal(tasks[0].skip_auto_dispatch, true);
+});
+
+test('a task without the field is included by default', () => {
+    const dir = tmpProject([{ id: 'T-1', status: 'backlog' }]);
+    assert.equal(getTasks(dir).tasks[0].skip_auto_dispatch, undefined);
+});
+
 const { stampNewTask, stampTaskUpdate } = require('../lib/tasks');
 
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;

@@ -42,6 +42,7 @@ truncate the file, and never write it from an empty in-memory list.
 | `expected_results` | array of strings — concrete, mechanically verifiable outcomes | agent — detail file, not present in `GET /api/status` |
 | `questions` | array of objects — a thread of exchanges, one entry per exchange. See **The questions array** below | agent / human |
 | `operator_feedback` | string — the text of the operator's most recent revision request, also recorded as a `questions` entry | board, on Request AI Revision |
+| `skip_auto_dispatch` | boolean — exclude this task from `Dispatch all` and the auto loop. Absent means included. Does **not** block the card's own `Dispatch` | **operator only** — agents must not set or clear it |
 | `blockedBy` | array of task ids that must reach `done` first | agent |
 | `parent` | string, id of another task on the same board, optional | agent |
 | `spec_path` | string, e.g. `docs/tasks/MERID-1-spec.md` | agent |
@@ -62,6 +63,12 @@ agent**. `created_at` is set once on creation. `updated_at` is set on every
 write. `moved_at` is set on every status change. `completed_at` is set when the
 status enters `done` and set back to `null` when it leaves `done`. Sending any
 of them in a write is refused by the server with HTTP 400.
+
+`skip_auto_dispatch` is operator-owned, like `priority`. An agent must never
+set or clear it: it records a human decision that this task is not for the
+automatic loop. It is deliberately not named `auto_dispatch` — the
+project-level flag says whether the loop runs, this says whether a task is
+eligible, and one name for two things is a trap for whoever reads this next.
 
 An empty string is not a valid value for any string field. If a field has no
 value, omit it (on create) or do not mention it in the update payload.
