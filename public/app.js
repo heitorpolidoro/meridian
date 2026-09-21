@@ -2687,8 +2687,15 @@ function renderRunEntry(run, idx) {
 
 // The failure reason comes from /api/status's per-project lastRun (already
 // in memory as currentProjectsData), not from the runs endpoint — it must
-// show up the instant the tab opens, and it must keep showing until this
-// task's *own* next run, which is exactly what matching lastRun.taskId does.
+// show up the instant the tab opens.
+//
+// How long it keeps showing is a property of lastRun, which is keyed per
+// PROJECT and holds exactly one entry. So the badge survives only until the
+// next run or refusal anywhere in this project: another task's dispatch
+// overwrites lastRun, the id stops matching, and this task's badge goes even
+// though nothing about this task changed. Matching on lastRun.taskId is what
+// keeps the badge from being shown against the wrong task; it is not what
+// keeps it alive. The run log on disk is the record that does persist.
 function updateRunsTabHeader(task, projPath) {
     const badge = document.getElementById('tm-runs-badge');
     const reasonEl = document.getElementById('tm-runs-reason');

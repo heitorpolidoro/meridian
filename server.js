@@ -805,9 +805,16 @@ function sendDispatch(payload) {
 }
 
 function refuseDispatch(projectPath, taskId, reason) {
-    // Discarded with a visible reason, never re-queued at the back: a task
-    // whose blocker never lands would spin forever, and re-enqueueing is
-    // one click.
+    // Records the reason and shows it. What happens to the task itself is
+    // the caller's decision, and it differs by scope — this function is
+    // called on both paths, so it must not claim either.
+    //
+    // A task-scoped refusal discards the task: pullNext already removed it
+    // and nothing puts it back, because a task whose blocker never lands
+    // would spin forever and re-enqueueing is one click. An
+    // environment-scoped refusal does requeue it, at the FRONT: a logged-out
+    // CLI or a session holding the repository says nothing about this task,
+    // and the queue's order was the operator's decision.
     lastRun.set(projectPath, { taskId, ok: false, reason, endedAt: new Date().toISOString() });
     sendDispatch({ projectPath, taskId, state: 'refused', reason });
     broadcastUpdate();
