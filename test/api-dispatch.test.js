@@ -274,3 +274,89 @@ test('enqueueing writes nothing to tasks.jsonl', async () => {
         assert.equal(fs.readFileSync(file, 'utf8'), before, 'no queued field was written');
     });
 });
+
+// Task 13: a fixture project starts with no .claude/settings.json at all, so
+// the status payload must offer to create one and must explain why dispatch
+// is blocked in the meantime.
+test('status reports canCreateAllowlist and the no-allowlist reason for a fresh project', async () => {
+    const { ws, dir } = workspaceWith(TASKS);
+    await withServer(ws, async base => {
+        const p = projectIn(await json(base, '/api/status'), dir);
+        assert.equal(p.canCreateAllowlist, true);
+        assert.match(p.dispatchBlockedReason, /no dispatch allowlist/);
+    });
+});
+
+test('POST allowlist writes a starting settings.json and reports the detected runner', async () => {
+    const { ws, dir } = workspaceWith(TASKS);
+    fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ scripts: { test: 'vitest' } }));
+    await withServer(ws, async base => {
+        const res = await post(base, '/api/projects/allowlist', { projectPath: dir });
+        assert.equal(res.status, 200);
+        const body = await res.json();
+        assert.equal(body.ok, true);
+        assert.equal(body.runner, 'npm test');
+        const settingsPath = path.join(dir, '.claude', 'settings.json');
+        assert.equal(body.path, settingsPath);
+        const written = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        assert.ok(written.permissions.allow.includes('Bash(npm test)'));
+        assert.ok(fs.readFileSync(settingsPath, 'utf8').endsWith('\n'));
+
+        // canCreateAllowlist must flip off, and the blocked reason must
+        // clear, once the file exists.
+        const p = projectIn(await json(base, '/api/status'), dir);
+        assert.equal(p.canCreateAllowlist, false);
+        assert.equal(p.dispatchBlockedReason, null);
+    });
+});
+
+test('POST allowlist reports a null runner when none is detected', async () => {
+    const { ws, dir } = workspaceWith(TASKS);
+    await withServer(ws, async base => {
+        const body = await (await post(base, '/api/projects/allowlist', { projectPath: dir })).json();
+        assert.equal(body.runner, null);
+    });
+});
+
+test('POST allowlist never overwrites an existing settings.json', async () => {
+    const { ws, dir } = workspaceWith(TASKS);
+    fs.mkdirSync(path.join(dir, '.claude'), { recursive: true });
+    fs.writeFileSync(path.join(dir, '.claude', 'settings.json'), '{}');
+    await withServer(ws, async base => {
+        const res = await post(base, '/api/projects/allowlist', { projectPath: dir });
+        assert.equal(res.status, 409);
+        assert.equal(fs.readFileSync(path.join(dir, '.claude', 'settings.json'), 'utf8'), '{}');
+    });
+});
+
+test('POST allowlist for an unregistered project is refused', async () => {
+    const { ws } = workspaceWith(TASKS);
+    await withServer(ws, async base => {
+        const res = await post(base, '/api/projects/allowlist', { projectPath: '/etc' });
+        assert.equal(res.status, 400);
+    });
+});
+
+test('POST allowlist with no projectPath is refused, not a 500', async () => {
+    const { ws } = workspaceWith(TASKS);
+    await withServer(ws, async base => {
+        const res = await post(base, '/api/projects/allowlist', {});
+        assert.equal(res.status, 400);
+    });
+});
+
+// A file the operator wrote is not ours to complete: canCreateAllowlist
+// must stay false even when permissions.allow is empty or missing, exactly
+// as it would be for a stranger's settings.json this endpoint refuses to
+// touch.
+test('canCreateAllowlist is false for an existing settings.json with an empty allow list', async () => {
+    const { ws, dir } = workspaceWith(TASKS);
+    fs.mkdirSync(path.join(dir, '.claude'), { recursive: true });
+    fs.writeFileSync(path.join(dir, '.claude', 'settings.json'),
+        JSON.stringify({ permissions: { allow: [] } }));
+    await withServer(ws, async base => {
+        const p = projectIn(await json(base, '/api/status'), dir);
+        assert.equal(p.canCreateAllowlist, false);
+        assert.match(p.dispatchBlockedReason, /no dispatch allowlist/);
+    });
+});

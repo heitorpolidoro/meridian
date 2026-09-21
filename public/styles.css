@@ -795,6 +795,21 @@ body:not([data-view="dashboard"]) #error-container {
     cursor: not-allowed;
 }
 
+/* Offered only when a repository has no .claude/settings.json at all —
+   amber like the other "something is missing here" badges, never red: this
+   is routine setup, not an error. */
+.allowlist-btn {
+    font-size: 0.7rem;
+    padding: 0.25rem 0.6rem;
+    margin-left: 0.5rem;
+    border-color: #f59e0b;
+    color: #f59e0b;
+}
+
+.allowlist-btn:hover {
+    background: rgba(245, 158, 11, 0.15);
+}
+
 .kanban-toolbar {
     display: flex;
     justify-content: space-between;

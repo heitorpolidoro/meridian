@@ -13,9 +13,10 @@ const {
 } = require('./lib/dispatch-queue');
 const { backgroundSessionFor } = require('./lib/dispatch-sessions');
 const { dispatchCommand, DISPATCH_TIMEOUT_MS } = require('./lib/dispatch-command');
-const { dispatchEligibility } = require('./lib/dispatch-eligibility');
+const { dispatchEligibility, NO_ALLOWLIST_REASON } = require('./lib/dispatch-eligibility');
 const { dispatchOutcome } = require('./lib/dispatch-outcome');
 const { runLogPath, appendRunLog } = require('./lib/run-log');
+const { detectRunner, allowlistFor } = require('./lib/allowlist-template');
 
 const app = express();
 const PORT = process.env.PORT || 3333;
@@ -243,6 +244,27 @@ function limitPerStatus(tasks, limit) {
     return out;
 }
 
+// Whether `projectPath` has a `.claude/settings.json` declaring at least one
+// `permissions.allow` entry, and whether that file exists at all. The two
+// are kept apart because the UI's "Create allowlist" button must never
+// appear over a file the operator wrote themselves — only true absence of
+// the file offers it, even when that file's `permissions.allow` is empty or
+// missing.
+function projectAllowlist(projectPath) {
+    const settingsPath = path.join(projectPath, '.claude', 'settings.json');
+    if (!fs.existsSync(settingsPath)) return { hasFile: false, hasAllow: false };
+    try {
+        const parsed = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        const allow = parsed && parsed.permissions && Array.isArray(parsed.permissions.allow)
+            ? parsed.permissions.allow : [];
+        return { hasFile: true, hasAllow: allow.length > 0 };
+    } catch (err) {
+        // Malformed JSON is a file the operator wrote and got wrong, not one
+        // Meridian may overwrite or pretend does not exist.
+        return { hasFile: true, hasAllow: false };
+    }
+}
+
 // Helper to fetch aggregated data from decentralized storage
 function getStatusData(options = {}) {
     let data = { projects: [], errors: [] };
@@ -317,6 +339,8 @@ function getStatusData(options = {}) {
                 
                 const relPath = path.relative(WORKSPACE_DIR, projPath) || path.basename(projPath);
 
+                const allowlist = projectAllowlist(projPath);
+
                 data.projects.push({
                     name: info.name,
                     key: info.key || '',
@@ -337,7 +361,11 @@ function getStatusData(options = {}) {
                     autoDispatch: isAuto(dispatchState, projPath),
                     dispatchBlockedReason: running.has(projPath)
                         ? `a run is in flight (${running.get(projPath).taskId})`
-                        : null,
+                        : (allowlist.hasAllow ? null : NO_ALLOWLIST_REASON),
+                    // Only true absence of the file offers to create one — a
+                    // file the operator wrote with an empty or missing
+                    // `permissions.allow` is not ours to complete.
+                    canCreateAllowlist: !allowlist.hasFile,
                     lastRun: lastRun.get(projPath) || null
                 });
             }
@@ -609,6 +637,39 @@ app.post('/api/projects/dispatch/stop', async (req, res) => {
     res.json({ ok: true, stopped, reason });
 });
 
+// Writes a starting-point `.claude/settings.json` for a registered project
+// that has none. Meridian writes the file and stops there: it does not
+// `git add` it, does not commit it, and does not tell the operator it has
+// been committed — that stays a step the operator takes themselves.
+app.post('/api/projects/allowlist', (req, res) => {
+    const { projectPath } = req.body || {};
+    const projectError = missingProjectReason('projectPath', projectPath);
+    if (projectError) {
+        return res.status(400).json({ error: projectError });
+    }
+    if (!isRegisteredProject(projectPath)) {
+        return res.status(400).json({ error: `Unknown project ${projectPath}` });
+    }
+    const settingsDir = path.join(projectPath, '.claude');
+    const settingsPath = path.join(settingsDir, 'settings.json');
+    // Never overwrite. This is not an edge case to tolerate, it is the
+    // point: a file the operator already wrote is theirs, not ours to
+    // replace.
+    if (fs.existsSync(settingsPath)) {
+        return res.status(409).json({ error: '.claude/settings.json already exists' });
+    }
+    const runner = detectRunner(projectPath);
+    const settings = allowlistFor(runner);
+    try {
+        fs.mkdirSync(settingsDir, { recursive: true });
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf8');
+    } catch (err) {
+        return res.status(500).json({ error: err.message });
+    }
+    broadcastUpdate();
+    res.json({ ok: true, path: settingsPath, runner });
+});
+
 // One in-flight run per project: { child, taskId, tool, startedAt, logFile }.
 const running = new Map();
 
@@ -718,7 +779,8 @@ async function dispatchOnePass(projectPath) {
     if (!taskId) return false;
 
     const { tasks } = getTasks(projectPath);
-    const verdict = dispatchEligibility({ taskId, tasks, authenticated, liveSession });
+    const allowlist = projectAllowlist(projectPath).hasAllow;
+    const verdict = dispatchEligibility({ taskId, tasks, authenticated, liveSession, allowlist });
     if (!verdict.ok) {
         if (verdict.scope === 'environment') {
             // Transient and global: a logged-out CLI or a session holding

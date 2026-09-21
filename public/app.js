@@ -243,6 +243,13 @@ function renderProjects(data) {
                 : `<button type="button" class="secondary-btn dispatch-row-btn" ${proj.dispatchBlockedReason ? 'disabled' : ''}
                         title="${escapeHtml(proj.dispatchBlockedReason || 'Arm automatic dispatch for this project')}"
                         onclick="setAutoDispatch('${escapedPath}', true); event.stopPropagation();">Dispatch all</button>`;
+            // Offered only when the repository has no `.claude/settings.json`
+            // at all — never over a file the operator wrote themselves, even
+            // one whose `permissions.allow` is empty.
+            const allowlistBtnHtml = proj.canCreateAllowlist
+                ? `<button type="button" class="secondary-btn allowlist-btn" title="Write a starting .claude/settings.json for this repository"
+                        onclick="createAllowlist('${escapedPath}'); event.stopPropagation();">Create allowlist</button>`
+                : '';
 
             return `
             <div class="project-card" onclick="showProjectView('${proj.path.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}')">
@@ -262,6 +269,7 @@ function renderProjects(data) {
                             ? `<button class="fix-ai-btn" onclick="openFixModal('${proj.path.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}', '${proj.name.replace(/'/g, "\\'")}', this, ${proj.missingAgentsMd}, ${proj.missingStack}, ${proj.missingDescription}, ${proj.missingMeridianRules}, ${proj.outdatedMeridianRules}); event.stopPropagation();">Fix 🪄</button>`
                             : ''}
                         ${dispatchRowHtml}
+                        ${allowlistBtnHtml}
                     </div>
                     <p class="project-purpose">${proj.description}</p>
                     <div class="project-stack">${stackHtml}</div>
@@ -1147,6 +1155,38 @@ btnEdit.addEventListener('click', () => {
     }
 });
 
+// Writes a starting-point `.claude/settings.json` for `projectPath`, then
+// lets the SSE broadcast re-render the button away (canCreateAllowlist goes
+// false once the file exists). This writes the file and stops there — it
+// never stages or commits it, and never claims to the operator that it has
+// been committed; that step is theirs.
+async function createAllowlist(projectPath) {
+    try {
+        const res = await fetch('/api/projects/allowlist', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectPath })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            showFlashMessage(data.error || 'Could not create the allowlist', 'error');
+            return;
+        }
+        // This is a starting point, not a security audit of the target
+        // project — say so, and say plainly when the test command could not
+        // be guessed and needs to be added by hand.
+        const runnerNote = data.runner
+            ? `runs \`${data.runner}\``
+            : 'the test command could not be detected — add it by hand';
+        showFlashMessage(
+            `Created .claude/settings.json (starting point only, review it) — ${runnerNote}`,
+            'success'
+        );
+    } catch (err) {
+        showFlashMessage('Could not reach the server', 'error');
+    }
+}
+
 // `Stop queue` is named for what it does: it discards the queue rather than
 // suspending it. A button labelled "Pause" that threw away queued work would
 // be a trap.
@@ -1168,15 +1208,44 @@ async function setAutoDispatch(projectPath, enabled) {
 // header, from the project's own status fields — never invented client-side
 // state. A blocked `Dispatch all` states its reason in the title rather than
 // swallowing the click.
+// public/index.html carries no markup for this button — it exists only when
+// a repository needs it — so it is created once on first use and reused
+// after that, the same way the flash-message nodes in showFlashMessage are.
+function allowlistHeaderBtn() {
+    let btn = document.getElementById('allowlist-header-btn');
+    if (!btn) {
+        const stopBtn = document.getElementById('stop-queue-btn');
+        if (!stopBtn || !stopBtn.parentNode) return null;
+        btn = document.createElement('button');
+        btn.type = 'button';
+        btn.id = 'allowlist-header-btn';
+        btn.className = 'secondary-btn allowlist-btn hidden';
+        btn.textContent = 'Create allowlist';
+        btn.title = 'Write a starting .claude/settings.json for this repository';
+        stopBtn.parentNode.insertBefore(btn, stopBtn.nextSibling);
+    }
+    return btn;
+}
+
 function updateDispatchHeaderControls(proj) {
     const dispatchBtn = document.getElementById('dispatch-all-btn');
     const stopBtn = document.getElementById('stop-queue-btn');
+    const allowlistBtn = allowlistHeaderBtn();
     if (!dispatchBtn || !stopBtn) return;
 
     if (!proj) {
         dispatchBtn.classList.add('hidden');
         stopBtn.classList.add('hidden');
+        if (allowlistBtn) allowlistBtn.classList.add('hidden');
         return;
+    }
+
+    // Offered only when the repository has no `.claude/settings.json` at
+    // all — never over a file the operator wrote themselves, even one whose
+    // `permissions.allow` is empty or missing.
+    if (allowlistBtn) {
+        allowlistBtn.classList.toggle('hidden', !proj.canCreateAllowlist);
+        allowlistBtn.onclick = () => createAllowlist(proj.path);
     }
 
     if (proj.autoDispatch) {

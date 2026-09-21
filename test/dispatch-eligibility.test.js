@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { dispatchEligibility } = require('../lib/dispatch-eligibility');
+const { dispatchEligibility, NO_ALLOWLIST_REASON } = require('../lib/dispatch-eligibility');
 
 const board = [
     { id: 'T-1', status: 'ready_todo' },
@@ -38,6 +38,31 @@ test('a live session in the repo refuses, naming the lock', () => {
 test('authentication outranks the repo lock', () => {
     const out = dispatchEligibility(ok({ authenticated: false, liveSession: { pid: 1 } }));
     assert.match(out.reason, /not authenticated/i);
+});
+
+// A missing allowlist means the worst possible shape: the run edits files
+// under acceptEdits and is then denied at the test and commit steps,
+// leaving unverified changes and no commit. Refusing before that starts.
+test('a repository with no allowlist is refused', () => {
+    const out = dispatchEligibility(ok({ allowlist: false }));
+    assert.equal(out.ok, false);
+    assert.equal(out.reason, NO_ALLOWLIST_REASON);
+    assert.equal(out.scope, 'environment');
+});
+
+test('a missing allowlist outranks the session lock', () => {
+    const out = dispatchEligibility(ok({ allowlist: false, liveSession: { pid: 1 } }));
+    assert.equal(out.reason, NO_ALLOWLIST_REASON);
+});
+
+test('authentication outranks a missing allowlist', () => {
+    const out = dispatchEligibility(ok({ authenticated: false, allowlist: false }));
+    assert.match(out.reason, /not authenticated/i);
+});
+
+test('an allowlist of true or absent changes nothing about existing behaviour', () => {
+    assert.deepEqual(dispatchEligibility(ok({ allowlist: true })), { ok: true });
+    assert.deepEqual(dispatchEligibility(ok()), { ok: true });
 });
 
 test('a task that left the board is refused by id', () => {
@@ -102,7 +127,8 @@ test('a missing or malformed board refuses rather than throwing', () => {
 test('authentication and the repo lock are environment; everything else is task', () => {
     const environment = [
         dispatchEligibility(ok({ authenticated: false })),
-        dispatchEligibility(ok({ liveSession: { pid: 1 } }))
+        dispatchEligibility(ok({ liveSession: { pid: 1 } })),
+        dispatchEligibility(ok({ allowlist: false }))
     ];
     const task = [
         dispatchEligibility(ok({ tasks: null })),
@@ -111,7 +137,7 @@ test('authentication and the repo lock are environment; everything else is task'
         dispatchEligibility(ok({ taskId: 'T-4' })),
         dispatchEligibility(ok({ taskId: 'T-2' }))
     ];
-    assert.deepEqual(environment.map(r => r.scope), ['environment', 'environment']);
+    assert.deepEqual(environment.map(r => r.scope), ['environment', 'environment', 'environment']);
     assert.deepEqual(task.map(r => r.scope), ['task', 'task', 'task', 'task', 'task']);
 });
 
