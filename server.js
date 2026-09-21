@@ -15,7 +15,7 @@ const { backgroundSessionFor } = require('./lib/dispatch-sessions');
 const { dispatchCommand, DISPATCH_TIMEOUT_MS } = require('./lib/dispatch-command');
 const { dispatchEligibility, NO_ALLOWLIST_REASON } = require('./lib/dispatch-eligibility');
 const { dispatchOutcome } = require('./lib/dispatch-outcome');
-const { runLogPath, appendRunLog } = require('./lib/run-log');
+const { runLogPath, appendRunLog, listRunLogs } = require('./lib/run-log');
 const { detectRunner, allowlistFor } = require('./lib/allowlist-template');
 
 const app = express();
@@ -1202,6 +1202,30 @@ app.get('/api/projects/asset', (req, res) => {
         console.error('Error serving asset:', err.message);
         res.status(500).json({ error: err.message });
     }
+});
+
+// The run log for one task, newest first. The full output is on disk; the
+// one-line reason in /api/status is the summary, and this is what the
+// operator opens when the summary is not enough. listRunLogs already
+// validates the task id (via isSafeTaskId) before it touches the filesystem,
+// so an unsafe id simply yields no runs rather than a 400.
+app.get('/api/projects/runs/:taskId', (req, res) => {
+    const projectPath = req.query.project;
+    const projectError = missingProjectReason('project', projectPath);
+    if (projectError) {
+        return res.status(400).json({ error: projectError });
+    }
+    if (!isRegisteredProject(projectPath)) {
+        return res.status(400).json({ error: `Unknown project ${projectPath}` });
+    }
+    const files = listRunLogs(projectPath, req.params.taskId);
+    if (files.length === 0) return res.json({ runs: [] });
+    res.json({
+        runs: files.slice(0, 5).map(file => ({
+            name: path.basename(file),
+            body: fs.readFileSync(file, 'utf8')
+        }))
+    });
 });
 
 // REST API to add a task

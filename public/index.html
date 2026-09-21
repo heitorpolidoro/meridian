@@ -285,6 +285,7 @@
                         <div class="tm-tabs">
                             <button type="button" class="tm-tab tm-tab--active" id="tm-tab-spec">📄 Specification</button>
                             <button type="button" class="tm-tab" id="tm-tab-mock">🖥️ Interactive Mockup (HTML) <span id="tm-mock-badge" class="tm-tab-pill hidden">Available</span></button>
+                            <button type="button" class="tm-tab" id="tm-tab-runs">▶️ Runs <span id="tm-runs-badge" class="tm-tab-pill tm-tab-pill--danger hidden">Failed</span></button>
                         </div>
                         <span id="tm-spec-path" class="tm-spec-path-label"></span>
                     </div>
@@ -317,6 +318,16 @@
                         <div id="tm-mock-empty" class="tm-spec-viewer empty hidden">
                             No interactive mockup (.html) generated for this task yet.
                         </div>
+                    </div>
+
+                    <!-- Tab 3: Run Log -->
+                    <div id="tm-runs-container" class="hidden">
+                        <div id="tm-runs-reason" class="tm-runs-reason hidden"></div>
+                        <div id="tm-runs-loading" class="tm-spec-loading hidden">Loading runs...</div>
+                        <div id="tm-runs-empty" class="tm-spec-viewer empty hidden">
+                            No runs recorded for this task yet.
+                        </div>
+                        <div id="tm-runs-list" class="tm-runs-list"></div>
                     </div>
                 </div>
             </div>

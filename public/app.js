@@ -1957,6 +1957,12 @@ window.openTaskModal = async function(taskId, projectPath) {
     } catch (e) {}
 
     switchTaskModalTab('spec');
+    // Stale runs from whatever task was open before must not flash while the
+    // new task's own data loads.
+    const runsListEl = document.getElementById('tm-runs-list');
+    const runsEmptyEl = document.getElementById('tm-runs-empty');
+    if (runsListEl) runsListEl.innerHTML = '';
+    if (runsEmptyEl) runsEmptyEl.classList.add('hidden');
     renderTaskModalData(currentModalTask, null, currentModalTask.mock_path, currentModalTask.has_mock);
     if (taskModal) taskModal.classList.remove('hidden');
 
@@ -2148,6 +2154,10 @@ function renderTaskModalData(task, specContent, mockPath, hasMock) {
             mockFrameWrapper.classList.add('hidden');
         }
     }
+
+    // Run tab: the failure badge/reason are derived from status data already
+    // in memory, independent of whether the tab's log has been fetched yet.
+    updateRunsTabHeader(task, currentModalProjPath);
 
     // Status action buttons
     const isApproval = task.status === 'spec_approval';
@@ -2522,30 +2532,185 @@ if (taskModal) {
         if (e.target === taskModal) closeTaskModal();
     });
 }
-// Spec vs Mockup Tab Switching
+// Spec vs Mockup vs Runs tab switching. A run tab is loaded from the server
+// the moment it is opened rather than up front — a task might never have its
+// runs tab looked at, and the log can be large enough that fetching it
+// unconditionally on every modal open would be wasted work.
 function switchTaskModalTab(tabName) {
-    const tabSpec = document.getElementById('tm-tab-spec');
-    const tabMock = document.getElementById('tm-tab-mock');
-    const specContainer = document.getElementById('tm-spec-container');
-    const mockContainer = document.getElementById('tm-mock-container');
+    const tabs = [
+        [document.getElementById('tm-tab-spec'), document.getElementById('tm-spec-container'), 'spec'],
+        [document.getElementById('tm-tab-mock'), document.getElementById('tm-mock-container'), 'mock'],
+        [document.getElementById('tm-tab-runs'), document.getElementById('tm-runs-container'), 'runs']
+    ];
+    tabs.forEach(([tabBtn, container, name]) => {
+        const active = name === tabName;
+        if (tabBtn) tabBtn.classList.toggle('tm-tab--active', active);
+        if (container) container.classList.toggle('hidden', !active);
+    });
 
-    if (tabName === 'mock') {
-        if (tabSpec) tabSpec.classList.remove('tm-tab--active');
-        if (tabMock) tabMock.classList.add('tm-tab--active');
-        if (specContainer) specContainer.classList.add('hidden');
-        if (mockContainer) mockContainer.classList.remove('hidden');
-    } else {
-        if (tabSpec) tabSpec.classList.add('tm-tab--active');
-        if (tabMock) tabMock.classList.remove('tm-tab--active');
-        if (specContainer) specContainer.classList.remove('hidden');
-        if (mockContainer) mockContainer.classList.add('hidden');
+    if (tabName === 'runs') {
+        loadRunsTab();
     }
 }
 
 const tabSpecBtn = document.getElementById('tm-tab-spec');
 const tabMockBtn = document.getElementById('tm-tab-mock');
+const tabRunsBtn = document.getElementById('tm-tab-runs');
 if (tabSpecBtn) tabSpecBtn.addEventListener('click', () => switchTaskModalTab('spec'));
 if (tabMockBtn) tabMockBtn.addEventListener('click', () => switchTaskModalTab('mock'));
+if (tabRunsBtn) tabRunsBtn.addEventListener('click', () => switchTaskModalTab('runs'));
+
+// Bumped on every fetch so a stale response for a task the operator has since
+// navigated away from cannot overwrite the tab with the wrong task's runs.
+let runsRequestToken = 0;
+
+// A run log can carry a single field of unbounded size (a long assistant
+// message, a huge tool result). Truncating any one field keeps the tab from
+// having to lay out an enormous text node, independent of how many events
+// the log has in total.
+const RUN_LOG_FIELD_LIMIT = 20000;
+
+function truncateRunText(text) {
+    if (text.length <= RUN_LOG_FIELD_LIMIT) return text;
+    return text.slice(0, RUN_LOG_FIELD_LIMIT) + `\n… [truncated, ${text.length - RUN_LOG_FIELD_LIMIT} more characters]`;
+}
+
+// The run log is stream-json from the CLI: one JSON object per line, plus a
+// couple of plain-text lines the runner itself writes (the invoked command,
+// and a final "[failed] ..." line on failure). Rendering that raw would put
+// 100+ nested tool-call/hook objects in front of the operator for a run that
+// really has one thing worth reading — the assistant's narration and the
+// final report. So each line is reduced to a short, labelled summary instead
+// of being pretty-printed in full; hook bookkeeping (`type: "system"`) is
+// dropped entirely as noise once the run is over.
+function summarizeRunEvent(obj) {
+    if (obj.type === 'assistant' || obj.type === 'user') {
+        const blocks = (obj.message && obj.message.content) || [];
+        const text = blocks.filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
+        if (obj.type === 'assistant') {
+            if (text) return { cls: 'assistant', label: 'assistant', text };
+            const tools = blocks.filter(b => b.type === 'tool_use').map(b => b.name || 'tool');
+            if (tools.length) return { cls: 'tool-use', label: 'tool call', text: tools.join(', ') };
+            return null;
+        }
+        // user messages in a CLI transcript are tool results being fed back in
+        const resultText = blocks
+            .filter(b => b.type === 'tool_result')
+            .map(b => Array.isArray(b.content) ? b.content.map(c => c.text || '').join('\n') : (b.content || ''))
+            .join('\n').trim();
+        return resultText ? { cls: 'tool-result', label: 'tool result', text: resultText } : null;
+    }
+    if (obj.type === 'result') {
+        return { cls: 'final', label: 'final report', text: (obj.result || '').trim() || '(no summary text)' };
+    }
+    return null; // system events, rate_limit_event, etc. — bookkeeping, not narration
+}
+
+function renderRunLine(cls, label, text) {
+    return `<div class="tm-run-line tm-run-line--${cls}">` +
+        `<span class="tm-run-line-label">${escapeHtml(label)}</span>` +
+        `<pre class="tm-run-line-text">${escapeHtml(truncateRunText(text))}</pre>` +
+        `</div>`;
+}
+
+function formatRunLogBody(body) {
+    const parts = [];
+    // Consecutive non-JSON lines (the shell command header, or a multi-line
+    // "[failed] ..." footer the runner writes itself) are one unit of plain
+    // text to the operator, not one fragment per line — so they are
+    // accumulated and flushed together rather than each getting its own box.
+    let rawBuffer = [];
+    const flushRaw = () => {
+        if (rawBuffer.length) {
+            parts.push(renderRunLine('raw', 'log', rawBuffer.join('\n')));
+            rawBuffer = [];
+        }
+    };
+    for (const raw of String(body || '').split('\n')) {
+        const line = raw.trim();
+        if (!line) continue;
+        let obj = null;
+        try { obj = JSON.parse(line); } catch (e) { /* not a JSON line */ }
+        if (obj && typeof obj === 'object') {
+            const event = summarizeRunEvent(obj);
+            if (!event) continue;
+            flushRaw();
+            parts.push(renderRunLine(event.cls, event.label, event.text));
+        } else {
+            rawBuffer.push(line);
+        }
+    }
+    flushRaw();
+    return parts.length ? parts.join('') : renderRunLine('raw', 'log', '(empty log)');
+}
+
+function renderRunEntry(run, idx) {
+    return `<details class="tm-run-entry"${idx === 0 ? ' open' : ''}>` +
+        `<summary class="tm-run-entry-summary">${escapeHtml(run.name)}</summary>` +
+        `<div class="tm-run-entry-body">${formatRunLogBody(run.body)}</div>` +
+        `</details>`;
+}
+
+// The failure reason comes from /api/status's per-project lastRun (already
+// in memory as currentProjectsData), not from the runs endpoint — it must
+// show up the instant the tab opens, and it must keep showing until this
+// task's *own* next run, which is exactly what matching lastRun.taskId does.
+function updateRunsTabHeader(task, projPath) {
+    const badge = document.getElementById('tm-runs-badge');
+    const reasonEl = document.getElementById('tm-runs-reason');
+    if (!badge || !reasonEl || !task) return;
+
+    const proj = currentProjectsData.find(p => p.path === projPath);
+    const lastRun = proj && proj.lastRun;
+    const failed = Boolean(lastRun && lastRun.taskId === task.id && lastRun.ok === false);
+
+    badge.classList.toggle('hidden', !failed);
+    if (failed) {
+        reasonEl.textContent = lastRun.reason || 'The last run for this task failed.';
+        reasonEl.classList.remove('hidden');
+    } else {
+        reasonEl.textContent = '';
+        reasonEl.classList.add('hidden');
+    }
+}
+
+async function loadRunsTab() {
+    const listEl = document.getElementById('tm-runs-list');
+    const loadingEl = document.getElementById('tm-runs-loading');
+    const emptyEl = document.getElementById('tm-runs-empty');
+    if (!listEl || !loadingEl || !emptyEl || !currentModalTask || !currentModalProjPath) return;
+
+    const token = ++runsRequestToken;
+    listEl.innerHTML = '';
+    emptyEl.classList.add('hidden');
+    loadingEl.classList.remove('hidden');
+
+    try {
+        const url = `/api/projects/runs/${encodeURIComponent(currentModalTask.id)}?project=${encodeURIComponent(currentModalProjPath)}`;
+        const res = await fetch(url);
+        if (token !== runsRequestToken) return; // operator moved on to another task
+        if (!res.ok) {
+            emptyEl.textContent = 'Could not load runs for this task.';
+            emptyEl.classList.remove('hidden');
+            return;
+        }
+        const data = await res.json();
+        if (token !== runsRequestToken) return;
+        const runs = data.runs || [];
+        if (runs.length === 0) {
+            emptyEl.textContent = 'No runs recorded for this task yet.';
+            emptyEl.classList.remove('hidden');
+            return;
+        }
+        listEl.innerHTML = runs.map((run, idx) => renderRunEntry(run, idx)).join('');
+    } catch (err) {
+        if (token !== runsRequestToken) return;
+        emptyEl.textContent = 'Network error loading runs.';
+        emptyEl.classList.remove('hidden');
+    } finally {
+        if (token === runsRequestToken) loadingEl.classList.add('hidden');
+    }
+}
 
 // Viewport controls for Mockup viewer
 document.querySelectorAll('.tm-viewport-btn').forEach(btn => {
