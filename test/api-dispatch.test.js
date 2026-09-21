@@ -352,6 +352,7 @@ test('POST allowlist writes a starting settings.json and reports the detected ru
         const body = await res.json();
         assert.equal(body.ok, true);
         assert.equal(body.runner, 'npm test');
+        assert.equal(body.merged, false, 'a brand new file is created, not merged');
         const settingsPath = path.join(dir, '.claude', 'settings.json');
         assert.equal(body.path, settingsPath);
         const written = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
@@ -374,24 +375,77 @@ test('POST allowlist reports a null runner when none is detected', async () => {
     });
 });
 
-test('POST allowlist never overwrites an existing settings.json', async () => {
+// Fix round 2: a project's real `.claude/settings.json` predates the allowlist
+// feature — it holds only `enabledPlugins`, no `permissions` key at all.
+// That file is not one the operator wrote to refuse dispatch; the old rule
+// (canCreateAllowlist only when the file is wholly absent) blocked a project
+// like this from ever getting an allowlist through the board. The correct
+// rule merges into a file like this rather than refusing it, and every key
+// already there must survive byte-for-byte in meaning.
+test('POST allowlist merges into a settings.json that has no permissions key at all (a project shape)', async () => {
     const { ws, dir } = workspaceWith(TASKS);
     fs.mkdirSync(path.join(dir, '.claude'), { recursive: true });
-    fs.writeFileSync(path.join(dir, '.claude', 'settings.json'), '{}');
+    const settingsPath = path.join(dir, '.claude', 'settings.json');
+    fs.writeFileSync(settingsPath, JSON.stringify({ enabledPlugins: { meridian: true } }));
     await withServer(ws, async base => {
         const res = await post(base, '/api/projects/allowlist', { projectPath: dir });
-        assert.equal(res.status, 409);
-        assert.equal(fs.readFileSync(path.join(dir, '.claude', 'settings.json'), 'utf8'), '{}');
+        assert.equal(res.status, 200);
+        const body = await res.json();
+        assert.equal(body.ok, true);
+        assert.equal(body.merged, true);
+        const written = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        // The unrelated key survives, and permissions was added.
+        assert.deepEqual(written.enabledPlugins, { meridian: true });
+        assert.ok(Array.isArray(written.permissions.allow));
+        assert.ok(written.permissions.allow.some(e => e.startsWith('Bash(git ')));
+
+        // canCreateAllowlist must flip off, and the blocked reason must
+        // clear, once the merge lands.
+        const p = projectIn(await json(base, '/api/status'), dir);
+        assert.equal(p.canCreateAllowlist, false);
+        assert.equal(p.dispatchBlockedReason, null);
     });
 });
 
-// Fix round 1: the 409 must come from the write itself (fs's 'wx' flag)
-// failing with EEXIST, not from a separate existsSync probe — a
-// check-then-write has a gap a concurrent request or an operator's own save
-// could land in. This pins the observable behaviour of that atomic path
-// directly: an operator's own file, with content nothing here would ever
-// generate, survives the call byte for byte.
-test('the EEXIST path from the atomic write reports 409 and leaves the file untouched', async () => {
+// An empty allow array is not an allowlist the operator wrote to block
+// dispatch — it is indistinguishable from a file that never mentioned
+// permissions at all, so the endpoint merges here too.
+test('POST allowlist merges into a settings.json with an empty allow array', async () => {
+    const { ws, dir } = workspaceWith(TASKS);
+    fs.mkdirSync(path.join(dir, '.claude'), { recursive: true });
+    const settingsPath = path.join(dir, '.claude', 'settings.json');
+    fs.writeFileSync(settingsPath, JSON.stringify({ permissions: { allow: [] } }));
+    await withServer(ws, async base => {
+        const res = await post(base, '/api/projects/allowlist', { projectPath: dir });
+        assert.equal(res.status, 200);
+        const body = await res.json();
+        assert.equal(body.merged, true);
+        const written = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        assert.ok(written.permissions.allow.length > 0);
+    });
+});
+
+// A `permissions.deny` with no `allow` is not an allowlist either, but its
+// deny entries are the operator's own and must survive the merge, unioned
+// with whatever Meridian's template denies rather than replaced by it.
+test('POST allowlist keeps an existing permissions.deny and unions it with the generated one', async () => {
+    const { ws, dir } = workspaceWith(TASKS);
+    fs.mkdirSync(path.join(dir, '.claude'), { recursive: true });
+    const settingsPath = path.join(dir, '.claude', 'settings.json');
+    fs.writeFileSync(settingsPath, JSON.stringify({ permissions: { deny: ['Bash(rm -rf /)'] } }));
+    await withServer(ws, async base => {
+        const res = await post(base, '/api/projects/allowlist', { projectPath: dir });
+        assert.equal(res.status, 200);
+        const written = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        assert.ok(written.permissions.deny.includes('Bash(rm -rf /)'), 'the operator\'s own deny entry must survive');
+        assert.ok(written.permissions.allow.length > 0);
+    });
+});
+
+// The one case this endpoint must never touch: a file that already declares
+// a real, non-empty allowlist. It refuses with 409 and leaves the file byte
+// for byte as it was, and the result is still valid, round-trippable JSON.
+test('POST allowlist refuses a settings.json with a non-empty allow list, leaving it byte-identical', async () => {
     const { ws, dir } = workspaceWith(TASKS);
     fs.mkdirSync(path.join(dir, '.claude'), { recursive: true });
     const settingsPath = path.join(dir, '.claude', 'settings.json');
@@ -401,7 +455,7 @@ test('the EEXIST path from the atomic write reports 409 and leaves the file unto
         const res = await post(base, '/api/projects/allowlist', { projectPath: dir });
         assert.equal(res.status, 409);
         const body = await res.json();
-        assert.equal(body.error, '.claude/settings.json already exists');
+        assert.equal(body.error, '.claude/settings.json already has a dispatch allowlist');
         assert.equal(fs.readFileSync(settingsPath, 'utf8'), original, 'the write must not have touched the file at all');
     });
 });
@@ -422,18 +476,17 @@ test('POST allowlist with no projectPath is refused, not a 500', async () => {
     });
 });
 
-// A file the operator wrote is not ours to complete: canCreateAllowlist
-// must stay false even when permissions.allow is empty or missing, exactly
-// as it would be for a stranger's settings.json this endpoint refuses to
-// touch.
-test('canCreateAllowlist is false for an existing settings.json with an empty allow list', async () => {
+// A file the operator wrote with a real allowlist is not ours to complete:
+// canCreateAllowlist must stay false only for that one case. Absent,
+// missing `permissions`, and empty `allow` all still offer to create/merge.
+test('canCreateAllowlist is false only once a non-empty allow list exists', async () => {
     const { ws, dir } = workspaceWith(TASKS);
     fs.mkdirSync(path.join(dir, '.claude'), { recursive: true });
     fs.writeFileSync(path.join(dir, '.claude', 'settings.json'),
         JSON.stringify({ permissions: { allow: [] } }));
     await withServer(ws, async base => {
         const p = projectIn(await json(base, '/api/status'), dir);
-        assert.equal(p.canCreateAllowlist, false);
+        assert.equal(p.canCreateAllowlist, true);
         assert.match(p.dispatchBlockedReason, /no dispatch allowlist/);
     });
 });

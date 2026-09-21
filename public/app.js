@@ -1312,14 +1312,16 @@ async function createAllowlist(projectPath) {
         }
         // This is a starting point, not a security audit of the target
         // project — say so, and say plainly when the test command could not
-        // be guessed and needs to be added by hand.
+        // be guessed and needs to be added by hand. Merged vs created also
+        // matters: a merge means Meridian just edited a file the operator
+        // wrote, and that is not something to leave unsaid.
         const runnerNote = data.runner
             ? `runs \`${data.runner}\``
             : 'the test command could not be detected — add it by hand';
-        showFlashMessage(
-            `Created .claude/settings.json (starting point only, review it) — ${runnerNote}`,
-            'success'
-        );
+        const actionNote = data.merged
+            ? 'Merged a dispatch allowlist into the existing .claude/settings.json (starting point only, review it)'
+            : 'Created .claude/settings.json (starting point only, review it)';
+        showFlashMessage(`${actionNote} — ${runnerNote}`, 'success');
     } catch (err) {
         showFlashMessage('Could not reach the server', 'error');
     }

@@ -247,20 +247,27 @@ function limitPerStatus(tasks, limit) {
     return out;
 }
 
+// True when the parsed contents of a `.claude/settings.json` declare at
+// least one `permissions.allow` entry. Shared between `projectAllowlist`
+// below and the allowlist endpoint's own re-check right before it writes,
+// so both agree on exactly one definition of "already has an allowlist".
+function hasNonEmptyAllow(parsed) {
+    return Boolean(parsed && parsed.permissions && Array.isArray(parsed.permissions.allow)
+        && parsed.permissions.allow.length > 0);
+}
+
 // Whether `projectPath` has a `.claude/settings.json` declaring at least one
 // `permissions.allow` entry, and whether that file exists at all. The two
-// are kept apart because the UI's "Create allowlist" button must never
-// appear over a file the operator wrote themselves — only true absence of
-// the file offers it, even when that file's `permissions.allow` is empty or
-// missing.
+// are kept apart because a 409 must still refuse to touch a file that
+// already carries a real allowlist — hasFile alone cannot tell that case
+// apart from a file with no `permissions` key, or an empty `allow` array,
+// both of which the endpoint below is free to complete.
 function projectAllowlist(projectPath) {
     const settingsPath = path.join(projectPath, '.claude', 'settings.json');
     if (!fs.existsSync(settingsPath)) return { hasFile: false, hasAllow: false };
     try {
         const parsed = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
-        const allow = parsed && parsed.permissions && Array.isArray(parsed.permissions.allow)
-            ? parsed.permissions.allow : [];
-        return { hasFile: true, hasAllow: allow.length > 0 };
+        return { hasFile: true, hasAllow: hasNonEmptyAllow(parsed) };
     } catch (err) {
         // Malformed JSON is a file the operator wrote and got wrong, not one
         // Meridian may overwrite or pretend does not exist.
@@ -375,10 +382,15 @@ function getStatusData(options = {}) {
                     // `Dispatch all` is disabled by, so both controls now
                     // read one field instead of disagreeing about a string.
                     dispatchGateBlocked: !allowlist.hasAllow,
-                    // Only true absence of the file offers to create one — a
-                    // file the operator wrote with an empty or missing
-                    // `permissions.allow` is not ours to complete.
-                    canCreateAllowlist: !allowlist.hasFile,
+                    // True whenever there is no non-empty `permissions.allow`
+                    // to protect — file absent, present without a
+                    // `permissions` key, or present with an empty `allow`
+                    // array all qualify, because none of those is an
+                    // allowlist the operator wrote and none is ours to
+                    // overwrite by completing it. Only a real, non-empty
+                    // `allow` list closes this off — that is the one case
+                    // the endpoint below refuses with 409.
+                    canCreateAllowlist: !allowlist.hasAllow,
                     lastRun: lastRun.get(projPath) || null
                 });
             }
@@ -671,10 +683,35 @@ app.post('/api/projects/dispatch/stop', async (req, res) => {
     res.json({ ok: true, stopped, reason });
 });
 
+// Merges the generated allowlist into `existing` (the parsed contents of a
+// project's `.claude/settings.json` that has no non-empty
+// `permissions.allow`). Every top-level key already in `existing` survives
+// untouched — only `permissions` is added or completed. `permissions.deny`
+// is unioned rather than replaced: an operator's own deny rules and
+// Meridian's generated ones must both survive the merge.
+function mergeAllowlist(existing, generated) {
+    const base = existing && typeof existing === 'object' && !Array.isArray(existing) ? existing : {};
+    const basePermissions = base.permissions && typeof base.permissions === 'object' ? base.permissions : {};
+    const existingAllow = Array.isArray(basePermissions.allow) ? basePermissions.allow : [];
+    const existingDeny = Array.isArray(basePermissions.deny) ? basePermissions.deny : [];
+    return {
+        ...base,
+        permissions: {
+            ...basePermissions,
+            allow: Array.from(new Set([...existingAllow, ...generated.permissions.allow])),
+            deny: Array.from(new Set([...existingDeny, ...generated.permissions.deny]))
+        }
+    };
+}
+
 // Writes a starting-point `.claude/settings.json` for a registered project
-// that has none. Meridian writes the file and stops there: it does not
-// `git add` it, does not commit it, and does not tell the operator it has
-// been committed — that stays a step the operator takes themselves.
+// that has no non-empty `permissions.allow` yet — whether that means no
+// file at all, a file with no `permissions` key, or a file with an empty
+// `allow` array. Meridian writes (or completes) the file and stops there:
+// it does not `git add` it, does not commit it, and does not tell the
+// operator it has been committed — that stays a step the operator takes
+// themselves. Refuses with 409 the one case this must never touch: a file
+// that already declares a real, non-empty allowlist.
 app.post('/api/projects/allowlist', (req, res) => {
     const { projectPath } = req.body || {};
     const projectError = missingProjectReason('projectPath', projectPath);
@@ -687,26 +724,73 @@ app.post('/api/projects/allowlist', (req, res) => {
     const settingsDir = path.join(projectPath, '.claude');
     const settingsPath = path.join(settingsDir, 'settings.json');
     const runner = detectRunner(projectPath);
-    const settings = allowlistFor(runner);
+    const generated = allowlistFor(runner);
+
     try {
         fs.mkdirSync(settingsDir, { recursive: true });
-        // Never overwrite. This is not an edge case to tolerate, it is the
-        // point: a file the operator already wrote is theirs, not ours to
-        // replace. An existsSync check followed by a separate write is two
-        // operations, and the gap between them is exactly where a
-        // concurrent request or an operator's own save can create the file
-        // this write must not destroy. The 'wx' flag makes the "does it
-        // already exist" check and the write a single atomic filesystem
-        // call, so there is no gap left to lose the race in.
-        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', { encoding: 'utf8', flag: 'wx' });
     } catch (err) {
-        if (err.code === 'EEXIST') {
-            return res.status(409).json({ error: '.claude/settings.json already exists' });
+        return res.status(500).json({ error: err.message });
+    }
+
+    if (!fs.existsSync(settingsPath)) {
+        try {
+            // The create path keeps a real create-or-fail: the 'wx' flag
+            // makes "does it already exist" and the write a single atomic
+            // filesystem call, so a concurrent request or the operator's own
+            // save cannot land in the gap between a check and a write. If
+            // EEXIST fires here, the file appeared in exactly that gap, and
+            // the merge path below picks it up with a fresh read.
+            fs.writeFileSync(settingsPath, JSON.stringify(generated, null, 2) + '\n', { encoding: 'utf8', flag: 'wx' });
+            broadcastUpdate();
+            return res.json({ ok: true, path: settingsPath, runner, merged: false });
+        } catch (err) {
+            if (err.code !== 'EEXIST') {
+                return res.status(500).json({ error: err.message });
+            }
+            // Fall through: someone else created the file between the
+            // existsSync check and this write. Handle it the same way any
+            // other pre-existing file is handled, below.
         }
+    }
+
+    // Merge path: a read-modify-write, which cannot use 'wx'. This read
+    // doubles as the "immediately before writing" re-check the atomicity
+    // guarantee asks for — nothing async happens between it and the write
+    // below, so nothing can change the file out from under this request in
+    // between.
+    let raw;
+    try {
+        raw = fs.readFileSync(settingsPath, 'utf8');
+    } catch (err) {
+        return res.status(500).json({ error: err.message });
+    }
+    let existing;
+    try {
+        existing = JSON.parse(raw);
+    } catch (err) {
+        // Malformed JSON is a file the operator wrote and got wrong, not one
+        // Meridian may rewrite out from under them.
+        return res.status(409).json({ error: '.claude/settings.json is not valid JSON' });
+    }
+    if (hasNonEmptyAllow(existing)) {
+        return res.status(409).json({ error: '.claude/settings.json already has a dispatch allowlist' });
+    }
+
+    const merged = mergeAllowlist(existing, generated);
+    const tmp = path.join(settingsDir, `.settings.json.${process.pid}.${Date.now()}.tmp`);
+    try {
+        // Same pattern as lib/tasks.js#writeAtomic: write to a temp file in
+        // the same directory, then rename into place. The rename is atomic
+        // on the same filesystem, so a reader never observes a half-written
+        // file — 'wx' cannot offer that here because this is read-modify-write.
+        fs.writeFileSync(tmp, JSON.stringify(merged, null, 2) + '\n', 'utf8');
+        fs.renameSync(tmp, settingsPath);
+    } catch (err) {
+        try { fs.unlinkSync(tmp); } catch (e) { /* nothing to clean up */ }
         return res.status(500).json({ error: err.message });
     }
     broadcastUpdate();
-    res.json({ ok: true, path: settingsPath, runner });
+    res.json({ ok: true, path: settingsPath, runner, merged: true });
 });
 
 // One in-flight run per project: { child, taskId, tool, startedAt, logFile }.
