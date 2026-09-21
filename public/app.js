@@ -258,12 +258,24 @@ function confirmDispatch(message, { showCheckbox = true, confirmLabel = 'Dispatc
         const checkbox = overlay.querySelector('#dispatch-confirm-suppress');
         checkbox.checked = false;
         checkboxRow.classList.toggle('hidden', !showCheckbox);
-        overlay.querySelector('#dispatch-confirm-ok').textContent = confirmLabel;
         overlay.classList.remove('hidden');
 
-        const okBtn = overlay.querySelector('#dispatch-confirm-ok');
-        const cancelBtn = overlay.querySelector('#dispatch-confirm-cancel');
-        const closeBtn = overlay.querySelector('#dispatch-confirm-close');
+        // Fix round 1: this dialog is a singleton, and a call in flight
+        // leaves its listeners attached — two fast clicks before the
+        // triggering button disables itself would otherwise queue two
+        // calls, each wiring up its own set, so one click on OK fired both.
+        // Cloning the buttons drops every listener a previous call attached
+        // without needing to track those closures across calls.
+        const oldOkBtn = overlay.querySelector('#dispatch-confirm-ok');
+        const okBtn = oldOkBtn.cloneNode(true);
+        oldOkBtn.replaceWith(okBtn);
+        const oldCancelBtn = overlay.querySelector('#dispatch-confirm-cancel');
+        const cancelBtn = oldCancelBtn.cloneNode(true);
+        oldCancelBtn.replaceWith(cancelBtn);
+        const oldCloseBtn = overlay.querySelector('#dispatch-confirm-close');
+        const closeBtn = oldCloseBtn.cloneNode(true);
+        oldCloseBtn.replaceWith(closeBtn);
+        okBtn.textContent = confirmLabel;
 
         function cleanup(result) {
             overlay.classList.add('hidden');

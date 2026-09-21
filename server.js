@@ -652,18 +652,23 @@ app.post('/api/projects/allowlist', (req, res) => {
     }
     const settingsDir = path.join(projectPath, '.claude');
     const settingsPath = path.join(settingsDir, 'settings.json');
-    // Never overwrite. This is not an edge case to tolerate, it is the
-    // point: a file the operator already wrote is theirs, not ours to
-    // replace.
-    if (fs.existsSync(settingsPath)) {
-        return res.status(409).json({ error: '.claude/settings.json already exists' });
-    }
     const runner = detectRunner(projectPath);
     const settings = allowlistFor(runner);
     try {
         fs.mkdirSync(settingsDir, { recursive: true });
-        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf8');
+        // Never overwrite. This is not an edge case to tolerate, it is the
+        // point: a file the operator already wrote is theirs, not ours to
+        // replace. An existsSync check followed by a separate write is two
+        // operations, and the gap between them is exactly where a
+        // concurrent request or an operator's own save can create the file
+        // this write must not destroy. The 'wx' flag makes the "does it
+        // already exist" check and the write a single atomic filesystem
+        // call, so there is no gap left to lose the race in.
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', { encoding: 'utf8', flag: 'wx' });
     } catch (err) {
+        if (err.code === 'EEXIST') {
+            return res.status(409).json({ error: '.claude/settings.json already exists' });
+        }
         return res.status(500).json({ error: err.message });
     }
     broadcastUpdate();

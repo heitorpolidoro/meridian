@@ -329,6 +329,27 @@ test('POST allowlist never overwrites an existing settings.json', async () => {
     });
 });
 
+// Fix round 1: the 409 must come from the write itself (fs's 'wx' flag)
+// failing with EEXIST, not from a separate existsSync probe — a
+// check-then-write has a gap a concurrent request or an operator's own save
+// could land in. This pins the observable behaviour of that atomic path
+// directly: an operator's own file, with content nothing here would ever
+// generate, survives the call byte for byte.
+test('the EEXIST path from the atomic write reports 409 and leaves the file untouched', async () => {
+    const { ws, dir } = workspaceWith(TASKS);
+    fs.mkdirSync(path.join(dir, '.claude'), { recursive: true });
+    const settingsPath = path.join(dir, '.claude', 'settings.json');
+    const original = '{\n  "permissions": {\n    "allow": ["Bash(echo operator-owned-marker)"]\n  }\n}\n';
+    fs.writeFileSync(settingsPath, original);
+    await withServer(ws, async base => {
+        const res = await post(base, '/api/projects/allowlist', { projectPath: dir });
+        assert.equal(res.status, 409);
+        const body = await res.json();
+        assert.equal(body.error, '.claude/settings.json already exists');
+        assert.equal(fs.readFileSync(settingsPath, 'utf8'), original, 'the write must not have touched the file at all');
+    });
+});
+
 test('POST allowlist for an unregistered project is refused', async () => {
     const { ws } = workspaceWith(TASKS);
     await withServer(ws, async base => {
