@@ -375,14 +375,14 @@ test('POST allowlist reports a null runner when none is detected', async () => {
     });
 });
 
-// Fix round 2: a project's real `.claude/settings.json` predates the allowlist
+// Fix round 2: a real project's `.claude/settings.json` predated the allowlist
 // feature — it holds only `enabledPlugins`, no `permissions` key at all.
 // That file is not one the operator wrote to refuse dispatch; the old rule
 // (canCreateAllowlist only when the file is wholly absent) blocked a project
 // like this from ever getting an allowlist through the board. The correct
 // rule merges into a file like this rather than refusing it, and every key
 // already there must survive byte-for-byte in meaning.
-test('POST allowlist merges into a settings.json that has no permissions key at all (a project shape)', async () => {
+test('POST allowlist merges into a settings.json that has no permissions key at all (pre-existing settings shape)', async () => {
     const { ws, dir } = workspaceWith(TASKS);
     fs.mkdirSync(path.join(dir, '.claude'), { recursive: true });
     const settingsPath = path.join(dir, '.claude', 'settings.json');
