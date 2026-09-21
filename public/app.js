@@ -1037,20 +1037,36 @@ document.addEventListener('click', async (event) => {
     btn.disabled = true;
     try {
         if (action === 'dispatch') {
-            await fetch('/api/projects/dispatch', {
+            const res = await fetch('/api/projects/dispatch', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ projectPath: project, taskId, tool: 'claude' })
             });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                if (data.error) showFlashMessage(data.error, 'error');
+            }
         } else if (action === 'unqueue') {
-            await fetch(`/api/projects/dispatch/${encodeURIComponent(taskId)}?project=${encodeURIComponent(project)}`,
+            const res = await fetch(`/api/projects/dispatch/${encodeURIComponent(taskId)}?project=${encodeURIComponent(project)}`,
                 { method: 'DELETE' });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                if (data.error) showFlashMessage(data.error, 'error');
+            }
         } else if (action === 'stop') {
-            await fetch('/api/projects/dispatch/stop', {
+            const res = await fetch('/api/projects/dispatch/stop', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ projectPath: project, taskId })
             });
+            const data = await res.json().catch(() => ({}));
+            // stopped: false with a reason means a session is running in that
+            // repo that Meridian did not start — the operator has to stop it
+            // where they started it. Say so; when it did stop, the SSE
+            // re-render is the feedback and nothing more is needed here.
+            if (res.ok && data.stopped === false && data.reason) {
+                showFlashMessage(data.reason, 'error');
+            }
         }
     } catch (err) {
         showFlashMessage('Could not reach the server', 'error');
