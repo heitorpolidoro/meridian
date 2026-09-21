@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { writeDispatchLock, pidIsAlive } = require('../lib/dispatch-lock');
 
 // Ports are allocated deterministically per file, from a base no other test
 // file uses. They used to be drawn at random from one shared 500-wide range,
@@ -228,15 +229,51 @@ test('auto with no projectPath is refused, not a 500', async () => {
 });
 
 // Stop never signals a session Meridian did not start, so it can answer
-// "nothing stopped". With no CLI reachable there is no live session to
-// report either, so the reason is empty rather than invented.
-test('stop with nothing running answers honestly rather than pretending', async () => {
+// "nothing stopped" — but it must still say so. The board only flashes a
+// message when `reason` is truthy, so a null reason here is a click that
+// visibly does nothing, which is exactly the swallowed click the design
+// objected to. With no CLI reachable and no lock file, the honest reason is
+// that there was nothing to stop.
+test('stop with nothing running says so instead of returning a null reason', async () => {
     const { ws, dir } = workspaceWith(TASKS);
     await withServer(ws, async base => {
         const body = await (await post(base, '/api/projects/dispatch/stop', { projectPath: dir })).json();
         assert.equal(body.ok, true);
         assert.equal(body.stopped, false);
-        assert.equal(body.reason, null);
+        assert.match(body.reason, /nothing is running/i);
+    });
+});
+
+// A run this server started before it was restarted is invisible to both the
+// in-memory `running` map and `claude agents --json`; only the pid lock file
+// sees it. Stop must name it, and name the pid, rather than report the repo
+// as idle while an agent is still editing it.
+test('stop reports a live run left behind by a previous server process', async () => {
+    const { ws, dir } = workspaceWith(TASKS);
+    // This test process is unambiguously alive, so the lock reads as held.
+    writeDispatchLock(dir, {
+        pid: process.pid, taskId: 'T-1', startedAt: new Date().toISOString()
+    });
+    await withServer(ws, async base => {
+        const body = await (await post(base, '/api/projects/dispatch/stop', { projectPath: dir })).json();
+        assert.equal(body.stopped, false);
+        assert.match(body.reason, /previous server process/i);
+        assert.match(body.reason, new RegExp(String(process.pid)));
+        assert.match(body.reason, /T-1/);
+    });
+});
+
+// A lock whose pid is gone is not a lock. It releases itself on the next
+// read, so Stop falls through to the ordinary "nothing to stop".
+test('a stale lock from a dead process does not make stop claim a run', async () => {
+    const { ws, dir } = workspaceWith(TASKS);
+    let pid = 60000;
+    while (pidIsAlive(pid)) pid++;
+    writeDispatchLock(dir, { pid, taskId: 'T-1', startedAt: new Date().toISOString() });
+    await withServer(ws, async base => {
+        const body = await (await post(base, '/api/projects/dispatch/stop', { projectPath: dir })).json();
+        assert.equal(body.stopped, false);
+        assert.match(body.reason, /nothing is running/i);
     });
 });
 

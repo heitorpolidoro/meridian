@@ -12,6 +12,9 @@ const {
     createDispatchState, enqueue, dequeue, pullNext, requeueFront, queueFor, setAuto, isAuto
 } = require('./lib/dispatch-queue');
 const { backgroundSessionFor } = require('./lib/dispatch-sessions');
+const {
+    writeDispatchLock, clearDispatchLock, readDispatchLock
+} = require('./lib/dispatch-lock');
 const { dispatchCommand, DISPATCH_TIMEOUT_MS } = require('./lib/dispatch-command');
 const { dispatchEligibility, NO_ALLOWLIST_REASON } = require('./lib/dispatch-eligibility');
 const { dispatchOutcome } = require('./lib/dispatch-outcome');
@@ -431,6 +434,27 @@ async function liveSessionFor(projectPath) {
     return backgroundSessionFor(probe.stdout, projectPath);
 }
 
+// Everything that can be holding this repository, as one answer.
+//
+// Two mechanisms, because neither sees what the other does. `claude agents
+// --json` reports the operator's sessions, but a dispatch is `claude -p`,
+// which registers there as `kind: "interactive"` — indistinguishable from
+// the terminal the operator is sitting in, which lib/dispatch-sessions.js
+// refuses to treat as a lock. So our own runs mark themselves with a pid
+// lock file instead, and that file is also what makes the lock outlive this
+// process: after a restart the in-memory `running` map is empty while the
+// child it described is still going.
+//
+// The lock is read first: it is a local file read against an awaited CLI
+// probe, and it is the case that identifies itself precisely.
+async function repoHeldBy(projectPath) {
+    const lock = readDispatchLock(projectPath);
+    if (lock) return { source: 'lock', pid: lock.pid, taskId: lock.taskId };
+    const session = await liveSessionFor(projectPath);
+    if (session) return { source: 'session', pid: session.pid, sessionId: session.sessionId };
+    return null;
+}
+
 // Pushes a chunk of a running tooling command to every connected board, so the
 // settings screen can show the login URL while the command is still waiting
 // for its callback rather than only after it returns.
@@ -705,14 +729,31 @@ const SIGKILL_GRACE_MS = 10000;
 async function stopDispatch(projectPath) {
     const run = running.get(projectPath);
     if (!run) {
-        const session = await liveSessionFor(projectPath);
-        if (session) {
+        // Every path out of here carries a reason. A null one renders as
+        // nothing at all on the board — the click goes in and the button
+        // does not move — and "the Stop button did nothing" is precisely
+        // what the design set out to avoid. Three different situations
+        // reach this branch and the operator's next move differs in each,
+        // so they are named apart rather than collapsed into one sentence.
+        const holder = await repoHeldBy(projectPath);
+        if (holder && holder.source === 'lock') {
+            // Our own run, started before this server process began. There
+            // is no child object to signal, and killing a bare pid read out
+            // of a file is not something a board button may do.
+            const which = holder.taskId ? ` on ${holder.taskId}` : '';
+            return {
+                stopped: false,
+                reason: `a run from a previous server process is still alive (pid ${holder.pid}${which}) — `
+                    + 'this server did not start it and has no handle on it; stop that process directly'
+            };
+        }
+        if (holder) {
             return {
                 stopped: false,
                 reason: 'a session is running in this repository that Meridian did not start — stop it where it was started'
             };
         }
-        return { stopped: false, reason: null };
+        return { stopped: false, reason: 'nothing is running for this project — there is nothing to stop' };
     }
     try {
         run.child.kill('SIGTERM');
@@ -767,7 +808,10 @@ function refuseDispatch(projectPath, taskId, reason) {
 async function dispatchOnePass(projectPath) {
     const authProbe = await runTooling(PROBES.claude.ready, 10000);
     const authenticated = parseReadiness('claude', authProbe.stdout || authProbe.stderr, authProbe.code).ready;
-    const liveSession = await liveSessionFor(projectPath);
+    // Both holders, not just the CLI's session list: a run this server
+    // started before it was restarted is invisible to that list and to the
+    // in-memory `running` map alike, and only the pid lock file sees it.
+    const liveSession = await repoHeldBy(projectPath);
 
     let taskId = pullNext(dispatchState, projectPath);
     // Where the task came from decides what a refusal may do below, so it is
@@ -846,6 +890,18 @@ async function dispatchOnePass(projectPath) {
 
     const run = { child, taskId, tool, startedAt, logFile };
     running.set(projectPath, run);
+    // The half of the lock that survives this process. Written immediately
+    // after the spawn so the window in which a restart could lose the run is
+    // as short as the code allows. A failure here must not abort a child that
+    // is already running: the in-memory map still holds the repo for as long
+    // as this process lives, and the lock's only job is to outlive it.
+    try {
+        writeDispatchLock(projectPath, {
+            pid: child.pid, taskId, startedAt: startedAt.toISOString()
+        });
+    } catch (err) {
+        console.error(`Could not write the dispatch lock for ${projectPath}: ${err.message}`);
+    }
 
     let stdout = '';
     const killer = setTimeout(() => stopDispatch(projectPath), DISPATCH_TIMEOUT_MS);
@@ -862,6 +918,12 @@ async function dispatchOnePass(projectPath) {
     child.on('close', code => {
         clearTimeout(killer);
         running.delete(projectPath);
+        // Released here rather than anywhere earlier: `close` is the one
+        // event that fires however the run ended — clean exit, SIGTERM,
+        // SIGKILL or a spawn that never got off the ground. A lock this
+        // misses is not fatal, only untidy: its pid is dead, so the next
+        // read releases it anyway.
+        clearDispatchLock(projectPath);
         const outcome = dispatchOutcome({ stdout, code });
         logRun(run, `\n[${outcome.ok ? 'ok' : 'failed'}] ${outcome.reason || outcome.summary}\n`);
         lastRun.set(projectPath, {
