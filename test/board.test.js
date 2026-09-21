@@ -336,3 +336,43 @@ test('a successful lastRun for this task is not treated as a stall reason', () =
     });
     assert.equal(reason, null);
 });
+
+// A single auto-dispatch pass can refuse several candidates before finding
+// one it can run, or before giving up (see selectAutoCandidate in
+// lib/dispatch-eligibility.js and dispatchOnePass in server.js). lastRun's
+// own taskId/reason hold only the last of them; `refusals` is where the rest
+// survive so an earlier-refused task's card can still find its own reason.
+test('a task named only in lastRun.refusals still finds its reason', () => {
+    const reason = queueStallReason({ id: 'T-1' }, {
+        lastRun: {
+            taskId: 'T-3', ok: false, reason: 'T-3 still blocked by T-9',
+            refusals: [
+                { taskId: 'T-1', reason: 'T-1 is already done' },
+                { taskId: 'T-3', reason: 'T-3 still blocked by T-9' }
+            ]
+        }
+    });
+    assert.equal(reason, 'T-1 is already done');
+});
+
+// The direct lastRun match still wins over the refusals list when both name
+// the same task — there is nothing to fall back to for.
+test('the direct lastRun match is tried before the refusals list', () => {
+    const reason = queueStallReason({ id: 'T-3' }, {
+        lastRun: {
+            taskId: 'T-3', ok: false, reason: 'T-3 still blocked by T-9',
+            refusals: [{ taskId: 'T-3', reason: 'a different, stale reason' }]
+        }
+    });
+    assert.equal(reason, 'T-3 still blocked by T-9');
+});
+
+// A task named in neither lastRun nor its refusals falls back to the
+// project-wide reason, same as when there is no refusals list at all.
+test('a task absent from both lastRun and refusals falls back to the project reason', () => {
+    const reason = queueStallReason({ id: 'T-7' }, {
+        dispatchBlockedReason: 'this repository has no dispatch allowlist',
+        lastRun: { taskId: 'T-3', ok: false, reason: 'x', refusals: [{ taskId: 'T-1', reason: 'y' }] }
+    });
+    assert.equal(reason, 'this repository has no dispatch allowlist');
+});

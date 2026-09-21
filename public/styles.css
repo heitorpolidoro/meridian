@@ -1246,6 +1246,32 @@ body:not([data-view="dashboard"]) #error-container {
     padding: 0.1rem 0.45rem;
 }
 
+/* A task-scoped refusal discards the task from the queue outright, so the
+   badge above no longer applies (the card shows Dispatch again) — this
+   variant is what is left to carry the reason once the flash message that
+   announced it has faded. Red rather than the queue badge's yellow: this is
+   not "waiting its turn", it is "was refused and went nowhere". */
+.task-queue-badge--refused {
+    background: rgba(248, 113, 113, 0.15);
+    color: #fca5a5;
+    border-color: rgba(248, 113, 113, 0.35);
+}
+
+.task-refusal-clear {
+    background: none;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 700;
+    line-height: 1;
+    padding: 0 0 0 0.15rem;
+}
+
+.task-refusal-clear:hover {
+    color: #fff;
+}
+
 /* Dashboard Task List Preview */
 .dashboard-tasks-preview {
     margin-top: 1rem;

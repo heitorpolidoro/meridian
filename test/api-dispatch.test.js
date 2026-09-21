@@ -490,3 +490,22 @@ test('canCreateAllowlist is false only once a non-empty allow list exists', asyn
         assert.match(p.dispatchBlockedReason, /no dispatch allowlist/);
     });
 });
+
+// A task-scoped refusal discards the task from the queue outright, so the
+// only surface left carrying the reason once the flash message fades is the
+// card itself — not a DOM test (this repo has no browser harness and adds
+// none here), just a smoke check that the served bundle still carries the
+// pieces that make that possible: the badge rendered for a no-longer-queued
+// task, its dismiss control, and the `refusals` fallback a multi-candidate
+// auto-dispatch pass relies on to keep more than one reason visible.
+test('GET /app.js carries the refusal badge, its dismiss control, and the refusals fallback', async () => {
+    const { ws } = workspaceWith(TASKS);
+    await withServer(ws, async base => {
+        const res = await fetch(`${base}/app.js`);
+        const body = await res.text();
+        assert.match(body, /task-queue-badge--refused/);
+        assert.match(body, /data-clear-refusal/);
+        assert.match(body, /dismissedRefusals/);
+        assert.match(body, /lastRun\.refusals/);
+    });
+});

@@ -153,8 +153,18 @@ function dispatchButton(task, { queue, runningTaskId, dispatchGateBlocked, dispa
 
 // Mirrors lib/board.js#queueStallReason — that file is the source of truth.
 function queueStallReason(task, { lastRun, dispatchBlockedReason } = {}) {
-    if (lastRun && task && lastRun.taskId === task.id && lastRun.ok === false && lastRun.reason) {
-        return lastRun.reason;
+    if (lastRun && task) {
+        if (lastRun.taskId === task.id && lastRun.ok === false && lastRun.reason) {
+            return lastRun.reason;
+        }
+        // One auto-dispatch pass can refuse several candidates before it
+        // either finds one it can run or gives up (see dispatchOnePass in
+        // server.js) — lastRun's own taskId/reason above hold only the last
+        // of them, so a task refused earlier in that same pass would
+        // otherwise have no way to show its reason at all. `refusals` is the
+        // full list from that pass, oldest first.
+        const fromPass = (lastRun.refusals || []).find(r => r.taskId === task.id);
+        if (fromPass) return fromPass.reason;
     }
     return dispatchBlockedReason || null;
 }
@@ -179,6 +189,13 @@ function dispatchContextFor(projectPath) {
 // Rails the operator expanded this session. Not persisted: a reload collapses
 // every empty column again.
 const expandedRails = new Set();
+
+// Task-scoped refusals the operator has dismissed from a card, keyed by
+// `${taskId}::${endedAt}` so a fresh refusal (a new endedAt) on the same task
+// clears any earlier dismissal instead of inheriting it. Not persisted across
+// reload, same as expandedRails — this is a per-session "I've seen it", not a
+// record the server needs to keep.
+const dismissedRefusals = new Set();
 
 // Mirrors lib/routes.js#resolveRoute — that file is the source of truth.
 const GLOBAL_SLUGS = ['tickets', 'all-tickets', 'global'];
@@ -1170,6 +1187,20 @@ function renderTooling(tools) {
 // `.task-card` that itself opens the task modal on click. Capturing here and
 // stopping propagation keeps the click from also bubbling into the card's
 // own handler and popping the modal open behind the request.
+// Dismissing a refusal badge is purely a client-side "I've seen it" — there
+// is nothing to tell the server, since the reason lives in `lastRun`, which
+// the server already owns and will overwrite on its own next refusal or run.
+// Capture phase for the same reason as the dispatch-action handler below:
+// the button sits inside a `.task-card` that opens the task modal on click.
+document.addEventListener('click', (event) => {
+    const clearBtn = event.target.closest('[data-clear-refusal]');
+    if (!clearBtn) return;
+    event.stopPropagation();
+    dismissedRefusals.add(clearBtn.dataset.clearRefusal);
+    const badge = clearBtn.closest('.task-queue-row');
+    if (badge) badge.remove();
+}, true);
+
 document.addEventListener('click', async (event) => {
     const btn = event.target.closest('[data-dispatch-action]');
     if (!btn) return;
@@ -1623,6 +1654,26 @@ function renderTaskCardHtml(task, allTasks) {
             ? `Queued at position ${position}, not moving: ${stallReason}`
             : `Queued at position ${position}, waiting to run`;
         queueBadgeHtml = `<span class="task-queue-badge" title="${escapeHtml(title)}">${escapeHtml(label)}</span>`;
+    } else if (btn && btn.action === 'dispatch') {
+        // A task-scoped refusal discards the task from the queue outright
+        // (see refuseDispatch in server.js) — the card above is the ONLY
+        // place left carrying the reason, since the flash message that
+        // announced it has already faded by the time the operator looks
+        // back. Reuse the same queue-badge surface rather than a third
+        // indicator; omit `dispatchBlockedReason` here (unlike the queued
+        // case above) because that field is project-wide and would then
+        // paint every ordinary dispatchable card with "no allowlist" — this
+        // badge is for a refusal about THIS task specifically.
+        const refusalReason = queueStallReason(task, { lastRun: dispatchCtx.lastRun });
+        const lastRun = dispatchCtx.lastRun;
+        const dismissKey = lastRun ? `${task.id}::${lastRun.endedAt}` : null;
+        if (refusalReason && dismissKey && !dismissedRefusals.has(dismissKey)) {
+            const label = `Not dispatched: ${refusalReason}`;
+            queueBadgeHtml = `<span class="task-queue-badge task-queue-badge--refused" title="${escapeHtml(label)}">`
+                + `${escapeHtml(label)} `
+                + `<button type="button" class="task-refusal-clear" data-clear-refusal="${escapeHtml(dismissKey)}" `
+                + `title="Dismiss this refusal reason" aria-label="Dismiss">×</button></span>`;
+        }
     }
 
     return `
