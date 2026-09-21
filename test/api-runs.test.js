@@ -102,14 +102,69 @@ test('caps at the five most recent runs', async () => {
     });
 });
 
-test('a real, large run log (135KB of stream-json) round-trips intact', async () => {
+test('a generated 135KB stream-json log round-trips intact through the endpoint', async () => {
+    // Generate a synthetic log file instead of reading from a real project's directory.
+    // This test must be hermetic (work on any machine) and the repository must not
+    // carry personal filesystem paths or real incident transcripts. A realistically
+    // shaped, self-contained 135KB+ log exercises the same code paths as the real one.
+
     const { ws, dir } = workspaceWith(TASKS);
-    const fixture = '~/workspace/example_project/.meridian/runs/EX-18-2026-09-20T15-29-06.log';
-    // Skip gracefully if this machine does not have the incident fixture —
-    // the fixture is evidence from a real incident and is never modified or
-    // copied into the repo, only read from in place.
-    if (!fs.existsSync(fixture)) return;
-    const body = fs.readFileSync(fixture, 'utf8');
+
+    // Build a synthetic newline-delimited JSON log, at least 135KB.
+    const logLines = [];
+
+    // System init message
+    logLines.push(JSON.stringify({
+        type: 'system',
+        subtype: 'init',
+        timestamp: '2026-09-20T15:29:06Z',
+        version: '1.0'
+    }));
+
+    // Many assistant messages with realistic content to reach 135KB
+    const baseMessage = 'This is a realistic long message from the model response. It contains varied text and explanations. ';
+    for (let i = 0; i < 800; i++) {
+        logLines.push(JSON.stringify({
+            type: 'assistant',
+            message: {
+                content: baseMessage.repeat(6) + `Message sequence ${i}: Additional context and padding. `.repeat(3)
+            },
+            timestamp: `2026-09-20T15:29:${String(i % 60).padStart(2, '0')}Z`,
+            index: i
+        }));
+    }
+
+    // Add tool use and tool result blocks to exercise renderer branches
+    for (let i = 0; i < 40; i++) {
+        logLines.push(JSON.stringify({
+            type: 'tool_use',
+            tool_id: 'tool_' + i,
+            tool_name: 'search_api',
+            input: { query: 'search query ' + i, parameters: { limit: 10, offset: 0 } },
+            timestamp: `2026-09-20T15:30:${String(i % 60).padStart(2, '0')}Z`
+        }));
+
+        logLines.push(JSON.stringify({
+            type: 'tool_result',
+            tool_id: 'tool_' + i,
+            result: { success: true, data: 'Result data '.repeat(20), count: 5 },
+            timestamp: `2026-09-20T15:30:${String(i % 60).padStart(2, '0')}Z`
+        }));
+    }
+
+    // Final result message
+    logLines.push(JSON.stringify({
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        timestamp: '2026-09-20T15:31:00Z'
+    }));
+
+    const body = logLines.join('\n') + '\n';
+
+    // Verify we have enough bytes
+    assert.ok(body.length >= 135000, `Generated log is ${body.length} bytes, need 135KB+`);
+
     writeRunLog(dir, 'TST-1', '2026-09-20T15-29-06', body);
     await withServer(ws, async base => {
         const res = await fetch(`${base}/api/projects/runs/TST-1?project=${encodeURIComponent(dir)}`);
