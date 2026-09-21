@@ -432,6 +432,8 @@ function connectSSE() {
                 renderProjects(parsed.data);
                 connectionStatus.textContent = "Live";
                 connectionStatus.className = "status-indicator connected";
+            } else if (parsed.type === 'dispatch') {
+                handleDispatchEvent(parsed);
             } else if (parsed.type === 'tooling-output') {
                 const out = document.getElementById(`tooling-out-${parsed.cli}`);
                 if (out) {
@@ -1978,6 +1980,10 @@ window.openTaskModal = async function(taskId, projectPath) {
     const runsListEl = document.getElementById('tm-runs-list');
     const runsEmptyEl = document.getElementById('tm-runs-empty');
     if (runsListEl) runsListEl.innerHTML = '';
+    // innerHTML took the live entry's node with it; the buffered half-line
+    // it was accumulating has to go too, or the next run's first chunk is
+    // prefixed with the previous task's last broken line.
+    clearLiveRunEntry();
     if (runsEmptyEl) runsEmptyEl.classList.add('hidden');
     renderTaskModalData(currentModalTask, null, currentModalTask.mock_path, currentModalTask.has_mock);
     if (taskModal) taskModal.classList.remove('hidden');
@@ -2274,6 +2280,9 @@ window.closeTaskModal = function(updateUrl = true) {
     if (taskModal) taskModal.classList.add('hidden');
     currentModalTask = null;
     currentModalProjPath = null;
+    // The live run entry and its half-line tail belong to the tab that was
+    // open. Reopening on any task must not inherit them.
+    clearLiveRunEntry();
     if (updateUrl) {
         try {
             const url = new URL(window.location);
@@ -2629,7 +2638,11 @@ function renderRunLine(cls, label, text) {
         `</div>`;
 }
 
-function formatRunLogBody(body) {
+// The rendering both the runs tab and the live SSE stream go through. It
+// returns the pieces rather than a string so the live path can tell "this
+// chunk rendered nothing" (hook bookkeeping, a blank line) from "this log is
+// empty", which are the same string but not the same situation.
+function renderRunLogLines(body) {
     const parts = [];
     // Consecutive non-JSON lines (the shell command header, or a multi-line
     // "[failed] ..." footer the runner writes itself) are one unit of plain
@@ -2657,6 +2670,11 @@ function formatRunLogBody(body) {
         }
     }
     flushRaw();
+    return parts;
+}
+
+function formatRunLogBody(body) {
+    const parts = renderRunLogLines(body);
     return parts.length ? parts.join('') : renderRunLine('raw', 'log', '(empty log)');
 }
 
@@ -2688,6 +2706,105 @@ function updateRunsTabHeader(task, projPath) {
         reasonEl.textContent = '';
         reasonEl.classList.add('hidden');
     }
+}
+
+// Live run output, streamed over SSE while the runs tab is open.
+//
+// The server broadcasts every chunk of agent stdout to every connected
+// board. Until now nothing consumed it: a 135KB run was serialised, pushed
+// to every open tab and dropped. The design asked for output to stream *and*
+// be logged, and only the log half had landed.
+//
+// The tab this appends into is the one the operator already has open, using
+// renderRunLogLines — the same reduction the persisted log goes through — so
+// there is one renderer, not two. When the modal is closed or showing
+// another task, the chunk is dropped before anything is parsed or stored:
+// see liveRunIsVisible, which is checked first on every chunk.
+
+// A chunk is a slice of a pipe, not a line: it can end mid-JSON. The tail
+// waits here for the rest of its line. Bounded by the run, and reset at every
+// start and finish, so a long run cannot grow it without bound — a line that
+// never ends is one line.
+let liveRunTail = '';
+
+// Is the operator looking at the runs tab of the task this chunk belongs to?
+// Nothing is buffered when the answer is no: a board left open on the
+// dashboard must not accumulate a run's worth of stdout it will never show.
+function liveRunIsVisible(projectPath, taskId) {
+    if (!taskModal || taskModal.classList.contains('hidden')) return false;
+    const container = document.getElementById('tm-runs-container');
+    if (!container || container.classList.contains('hidden')) return false;
+    if (!currentModalTask || currentModalTask.id !== taskId) return false;
+    return currentModalProjPath === projectPath;
+}
+
+// The entry live output goes into: one open <details> pinned at the top of
+// the list, above the finished runs the tab fetched when it opened. Created
+// on first use rather than up front, so a tab opened on a task that is not
+// running shows nothing extra.
+function liveRunEntryBody() {
+    const listEl = document.getElementById('tm-runs-list');
+    if (!listEl) return null;
+    let entry = document.getElementById('tm-runs-live');
+    if (!entry) {
+        entry = document.createElement('details');
+        entry.id = 'tm-runs-live';
+        entry.className = 'tm-run-entry';
+        entry.open = true;
+        entry.innerHTML = '<summary class="tm-run-entry-summary">Running now…</summary>'
+            + '<div class="tm-run-entry-body"></div>';
+        listEl.prepend(entry);
+        // The tab's "no runs recorded" line is wrong the moment a run starts.
+        const emptyEl = document.getElementById('tm-runs-empty');
+        if (emptyEl) emptyEl.classList.add('hidden');
+    }
+    return entry.querySelector('.tm-run-entry-body');
+}
+
+function clearLiveRunEntry() {
+    liveRunTail = '';
+    const entry = document.getElementById('tm-runs-live');
+    if (entry) entry.remove();
+}
+
+function handleDispatchEvent(payload) {
+    const { projectPath, taskId, state } = payload;
+
+    if (state === 'output') {
+        // Cheapest possible drop: the common case is a chunk for a tab
+        // nobody has open, and it must cost one boolean, not a parse.
+        if (!liveRunIsVisible(projectPath, taskId)) return;
+        const body = liveRunEntryBody();
+        if (!body) return;
+        const lines = (liveRunTail + String(payload.chunk || '')).split('\n');
+        // The last piece has no newline after it yet, so it may be half a
+        // line. It waits for the rest rather than being rendered as broken
+        // JSON and then rendered again complete.
+        liveRunTail = lines.pop();
+        const html = renderRunLogLines(lines.join('\n')).join('');
+        if (!html) return;
+        body.insertAdjacentHTML('beforeend', html);
+        body.scrollTop = body.scrollHeight;
+        return;
+    }
+
+    if (state === 'started') {
+        clearLiveRunEntry();
+        if (liveRunIsVisible(projectPath, taskId)) liveRunEntryBody();
+        return;
+    }
+
+    if (state === 'done' || state === 'failed') {
+        // The run is on disk now, complete and including whatever arrived
+        // while the tab was closed. Re-reading it replaces the live entry
+        // with the authoritative one instead of leaving two views of the
+        // same run side by side.
+        clearLiveRunEntry();
+        if (liveRunIsVisible(projectPath, taskId)) loadRunsTab();
+    }
+    // `refused` needs nothing here: it produced no output and no log, and
+    // the reason rides in on the /api/status broadcast that follows it,
+    // which updateRunsTabHeader already renders.
 }
 
 async function loadRunsTab() {
