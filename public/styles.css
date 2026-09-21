@@ -810,6 +810,28 @@ body:not([data-view="dashboard"]) #error-container {
     background: rgba(245, 158, 11, 0.15);
 }
 
+/* Task 14: the confirm-before-dispatch dialog. Reuses .modal-overlay /
+   .modal-content / .modal-header / .form-actions from the Add Project and
+   Fix Progress modals rather than a parallel set of dialog styles. */
+.dispatch-confirm-content {
+    max-width: 480px;
+}
+
+.dispatch-confirm-message {
+    color: var(--text-primary);
+    line-height: 1.5;
+    margin-bottom: 1.2rem;
+}
+
+.dispatch-confirm-checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
 .kanban-toolbar {
     display: flex;
     justify-content: space-between;

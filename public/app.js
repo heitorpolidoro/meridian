@@ -202,6 +202,100 @@ function showFlashMessage(msg, type = 'info') {
     }, 4000);
 }
 
+// Task 14: confirms before a click starts a real agent run. This is a
+// guard against the slip of a hand, not a security boundary — the dispatch
+// and dispatch-all endpoints stay exactly as they are, and anything that
+// can reach them directly (curl, another client) bypasses this by design.
+//
+// Checking "Don't ask again this session" sets this for the rest of the
+// page's life and nothing longer: it is never written to localStorage or
+// sent to the server, because a suppression that outlived the session is
+// how a safety step quietly disappears forever. It only ever suppresses the
+// per-card `Dispatch` confirmation — `Dispatch all` arms a loop that starts
+// run after run unattended, which always confirms regardless of this flag.
+let suppressDispatchConfirm = false;
+
+// public/index.html carries no markup for this dialog — it is built once,
+// on first use, the same modal-overlay/modal-content pattern the Add
+// Project and Fix Progress modals already use.
+function dispatchConfirmModal() {
+    let overlay = document.getElementById('dispatch-confirm-modal');
+    if (overlay) return overlay;
+    overlay = document.createElement('div');
+    overlay.id = 'dispatch-confirm-modal';
+    overlay.className = 'modal-overlay hidden';
+    overlay.innerHTML = `
+        <div class="modal-content dispatch-confirm-content">
+            <div class="modal-header">
+                <h2>Start this run?</h2>
+                <button type="button" class="close-modal-btn" id="dispatch-confirm-close" aria-label="Cancel">&times;</button>
+            </div>
+            <p id="dispatch-confirm-message" class="dispatch-confirm-message"></p>
+            <div class="form-group" id="dispatch-confirm-checkbox-row">
+                <label class="dispatch-confirm-checkbox-label">
+                    <input type="checkbox" id="dispatch-confirm-suppress">
+                    Don't ask again this session
+                </label>
+            </div>
+            <div class="form-actions">
+                <button type="button" class="secondary-btn" id="dispatch-confirm-cancel">Cancel</button>
+                <button type="button" class="primary-btn" id="dispatch-confirm-ok">Dispatch</button>
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
+    return overlay;
+}
+
+// Shows the confirm dialog and resolves to whether the operator confirmed.
+// `showCheckbox: false` leaves the suppression choice out entirely rather
+// than offer a checkbox that would do nothing — used for `Dispatch all`,
+// which always confirms no matter what this checkbox has ever set.
+function confirmDispatch(message, { showCheckbox = true, confirmLabel = 'Dispatch' } = {}) {
+    return new Promise(resolve => {
+        const overlay = dispatchConfirmModal();
+        overlay.querySelector('#dispatch-confirm-message').textContent = message;
+        const checkboxRow = overlay.querySelector('#dispatch-confirm-checkbox-row');
+        const checkbox = overlay.querySelector('#dispatch-confirm-suppress');
+        checkbox.checked = false;
+        checkboxRow.classList.toggle('hidden', !showCheckbox);
+        overlay.querySelector('#dispatch-confirm-ok').textContent = confirmLabel;
+        overlay.classList.remove('hidden');
+
+        const okBtn = overlay.querySelector('#dispatch-confirm-ok');
+        const cancelBtn = overlay.querySelector('#dispatch-confirm-cancel');
+        const closeBtn = overlay.querySelector('#dispatch-confirm-close');
+
+        function cleanup(result) {
+            overlay.classList.add('hidden');
+            okBtn.removeEventListener('click', onOk);
+            cancelBtn.removeEventListener('click', onCancel);
+            closeBtn.removeEventListener('click', onCancel);
+            resolve(result);
+        }
+        function onOk() {
+            if (showCheckbox && checkbox.checked) suppressDispatchConfirm = true;
+            cleanup(true);
+        }
+        function onCancel() { cleanup(false); }
+        okBtn.addEventListener('click', onOk);
+        cancelBtn.addEventListener('click', onCancel);
+        closeBtn.addEventListener('click', onCancel);
+    });
+}
+
+// `Dispatch all` arms auto-dispatch, which will pull and run task after
+// task, unattended, until stopped — a different act from starting one run,
+// and the one the operator most needs to be sure about. It always confirms,
+// even when the per-card suppression above is on.
+async function confirmDispatchAll(projectPath, projectName) {
+    const ok = await confirmDispatch(
+        `Arm automatic dispatch for ${projectName} in ${projectPath}? `
+        + `It will start run after run, unattended, until you stop the queue.`,
+        { showCheckbox: false, confirmLabel: 'Dispatch all' }
+    );
+    if (ok) setAutoDispatch(projectPath, true);
+}
+
 function renderErrors(errors) {
     if (!errors || errors.length === 0) {
         errorContainer.innerHTML = '';
@@ -242,7 +336,7 @@ function renderProjects(data) {
                         onclick="setAutoDispatch('${escapedPath}', false); event.stopPropagation();">Stop queue${(proj.queue || []).length > 0 ? ` (${proj.queue.length})` : ''}</button>`
                 : `<button type="button" class="secondary-btn dispatch-row-btn" ${proj.dispatchBlockedReason ? 'disabled' : ''}
                         title="${escapeHtml(proj.dispatchBlockedReason || 'Arm automatic dispatch for this project')}"
-                        onclick="setAutoDispatch('${escapedPath}', true); event.stopPropagation();">Dispatch all</button>`;
+                        onclick="confirmDispatchAll('${escapedPath}', '${proj.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'); event.stopPropagation();">Dispatch all</button>`;
             // Offered only when the repository has no `.claude/settings.json`
             // at all — never over a file the operator wrote themselves, even
             // one whose `permissions.allow` is empty.
@@ -1041,7 +1135,21 @@ document.addEventListener('click', async (event) => {
     const btn = event.target.closest('[data-dispatch-action]');
     if (!btn) return;
     event.stopPropagation();
-    const { dispatchAction: action, taskId, project } = btn.dataset;
+    const { dispatchAction: action, taskId, taskTitle, project } = btn.dataset;
+
+    // Task 14: starting a run is not undoable, and a misclick during this
+    // plan's own execution started a real one against a live repository.
+    // `Stop` and `Remove from queue` reduce activity and are recoverable, so
+    // only `dispatch` confirms here — `Dispatch all` confirms separately,
+    // through confirmDispatchAll, before this handler is ever reached.
+    if (action === 'dispatch' && !suppressDispatchConfirm) {
+        const title = taskTitle ? ` — ${taskTitle}` : '';
+        const ok = await confirmDispatch(
+            `Start a real agent run on ${taskId}${title} in ${project}?`
+        );
+        if (!ok) return;
+    }
+
     btn.disabled = true;
     try {
         if (action === 'dispatch') {
@@ -1260,7 +1368,7 @@ function updateDispatchHeaderControls(proj) {
         stopBtn.classList.add('hidden');
         dispatchBtn.disabled = Boolean(proj.dispatchBlockedReason);
         dispatchBtn.title = proj.dispatchBlockedReason || 'Arm automatic dispatch for this project';
-        dispatchBtn.onclick = () => setAutoDispatch(proj.path, true);
+        dispatchBtn.onclick = () => confirmDispatchAll(proj.path, proj.name);
     }
 }
 
@@ -1455,6 +1563,7 @@ function renderTaskCardHtml(task, allTasks) {
     if (btn) {
         dispatchBtnHtml = `<button type="button" class="card-dispatch-btn card-dispatch-btn--${btn.action}"
             data-dispatch-action="${btn.action}" data-task-id="${escapeHtml(task.id)}"
+            data-task-title="${escapeHtml(task.title || '')}"
             data-project="${escapeHtml(dispatchProjectPath || '')}" title="${escapeHtml(btn.title)}">${btn.label}</button>`;
     }
     // A queued task can sit idle — auth is missing, or another session holds
