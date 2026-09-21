@@ -509,3 +509,33 @@ test('GET /app.js carries the refusal badge, its dismiss control, and the refusa
         assert.match(body, /lastRun\.refusals/);
     });
 });
+
+// The aggregated all-tickets view has no single project of its own to arm,
+// so its `Dispatch all` control has to arm every registered project through
+// the existing per-project endpoint, once each — no bulk endpoint was
+// added. Same "no browser harness" smoke check as above: it pins the pieces
+// that make the behaviour work rather than driving a real DOM.
+test('GET /app.js carries a global Dispatch all/Stop queue that acts on every registered project', async () => {
+    const { ws } = workspaceWith(TASKS);
+    await withServer(ws, async base => {
+        const res = await fetch(`${base}/app.js`);
+        const body = await res.text();
+        // Wired from the aggregated view instead of hiding the header
+        // controls the way the single-project code path used to.
+        assert.match(body, /updateGlobalDispatchHeaderControls/);
+        assert.match(body, /confirmDispatchAllProjects/);
+        assert.match(body, /stopAllProjects/);
+        // The confirmation must be explicit that it arms several projects
+        // and must name how many, not reuse the single-project wording.
+        assert.match(body, /eligible\.length/);
+        assert.match(body, /unattended/);
+        // A gated project (no dispatch allowlist) is skipped, not silently
+        // dropped, and the result reports both counts.
+        assert.match(body, /dispatchBlockedReason/);
+        assert.match(body, /no dispatch allowlist/);
+        assert.match(body, /skipped/);
+        // Reuses POST /api/projects/dispatch/auto per project; no new bulk
+        // route exists to arm or disarm every project in one call.
+        assert.match(body, /\/api\/projects\/dispatch\/auto/);
+    });
+});

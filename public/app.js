@@ -1444,6 +1444,114 @@ function updateDispatchHeaderControls(proj) {
     }
 }
 
+// The aggregated all-tickets view's header controls: there is no single
+// project here to arm, so `Dispatch all` arms every registered project and
+// `Stop queue` disarms every one of them. Left out until now deliberately
+// — see confirmDispatchAllProjects below for why a confirmation had to
+// exist first.
+//
+// `Stop queue` is shown the moment any project is armed, same rule as the
+// single-project header: an operator who armed even one loop from here or
+// from a dashboard row sees a way back from this view too.
+function updateGlobalDispatchHeaderControls(projects) {
+    const dispatchBtn = document.getElementById('dispatch-all-btn');
+    const stopBtn = document.getElementById('stop-queue-btn');
+    const allowlistBtn = allowlistHeaderBtn();
+    if (!dispatchBtn || !stopBtn) return;
+    // Creating an allowlist is a per-repository action; it has no meaning
+    // averaged across every registered project, so it never appears here.
+    if (allowlistBtn) allowlistBtn.classList.add('hidden');
+
+    const list = projects || [];
+    const armedCount = list.filter(p => p.autoDispatch).length;
+
+    if (armedCount > 0) {
+        dispatchBtn.classList.add('hidden');
+        stopBtn.classList.remove('hidden');
+        stopBtn.textContent = `Stop queue (${armedCount})`;
+        stopBtn.title = 'Disarm auto-dispatch and discard the queue for every registered project';
+        stopBtn.onclick = () => stopAllProjects(list);
+    } else {
+        dispatchBtn.classList.remove('hidden');
+        stopBtn.classList.add('hidden');
+        dispatchBtn.disabled = list.length === 0;
+        dispatchBtn.title = list.length === 0
+            ? 'No registered projects'
+            : 'Arm automatic dispatch for every registered project';
+        dispatchBtn.onclick = () => confirmDispatchAllProjects(list);
+    }
+}
+
+// Arming six loops that will each start run after run unattended is the
+// single most consequential click in this feature, so the confirmation
+// must be explicit that it arms several projects, not one, and must name
+// how many — this is why the aggregated view could not offer `Dispatch
+// all` until a confirmation step existed at all.
+//
+// Reuses POST /api/projects/dispatch/auto once per project rather than
+// adding a bulk endpoint: each project keeps its own gate check (a project
+// with no dispatch allowlist is skipped, not silently failed) and its own
+// SSE broadcast, exactly as the per-row button in the dashboard already
+// does one project at a time.
+async function confirmDispatchAllProjects(projects) {
+    const eligible = projects.filter(p => !p.dispatchBlockedReason);
+    const gated = projects.filter(p => p.dispatchBlockedReason);
+    if (eligible.length === 0) {
+        showFlashMessage('No project can be armed — every registered project is gated', 'error');
+        return;
+    }
+    const skipNote = gated.length > 0
+        ? ` ${gated.length} of ${projects.length} project(s) have no dispatch allowlist and will be skipped.`
+        : '';
+    const ok = await confirmDispatch(
+        `Arm automatic dispatch for all ${eligible.length} eligible project(s), out of `
+        + `${projects.length} registered? Each one will start run after run, unattended, `
+        + `until you stop its queue.${skipNote}`,
+        { showCheckbox: false, confirmLabel: `Dispatch all (${eligible.length})` }
+    );
+    if (!ok) return;
+
+    let armed = 0;
+    for (const p of eligible) {
+        try {
+            await fetch('/api/projects/dispatch/auto', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ projectPath: p.path, enabled: true })
+            });
+            armed++;
+        } catch (err) {
+            // One project's unreachable request is not the others' problem;
+            // keep arming the rest and report the shortfall below.
+        }
+    }
+    const skipped = projects.length - armed;
+    showFlashMessage(
+        skipped > 0
+            ? `Armed ${armed} of ${projects.length} project(s); ${skipped} skipped (no dispatch allowlist)`
+            : `Armed ${armed} project(s)`,
+        armed === 0 ? 'error' : 'info'
+    );
+}
+
+// The matching disarm: every registered project gets the request, not just
+// the ones this render believed were armed — a project that armed itself
+// a moment ago still gets stopped, and disabling an already-off project is
+// a no-op on the server.
+async function stopAllProjects(projects) {
+    for (const p of projects) {
+        try {
+            await fetch('/api/projects/dispatch/auto', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ projectPath: p.path, enabled: false })
+            });
+        } catch (err) {
+            // Best-effort, same as confirmDispatchAllProjects above.
+        }
+    }
+}
+
 function refreshProjectView() {
     if (!currentProjectViewPath) return;
 
@@ -1454,10 +1562,11 @@ function refreshProjectView() {
 
         btnEdit.classList.add('hidden');
         addTaskForm.classList.add('hidden');
-        // `Dispatch all` in the header arms one project; the global view has
-        // none of its own, so it disappears here — the per-project controls
-        // live in each project's dashboard card instead.
-        updateDispatchHeaderControls(null);
+        // The aggregated view has no single project to arm, so its header
+        // `Dispatch all` / `Stop queue` act on every registered project at
+        // once instead of disappearing the way they used to — the
+        // per-project controls in each dashboard row still arm just one.
+        updateGlobalDispatchHeaderControls(currentProjectsData);
 
         let allTasks = [];
         currentProjectsData.forEach(proj => {
