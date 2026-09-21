@@ -1126,6 +1126,22 @@ function spawnRun(projectPath, taskId, tool, { retried = false } = {}) {
         if (!outcome.ok && outcome.retryable && !retried) {
             const retryAt = new Date(Date.now() + RETRY_DELAY_MS).toISOString();
             logRun(run, `\n[retrying] ${outcome.reason} — retrying once at ${retryAt}\n`);
+            // The retry itself lives only in this process's memory (the
+            // timer below) and is not made to survive a restart — that
+            // would mean persisting a timer, the kind of state this feature
+            // avoids everywhere else. But the *decision* to retry is a real
+            // event, and a restart during the wait must not erase every
+            // trace of it: appendEvent (the same mechanism the refusal log
+            // uses) records that a retry was scheduled, so a restart that
+            // loses the in-memory timer still leaves an honest trail —
+            // "a retry was scheduled" with no second run following it.
+            appendEvent(projectPath, {
+                type: 'dispatch_retry_scheduled',
+                task: taskId,
+                reason: outcome.reason,
+                retryAt,
+                at: new Date().toISOString()
+            });
             // Replaces this project's `running` entry with a pending-retry
             // one rather than deleting it: the project must keep reading as
             // busy for the whole wait, using the same "one run in flight"
@@ -1142,7 +1158,11 @@ function spawnRun(projectPath, taskId, tool, { retried = false } = {}) {
                 endedAt: new Date().toISOString(),
                 exitCode: code,
                 ok: false,
-                reason: outcome.reason,
+                // Distinct from the raw outcome reason: while the retry is
+                // pending, the board must read "retrying shortly", not a
+                // bare failure that looks final for the next thirty
+                // seconds. The underlying reason is still named.
+                reason: `${outcome.reason} — retrying shortly`,
                 retryPending: true,
                 retryAt
             });

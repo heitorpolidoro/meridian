@@ -649,3 +649,21 @@ test('a dispatch_refused event is ignored cleanly — no task entry, no crash, n
     // entry at all — a refusal alone never fabricates a task record.
     assert.equal(tasks['Y'], undefined);
 });
+
+// Same reasoning as the dispatch_refused test above, for the event the
+// retry-scheduling fix appends: it carries a `task` and an `at` but neither
+// `field` nor a recognised `type`, so it must land in the same "not used"
+// branch rather than being miscounted or crashing the stats endpoint.
+test('a dispatch_retry_scheduled event is ignored cleanly, same as a refusal', () => {
+    const t0 = new Date('2026-01-01T00:00:00.000Z');
+    const t1 = new Date('2026-01-01T00:05:00.000Z');
+    const events = [
+        { task: 'X', field: 'status', from: null, to: 'backlog', at: t0.toISOString() },
+        {
+            task: 'X', type: 'dispatch_retry_scheduled',
+            reason: 'OAuth token refresh contention', retryAt: t1.toISOString(), at: t1.toISOString()
+        }
+    ];
+    const { tasks } = aggregateStats(events, new Date('2026-01-01T01:00:00.000Z'));
+    assert.deepEqual(tasks['X'].stages, { backlog: { visits: 1 } });
+});

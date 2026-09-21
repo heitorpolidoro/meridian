@@ -1511,27 +1511,45 @@ async function confirmDispatchAllProjects(projects) {
     );
     if (!ok) return;
 
+    // Review finding: counting on any resolved fetch — regardless of HTTP
+    // status — overstated the armed count, because a 400/500 (a project
+    // deregistered between the render and the click, say) resolves just
+    // like a success. Only res.ok counts as armed; every other outcome,
+    // network throw or a non-2xx response alike, is a failure with its own
+    // message, never folded into "armed" or silently dropped into "gated".
     let armed = 0;
+    const failed = [];
     for (const p of eligible) {
         try {
-            await fetch('/api/projects/dispatch/auto', {
+            const res = await fetch('/api/projects/dispatch/auto', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ projectPath: p.path, enabled: true })
             });
-            armed++;
+            if (res.ok) {
+                armed++;
+            } else {
+                let message = `HTTP ${res.status}`;
+                try {
+                    const body = await res.json();
+                    if (body && body.error) message = body.error;
+                } catch (parseErr) {
+                    // No JSON body to read the server's message from; the
+                    // HTTP status is still an honest, if terser, reason.
+                }
+                failed.push({ name: p.name, message });
+            }
         } catch (err) {
-            // One project's unreachable request is not the others' problem;
-            // keep arming the rest and report the shortfall below.
+            failed.push({ name: p.name, message: err.message || 'could not reach the server' });
         }
     }
-    const skipped = projects.length - armed;
-    showFlashMessage(
-        skipped > 0
-            ? `Armed ${armed} of ${projects.length} project(s); ${skipped} skipped (no dispatch allowlist)`
-            : `Armed ${armed} project(s)`,
-        armed === 0 ? 'error' : 'info'
-    );
+
+    const parts = [`Armed ${armed} of ${projects.length} project(s)`];
+    if (gated.length > 0) parts.push(`${gated.length} skipped (no dispatch allowlist)`);
+    if (failed.length > 0) {
+        parts.push(`${failed.length} failed: ${failed.map(f => `${f.name} (${f.message})`).join(', ')}`);
+    }
+    showFlashMessage(parts.join('; '), failed.length > 0 || armed === 0 ? 'error' : 'info');
 }
 
 // The matching disarm: every registered project gets the request, not just

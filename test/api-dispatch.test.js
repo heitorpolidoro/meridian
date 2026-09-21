@@ -537,5 +537,11 @@ test('GET /app.js carries a global Dispatch all/Stop queue that acts on every re
         // Reuses POST /api/projects/dispatch/auto per project; no new bulk
         // route exists to arm or disarm every project in one call.
         assert.match(body, /\/api\/projects\/dispatch\/auto/);
+        // Review finding: counting any resolved fetch as armed overstated
+        // the count on a non-2xx response. Only res.ok may count as armed,
+        // and a failure (network throw or a bad HTTP status alike) is
+        // reported by name rather than folded into "armed" or "gated".
+        assert.match(body, /res\.ok/);
+        assert.match(body, /failed/);
     });
 });

@@ -124,8 +124,38 @@ test('a run failing on OAuth token refresh contention is left pending a retry, n
         assert.equal(p.lastRun.ok, false);
         assert.equal(p.lastRun.retryPending, true, 'the operator must see a retry is pending, not a plain failure');
         assert.match(p.lastRun.reason, /transient/i);
+        // The board must not read a bare, final-looking failure for the
+        // thirty seconds the retry is pending.
+        assert.match(p.lastRun.reason, /retrying shortly/i);
         assert.ok(!Number.isNaN(Date.parse(p.lastRun.retryAt)), 'retryAt is a parseable timestamp');
         assert.ok(Date.parse(p.lastRun.retryAt) > Date.now(), 'retryAt is in the future at the moment of failure');
+    });
+});
+
+// Review finding: clearDispatchLock already ran by the time the retry is
+// scheduled, so the pending retry exists only as an in-memory timer — a
+// server restart during the wait drops it silently. The fix is not to make
+// the timer survive (that would persist state that outlives the thing it
+// describes); it is to make the *decision* to retry leave a trace, the same
+// way appendEvent already records a refusal, so a restart still leaves an
+// honest record: a retry was scheduled, and no second run followed it.
+test('scheduling a retry appends one dispatch_retry_scheduled line to the project event log', async () => {
+    const { ws, dir } = workspaceWith(TASKS);
+    const fakeBin = fakeClaudeBin();
+    await withServer(ws, { PATH: fakeBin }, async base => {
+        await post(base, '/api/projects/dispatch', { projectPath: dir, taskId: 'TST-1', tool: 'claude' });
+        await untilLastRun(base, dir);
+
+        const eventsPath = path.join(dir, '.meridian', 'events.jsonl');
+        const lines = fs.readFileSync(eventsPath, 'utf8').trim().split('\n')
+            .filter(Boolean).map(l => JSON.parse(l))
+            .filter(e => e.type === 'dispatch_retry_scheduled');
+        assert.equal(lines.length, 1, 'exactly one scheduled-retry line');
+        const [line] = lines;
+        assert.equal(line.task, 'TST-1');
+        assert.match(line.reason, /transient/i);
+        assert.ok(!Number.isNaN(Date.parse(line.retryAt)));
+        assert.ok(!Number.isNaN(Date.parse(line.at)));
     });
 });
 
