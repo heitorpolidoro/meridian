@@ -1,6 +1,12 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { finalEvent, dispatchOutcome } = require('../lib/dispatch-outcome');
+const { finalEvent, dispatchOutcome, isOAuthContention } = require('../lib/dispatch-outcome');
+
+// The exact message probed 2026-09-20, quoted in full because the pattern
+// must survive it verbatim, not just some paraphrase of it.
+const OAUTH_MESSAGE = 'Failed to refresh OAuth token: another Claude Code process is refreshing it '
+    + 'or exited mid-refresh. This is usually transient; retry in a minute, and if it persists close '
+    + 'other Claude Code processes or sign in again';
 
 const CLAUDE_OK = JSON.stringify({
     type: 'result', subtype: 'success', is_error: false, result: 'done',
@@ -96,6 +102,65 @@ test('an unstructured denial message is translated too', () => {
 
 // A translation table that swallows what it does not recognise is worse than
 // no table at all.
+// CHANGE 3: the only failure shape in the catalogue that resolves itself.
+// It must be detected from the structured outcome, with a field the runner
+// can branch on, rather than a re-match of the text in server.js.
+test('a claude result event failing on OAuth token refresh contention is retryable', () => {
+    const text = stream(JSON.stringify({
+        type: 'result', is_error: true, result: OAUTH_MESSAGE,
+        permission_denials: [], terminal_reason: 'error'
+    }));
+    const out = dispatchOutcome({ stdout: text, code: 0 });
+    assert.equal(out.ok, false);
+    assert.equal(out.retryable, true);
+    assert.match(out.reason, /transient/i);
+});
+
+test('the same OAuth failure in unstructured output (no result event) is retryable', () => {
+    const out = dispatchOutcome({ stdout: OAUTH_MESSAGE, code: 1 });
+    assert.equal(out.ok, false);
+    assert.equal(out.retryable, true);
+});
+
+test('an agy failure carrying the OAuth message is retryable too', () => {
+    const text = stream(JSON.stringify({
+        event: 'result', result: { status: 'ERROR', response: OAUTH_MESSAGE }
+    }));
+    const out = dispatchOutcome({ stdout: text, code: 0 });
+    assert.equal(out.ok, false);
+    assert.equal(out.retryable, true);
+});
+
+// Every other failure shape needs a human and must never retry: a
+// permission denial, an authentication failure, and a model error all say
+// nothing about a transient race, so retrying them burns tokens for nothing.
+test('an authentication failure, a permission denial, and a plain model error are not retryable', () => {
+    const authFailure = dispatchOutcome({ stdout: 'Failed to authenticate: OAuth session expired', code: 1 });
+    assert.equal(authFailure.retryable, false);
+
+    const denialText = stream(JSON.stringify({
+        type: 'result', is_error: false, result: '',
+        permission_denials: [{ tool_name: 'Bash', tool_input: { command: 'npm run lint' } }],
+        terminal_reason: 'completed'
+    }));
+    const denial = dispatchOutcome({ stdout: denialText, code: 0 });
+    assert.equal(denial.retryable, false);
+
+    const modelErrorText = stream(JSON.stringify({
+        type: 'result', is_error: true, result: 'the model refused',
+        permission_denials: [], terminal_reason: 'error'
+    }));
+    const modelError = dispatchOutcome({ stdout: modelErrorText, code: 0 });
+    assert.equal(modelError.retryable, false);
+});
+
+test('isOAuthContention matches the exact message and rejects unrelated text', () => {
+    assert.equal(isOAuthContention(OAUTH_MESSAGE), true);
+    assert.equal(isOAuthContention('the model refused'), false);
+    assert.equal(isOAuthContention(''), false);
+    assert.equal(isOAuthContention(undefined), false);
+});
+
 test('an unrecognised failure is surfaced verbatim, trimmed to the end', () => {
     const noise = Array.from({ length: 200 }, (_, i) => `line ${i}`).join('\n');
     const out = dispatchOutcome({ stdout: noise, code: 3 });

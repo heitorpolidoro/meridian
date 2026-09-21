@@ -370,7 +370,9 @@ function getStatusData(options = {}) {
                     queue: queueFor(dispatchState, projPath),
                     autoDispatch: isAuto(dispatchState, projPath),
                     dispatchBlockedReason: running.has(projPath)
-                        ? `a run is in flight (${running.get(projPath).taskId})`
+                        ? (running.get(projPath).pendingRetry
+                            ? `retrying ${running.get(projPath).taskId} shortly after an OAuth token refresh contention`
+                            : `a run is in flight (${running.get(projPath).taskId})`)
                         : (allowlist.hasAllow ? null : NO_ALLOWLIST_REASON),
                     // dispatchBlockedReason is overloaded — it also says "a
                     // run is in flight", which must never disable the card's
@@ -794,7 +796,23 @@ app.post('/api/projects/allowlist', (req, res) => {
 });
 
 // One in-flight run per project: { child, taskId, tool, startedAt, logFile }.
+//
+// A project waiting out the one retry for an OAuth-refresh-contention
+// failure (see spawnRun below) also occupies this map, as { child: null,
+// taskId, tool, startedAt, logFile, pendingRetry: true, timer } — the
+// existing "one run in flight" rule is what keeps the project reading as
+// busy for that window too, rather than a second mechanism built to say
+// the same thing.
 const running = new Map();
+
+// A run fails on OAuth token refresh contention when several Claude Code
+// processes on this machine renew the token at once and this one loses the
+// race — the CLI's own message says it is transient and to retry. It is
+// retried exactly once, after this delay: not configurable, and no seam is
+// added to make the delay itself unit-testable (see lib/dispatch-outcome.js
+// for the tested part — detecting the shape — and the report for what that
+// leaves to manual verification).
+const RETRY_DELAY_MS = 30000;
 
 // A pass that has begun but has not yet spawned anything. `running` cannot
 // carry this: it is only filled after two awaited probes, and two clicks
@@ -848,6 +866,25 @@ async function stopDispatch(projectPath) {
             };
         }
         return { stopped: false, reason: 'nothing is running for this project — there is nothing to stop' };
+    }
+    if (run.pendingRetry) {
+        // No child to signal — the run already ended once and is only
+        // waiting out the retry delay. Cancelling the timer and reporting
+        // the run as failed (rather than silently vanishing) is the honest
+        // equivalent of stopping it.
+        clearTimeout(run.timer);
+        running.delete(projectPath);
+        lastRun.set(projectPath, {
+            taskId: run.taskId, tool: run.tool,
+            startedAt: run.startedAt.toISOString(),
+            endedAt: new Date().toISOString(),
+            exitCode: null,
+            ok: false,
+            reason: `${run.taskId} was stopped before its retry ran`
+        });
+        sendDispatch({ projectPath, taskId: run.taskId, state: 'failed', reason: 'stopped before its retry ran' });
+        broadcastUpdate();
+        return { stopped: true, reason: null };
     }
     try {
         run.child.kill('SIGTERM');
@@ -1008,8 +1045,7 @@ async function dispatchOnePass(projectPath) {
     }
 
     const tool = 'claude';
-    const command = dispatchCommand(tool, taskId);
-    if (!command) {
+    if (!dispatchCommand(tool, taskId)) {
         // Only reachable through the auto path: the endpoints validate the
         // id before it can be queued, but a board may hold an id that is not
         // safe to put in an argv or a filename. Refuse it the same way
@@ -1017,6 +1053,24 @@ async function dispatchOnePass(projectPath) {
         refuseDispatch(projectPath, taskId, `${taskId} cannot be dispatched with ${tool}`, 'task');
         return fromQueue;
     }
+    spawnRun(projectPath, taskId, tool);
+
+    // The run owns the repository from here; the next pass starts when the
+    // child closes, not now.
+    return false;
+}
+
+// Spawns the CLI for one task and wires up everything a run needs: the pid
+// lock, the timeout, the SSE stream and the close handler that records the
+// outcome. Pulled out of dispatchOnePass so the one retry a run gets on
+// OAuth token refresh contention (see lib/dispatch-outcome.js) can call the
+// exact same spawn again rather than duplicating it.
+//
+// `retried` is true only on that one retry attempt, and it is what stops a
+// second failure — of any shape — from retrying again: see the close
+// handler below.
+function spawnRun(projectPath, taskId, tool, { retried = false } = {}) {
+    const command = dispatchCommand(tool, taskId);
     const startedAt = new Date();
     const logFile = runLogPath(projectPath, taskId, startedAt);
 
@@ -1056,7 +1110,6 @@ async function dispatchOnePass(projectPath) {
 
     child.on('close', code => {
         clearTimeout(killer);
-        running.delete(projectPath);
         // Released here rather than anywhere earlier: `close` is the one
         // event that fires however the run ended — clean exit, SIGTERM,
         // SIGKILL or a spawn that never got off the ground. A lock this
@@ -1064,6 +1117,44 @@ async function dispatchOnePass(projectPath) {
         // read releases it anyway.
         clearDispatchLock(projectPath);
         const outcome = dispatchOutcome({ stdout, code });
+
+        // The one failure shape that resolves itself (lib/dispatch-outcome.js):
+        // several Claude Code processes on this machine renewed the OAuth
+        // token at once and this run lost the race. Retried exactly once —
+        // `retried` is only true on that retry itself, so a second failure,
+        // whatever it is, is reported like any other rather than looping.
+        if (!outcome.ok && outcome.retryable && !retried) {
+            const retryAt = new Date(Date.now() + RETRY_DELAY_MS).toISOString();
+            logRun(run, `\n[retrying] ${outcome.reason} — retrying once at ${retryAt}\n`);
+            // Replaces this project's `running` entry with a pending-retry
+            // one rather than deleting it: the project must keep reading as
+            // busy for the whole wait, using the same "one run in flight"
+            // rule that already blocks a second dispatch, so nothing else
+            // is pulled into it while the retry is pending.
+            const timer = setTimeout(() => {
+                running.delete(projectPath);
+                spawnRun(projectPath, taskId, tool, { retried: true });
+            }, RETRY_DELAY_MS);
+            running.set(projectPath, { child: null, taskId, tool, startedAt, logFile, pendingRetry: true, timer });
+            lastRun.set(projectPath, {
+                taskId, tool,
+                startedAt: startedAt.toISOString(),
+                endedAt: new Date().toISOString(),
+                exitCode: code,
+                ok: false,
+                reason: outcome.reason,
+                retryPending: true,
+                retryAt
+            });
+            sendDispatch({ projectPath, taskId, state: 'retry_pending', reason: outcome.reason, retryAt });
+            broadcastUpdate();
+            // Not runDispatchLoop: `running` still holds this project, so
+            // the loop would no-op anyway, and calling it here would only
+            // race its guard against the timer just armed above.
+            return;
+        }
+
+        running.delete(projectPath);
         logRun(run, `\n[${outcome.ok ? 'ok' : 'failed'}] ${outcome.reason || outcome.summary}\n`);
         lastRun.set(projectPath, {
             taskId, tool,
@@ -1088,12 +1179,8 @@ async function dispatchOnePass(projectPath) {
     child.stderr.on('data', take);
 
     logRun(run, `$ ${command.display}\n\n`);
-    sendDispatch({ projectPath, taskId, state: 'started', command: command.display });
+    sendDispatch({ projectPath, taskId, state: retried ? 'retry-started' : 'started', command: command.display });
     broadcastUpdate();
-
-    // The run owns the repository from here; the next pass starts when the
-    // child closes, not now.
-    return false;
 }
 
 // Runs passes until there is nothing left to do. Re-entrant by design: every
