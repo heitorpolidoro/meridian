@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { dispatchEligibility, NO_ALLOWLIST_REASON } = require('../lib/dispatch-eligibility');
+const { dispatchEligibility, NO_ALLOWLIST_REASON, selectAutoCandidate } = require('../lib/dispatch-eligibility');
 
 const board = [
     { id: 'T-1', status: 'ready_todo' },
@@ -168,4 +168,83 @@ test('running false and an absent running both stay dispatchable', () => {
     const never = [{ id: 'T-9', status: 'in_progress' }];
     assert.equal(dispatchEligibility(ok({ taskId: 'T-9', tasks: cleared })).ok, true);
     assert.equal(dispatchEligibility(ok({ taskId: 'T-9', tasks: never })).ok, true);
+});
+
+// --- selectAutoCandidate: the auto-dispatch loop's pure selection core ---
+//
+// This is the fix for the bug reported against a real board: auto-dispatch
+// pulled one ineligible backlog task, refused it, and gave up rather than
+// trying the other candidates behind it. These tests exercise the walk in
+// isolation, with a fixed `candidates` list standing in for whatever
+// workableTasks() would have produced — the ordering and filtering that
+// produces that list is server.js's job, not this function's.
+
+const selCtx = (over = {}) => Object.assign({ tasks: [], authenticated: true, liveSession: null }, over);
+
+test('the first eligible candidate is picked with no refusals', () => {
+    const board = [{ id: 'T-1', status: 'backlog' }];
+    const out = selectAutoCandidate(board, selCtx({ tasks: board }));
+    assert.deepEqual(out, { taskId: 'T-1', refusals: [], blocked: null });
+});
+
+// The exact bug: T-1 is blocked, T-2 and T-3 are not. The old rule ended the
+// pass on T-1's refusal; this must walk past it to T-2.
+test('a task-scoped refusal is skipped in favour of the next candidate', () => {
+    const board = [
+        { id: 'T-1', status: 'backlog', blockedBy: ['GHOST'] },
+        { id: 'T-2', status: 'backlog' },
+        { id: 'T-3', status: 'backlog' }
+    ];
+    const out = selectAutoCandidate(board, selCtx({ tasks: board }));
+    assert.equal(out.taskId, 'T-2');
+    assert.deepEqual(out.refusals, [{ taskId: 'T-1', reason: 'T-1 still blocked by GHOST' }]);
+    assert.equal(out.blocked, null);
+});
+
+test('every refusal along the way is recorded, in order, when none are eligible', () => {
+    const board = [
+        { id: 'T-1', status: 'backlog', blockedBy: ['GHOST'] },
+        { id: 'T-2', status: 'done' },
+        { id: 'T-3', status: 'nope' }
+    ];
+    const out = selectAutoCandidate(board, selCtx({ tasks: board }));
+    assert.equal(out.taskId, null);
+    assert.equal(out.blocked, null);
+    assert.deepEqual(out.refusals, [
+        { taskId: 'T-1', reason: 'T-1 still blocked by GHOST' },
+        { taskId: 'T-2', reason: 'T-2 is already done' },
+        { taskId: 'T-3', reason: 'T-3 was dropped' }
+    ]);
+});
+
+// An environment-scoped refusal applies identically to every candidate, so
+// the walk stops at the first one rather than working through the rest —
+// trying T-2 and T-3 would just repeat the same unauthenticated refusal.
+test('an environment-scoped refusal stops the walk immediately', () => {
+    const board = [
+        { id: 'T-1', status: 'backlog' },
+        { id: 'T-2', status: 'backlog' }
+    ];
+    const out = selectAutoCandidate(board, selCtx({ tasks: board, authenticated: false }));
+    assert.equal(out.taskId, null);
+    assert.deepEqual(out.refusals, []);
+    assert.equal(out.blocked.taskId, 'T-1');
+    assert.match(out.blocked.reason, /not authenticated/i);
+});
+
+test('an empty candidate list refuses nothing and selects nothing', () => {
+    assert.deepEqual(selectAutoCandidate([], selCtx()), { taskId: null, refusals: [], blocked: null });
+    assert.deepEqual(selectAutoCandidate(undefined, selCtx()), { taskId: null, refusals: [], blocked: null });
+});
+
+// Termination argument, made concrete: candidates is a fixed list and the
+// walk consumes exactly one entry per non-eligible step (refused or
+// blocked), so it cannot loop — a large candidate list all task-refused
+// still finishes and names every one of them.
+test('a long run of task-scoped refusals still terminates and names them all', () => {
+    const board = Array.from({ length: 50 }, (_, i) => ({ id: `T-${i}`, status: 'done' }));
+    const out = selectAutoCandidate(board, selCtx({ tasks: board }));
+    assert.equal(out.taskId, null);
+    assert.equal(out.refusals.length, 50);
+    assert.equal(out.refusals[49].taskId, 'T-49');
 });

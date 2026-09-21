@@ -16,7 +16,7 @@ const {
     writeDispatchLock, clearDispatchLock, readDispatchLock
 } = require('./lib/dispatch-lock');
 const { dispatchCommand, DISPATCH_TIMEOUT_MS } = require('./lib/dispatch-command');
-const { dispatchEligibility, NO_ALLOWLIST_REASON } = require('./lib/dispatch-eligibility');
+const { dispatchEligibility, NO_ALLOWLIST_REASON, selectAutoCandidate } = require('./lib/dispatch-eligibility');
 const { dispatchOutcome } = require('./lib/dispatch-outcome');
 const { runLogPath, appendRunLog, listRunLogs } = require('./lib/run-log');
 const { detectRunner, allowlistFor } = require('./lib/allowlist-template');
@@ -918,55 +918,79 @@ async function dispatchOnePass(projectPath) {
     // Where the task came from decides what a refusal may do below, so it is
     // recorded here rather than inferred later from the queue's contents —
     // by then the queue has already been changed by this very pull.
-    let fromQueue = taskId !== null;
-    if (!taskId && isAuto(dispatchState, projectPath)) {
+    const fromQueue = taskId !== null;
+
+    if (fromQueue) {
+        const { tasks } = getTasks(projectPath);
+        const allowlist = projectAllowlist(projectPath).hasAllow;
+        const verdict = dispatchEligibility({ taskId, tasks, authenticated, liveSession, allowlist });
+        if (!verdict.ok) {
+            if (verdict.scope === 'environment') {
+                // Transient and global: a logged-out CLI or a session
+                // holding the repository says nothing about this task and
+                // applies identically to every other one queued behind it.
+                // It lifts for the whole queue at once — one `claude auth
+                // login`, or the running session ending — so the queue the
+                // operator built is kept exactly as it was. pullNext already
+                // took this task, so put it back at the front rather than at
+                // the back: its position was the operator's decision too.
+                requeueFront(dispatchState, projectPath, taskId);
+                refuseDispatch(projectPath, taskId, verdict.reason);
+                // Never retry here. Nothing the next pass would read has
+                // changed — with the task restored, it would pull the same
+                // one, refuse it the same way and recurse forever.
+                return false;
+            }
+            // Task-scoped: this one task may never become eligible, so it
+            // stays discarded with its reason visible, and the pass moves
+            // on. Retry immediately by returning true: pullNext has already
+            // removed this task, so the next pass (run by the caller,
+            // runDispatchLoop) sees a strictly shorter queue, and the chain
+            // is bounded by the queue's length.
+            refuseDispatch(projectPath, taskId, verdict.reason);
+            return true;
+        }
+        // Eligible: fall through to the dispatch below with this taskId.
+    } else if (isAuto(dispatchState, projectPath)) {
         // Pulled at dispatch time, not snapshotted when auto was armed: a
         // task created a minute ago has to be able to join.
         const { tasks } = getTasks(projectPath);
-        taskId = (workableTasks(tasks).find(t => !t.skip_auto_dispatch) || {}).id || null;
-        fromQueue = false;
-    }
-    if (!taskId) return false;
+        const allowlist = projectAllowlist(projectPath).hasAllow;
+        const candidates = workableTasks(tasks).filter(t => !t.skip_auto_dispatch);
+        // The walk itself is pure (lib/dispatch-eligibility.js) so it can be
+        // tested without spawning anything; only what to DO with its result
+        // — report each refusal, requeue-or-not, keep the pass going or end
+        // it — is server.js's job.
+        const selection = selectAutoCandidate(candidates, { tasks, authenticated, liveSession, allowlist });
+        for (const r of selection.refusals) refuseDispatch(projectPath, r.taskId, r.reason);
 
-    const { tasks } = getTasks(projectPath);
-    const allowlist = projectAllowlist(projectPath).hasAllow;
-    const verdict = dispatchEligibility({ taskId, tasks, authenticated, liveSession, allowlist });
-    if (!verdict.ok) {
-        if (verdict.scope === 'environment') {
-            // Transient and global: a logged-out CLI or a session holding
-            // the repository says nothing about this task and applies
-            // identically to every other one queued behind it. It lifts for
-            // the whole queue at once — one `claude auth login`, or the
-            // running session ending — so the queue the operator built is
-            // kept exactly as it was. pullNext already took this task, so
-            // put it back at the front rather than at the back: its
-            // position was the operator's decision too.
-            if (fromQueue) requeueFront(dispatchState, projectPath, taskId);
-            refuseDispatch(projectPath, taskId, verdict.reason);
-            // Never retry here. Nothing the next pass would read has
-            // changed — with the task restored, it would pull the same one,
-            // refuse it the same way and recurse forever, for a queued task
-            // just as much as for an auto-pulled one.
+        if (selection.blocked) {
+            // Environment-scoped: applies identically to every remaining
+            // candidate, so selectAutoCandidate stopped at the first one it
+            // hit rather than working through the rest. An auto-pulled task
+            // is in no queue, so there is nothing to requeue — unlike the
+            // fromQueue branch above.
+            refuseDispatch(projectPath, selection.blocked.taskId, selection.blocked.reason);
             return false;
         }
-        refuseDispatch(projectPath, taskId, verdict.reason);
-        // Task-scoped: this one task may never become eligible, so it stays
-        // discarded with its reason visible, and the pass moves on.
-        //
-        // Retry immediately ONLY for a queued task. pullNext has already
-        // removed it, so the next pass sees a strictly shorter queue and the
-        // chain is bounded by the queue's length.
-        //
-        // A task the auto mode picked is in no queue: refusing it changes
-        // nothing that the next selection reads, so the same task would be
-        // chosen again, refused again, and the loop would never end — it
-        // would hang the server on its own stack. A `backlog` task with an
-        // unmet blockedBy reaches exactly this path today, because
-        // workableTasks() excludes `blocked` by status and nothing else.
-        // Ending the pass is correct: the next broadcastUpdate, enqueue or
-        // auto toggle starts a fresh one, by which time the board may have
-        // changed. Do not "simplify" this back into an unconditional retry.
-        return fromQueue;
+        if (!selection.taskId) {
+            // Candidates exhausted: every one auto-selection could see this
+            // pass was refused for a task-scoped reason. lastRun (see
+            // refuseDispatch, called above for each) holds only the last of
+            // them — attach the full list too, so a card for any of the
+            // others can still show its own reason (queueStallReason's
+            // fallback in lib/board.js). The next broadcastUpdate, enqueue
+            // or auto toggle starts a fresh pass, by which time the board
+            // may have changed.
+            if (selection.refusals.length) {
+                const current = lastRun.get(projectPath);
+                if (current) lastRun.set(projectPath, { ...current, refusals: selection.refusals });
+            }
+            return false;
+        }
+        taskId = selection.taskId;
+    } else {
+        return false;
     }
 
     const tool = 'claude';
