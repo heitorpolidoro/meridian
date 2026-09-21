@@ -888,7 +888,7 @@ function sendDispatch(payload) {
     clients.forEach(c => { try { c.write(line); } catch (e) { /* gone */ } });
 }
 
-function refuseDispatch(projectPath, taskId, reason) {
+function refuseDispatch(projectPath, taskId, reason, scope) {
     // Records the reason and shows it. What happens to the task itself is
     // the caller's decision, and it differs by scope — this function is
     // called on both paths, so it must not claim either.
@@ -901,6 +901,20 @@ function refuseDispatch(projectPath, taskId, reason) {
     // and the queue's order was the operator's decision.
     lastRun.set(projectPath, { taskId, ok: false, reason, endedAt: new Date().toISOString() });
     sendDispatch({ projectPath, taskId, state: 'refused', reason });
+    // Otherwise a refusal that isn't the pass's last event leaves no trace:
+    // a pass that refuses several candidates before dispatching one used to
+    // lose every refusal but the last, which lastRun.refusals only patches
+    // over for auto's own exhausted-candidates case. This is that project's
+    // permanent history, so every refusal lands here regardless of which
+    // path produced it. Best-effort like every other appendEvent call — a
+    // write failure here must never stop the dispatch loop from moving on.
+    appendEvent(projectPath, {
+        type: 'dispatch_refused',
+        task: taskId,
+        reason,
+        scope,
+        at: new Date().toISOString()
+    });
     broadcastUpdate();
 }
 
@@ -935,7 +949,7 @@ async function dispatchOnePass(projectPath) {
                 // took this task, so put it back at the front rather than at
                 // the back: its position was the operator's decision too.
                 requeueFront(dispatchState, projectPath, taskId);
-                refuseDispatch(projectPath, taskId, verdict.reason);
+                refuseDispatch(projectPath, taskId, verdict.reason, 'environment');
                 // Never retry here. Nothing the next pass would read has
                 // changed — with the task restored, it would pull the same
                 // one, refuse it the same way and recurse forever.
@@ -947,7 +961,7 @@ async function dispatchOnePass(projectPath) {
             // removed this task, so the next pass (run by the caller,
             // runDispatchLoop) sees a strictly shorter queue, and the chain
             // is bounded by the queue's length.
-            refuseDispatch(projectPath, taskId, verdict.reason);
+            refuseDispatch(projectPath, taskId, verdict.reason, 'task');
             return true;
         }
         // Eligible: fall through to the dispatch below with this taskId.
@@ -962,7 +976,7 @@ async function dispatchOnePass(projectPath) {
         // — report each refusal, requeue-or-not, keep the pass going or end
         // it — is server.js's job.
         const selection = selectAutoCandidate(candidates, { tasks, authenticated, liveSession, allowlist });
-        for (const r of selection.refusals) refuseDispatch(projectPath, r.taskId, r.reason);
+        for (const r of selection.refusals) refuseDispatch(projectPath, r.taskId, r.reason, 'task');
 
         if (selection.blocked) {
             // Environment-scoped: applies identically to every remaining
@@ -970,7 +984,7 @@ async function dispatchOnePass(projectPath) {
             // hit rather than working through the rest. An auto-pulled task
             // is in no queue, so there is nothing to requeue — unlike the
             // fromQueue branch above.
-            refuseDispatch(projectPath, selection.blocked.taskId, selection.blocked.reason);
+            refuseDispatch(projectPath, selection.blocked.taskId, selection.blocked.reason, 'environment');
             return false;
         }
         if (!selection.taskId) {
@@ -1000,7 +1014,7 @@ async function dispatchOnePass(projectPath) {
         // id before it can be queued, but a board may hold an id that is not
         // safe to put in an argv or a filename. Refuse it the same way
         // rather than let runLogPath throw inside the loop.
-        refuseDispatch(projectPath, taskId, `${taskId} cannot be dispatched with ${tool}`);
+        refuseDispatch(projectPath, taskId, `${taskId} cannot be dispatched with ${tool}`, 'task');
         return fromQueue;
     }
     const startedAt = new Date();

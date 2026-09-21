@@ -627,3 +627,25 @@ test('computeWorkspaceStats with an empty/missing projects.json returns empty ta
     const result = computeWorkspaceStats(ws, new Date());
     assert.deepEqual(result, { tasks: {}, stages: {}, errors: [] });
 });
+
+// A dispatch refusal (type: 'dispatch_refused') is neither a status change
+// nor a running interval nor a token event, so it must fall into
+// aggregateTaskStats' "anything else: not used" branch — counted nowhere,
+// crashing nothing. This pins that a refusal line dropped into the same
+// log a pass's successful dispatch already writes to cannot skew the very
+// numbers this file reports.
+test('a dispatch_refused event is ignored cleanly — no task entry, no crash, no effect on sibling events', () => {
+    const t0 = new Date('2026-01-01T00:00:00.000Z');
+    const t1 = new Date('2026-01-01T00:05:00.000Z');
+    const events = [
+        { task: 'X', field: 'status', from: null, to: 'backlog', at: t0.toISOString() },
+        { task: 'X', type: 'dispatch_refused', reason: 'X is already done', scope: 'task', at: t1.toISOString() },
+        { task: 'Y', type: 'dispatch_refused', reason: 'CLI not authenticated', scope: 'environment', at: t1.toISOString() }
+    ];
+    const { tasks } = aggregateStats(events, new Date('2026-01-01T01:00:00.000Z'));
+    // X still only shows the visit its status event produced.
+    assert.deepEqual(tasks['X'].stages, { backlog: { visits: 1 } });
+    // Y never had a status/running/dispatch_tokens event, so it gets no
+    // entry at all — a refusal alone never fabricates a task record.
+    assert.equal(tasks['Y'], undefined);
+});
