@@ -146,3 +146,26 @@ test('authentication and the repo lock are environment; everything else is task'
 test('an eligible task carries ok alone', () => {
     assert.deepEqual(Object.keys(dispatchEligibility(ok())), ['ok']);
 });
+
+// A task the operator is already working on in their own terminal carries
+// `running: true` (the plugin's running-flag hook sets it). The derived repo
+// lock ignores interactive sessions on purpose, so this check is the only
+// thing standing between auto-dispatch and a second agent on the same task.
+test('a task already being worked on is refused, task-scoped', () => {
+    const tasks = [{ id: 'T-9', status: 'in_progress', running: true }];
+    const out = dispatchEligibility(ok({ taskId: 'T-9', tasks }));
+    assert.equal(out.ok, false);
+    assert.equal(out.scope, 'task');
+    assert.match(out.reason, /T-9/);
+    assert.match(out.reason, /session/i);
+});
+
+// Only an explicit true claims the task. A cleared flag and a task that never
+// carried one are the normal case and must not be punished — the hook clears
+// `running` on SessionEnd, and most tasks have never been run at all.
+test('running false and an absent running both stay dispatchable', () => {
+    const cleared = [{ id: 'T-9', status: 'in_progress', running: false }];
+    const never = [{ id: 'T-9', status: 'in_progress' }];
+    assert.equal(dispatchEligibility(ok({ taskId: 'T-9', tasks: cleared })).ok, true);
+    assert.equal(dispatchEligibility(ok({ taskId: 'T-9', tasks: never })).ok, true);
+});
