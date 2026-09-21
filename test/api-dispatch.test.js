@@ -321,6 +321,25 @@ test('status reports canCreateAllowlist and the no-allowlist reason for a fresh 
         const p = projectIn(await json(base, '/api/status'), dir);
         assert.equal(p.canCreateAllowlist, true);
         assert.match(p.dispatchBlockedReason, /no dispatch allowlist/);
+        // The card's Dispatch button reads this field, never the overloaded
+        // reason string, so the header and the card agree about one gate.
+        assert.equal(p.dispatchGateBlocked, true);
+    });
+});
+
+// The allowlist is the gate, and writing one opens it — for the card button
+// as much as for the header's `Dispatch all`.
+test('a repository with an allowlist reports an open dispatch gate', async () => {
+    const { ws, dir } = workspaceWith(TASKS);
+    fs.mkdirSync(path.join(dir, '.claude'), { recursive: true });
+    fs.writeFileSync(
+        path.join(dir, '.claude', 'settings.json'),
+        JSON.stringify({ permissions: { allow: ['Bash(npm test:*)'] } })
+    );
+    await withServer(ws, async base => {
+        const p = projectIn(await json(base, '/api/status'), dir);
+        assert.equal(p.dispatchGateBlocked, false);
+        assert.equal(p.dispatchBlockedReason, null);
     });
 });
 

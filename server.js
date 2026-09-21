@@ -365,6 +365,16 @@ function getStatusData(options = {}) {
                     dispatchBlockedReason: running.has(projPath)
                         ? `a run is in flight (${running.get(projPath).taskId})`
                         : (allowlist.hasAllow ? null : NO_ALLOWLIST_REASON),
+                    // dispatchBlockedReason is overloaded — it also says "a
+                    // run is in flight", which must never disable the card's
+                    // own Dispatch button, because queueing work behind a
+                    // running task is the point of the queue. This boolean
+                    // is the narrower question the card asks: can this
+                    // repository host a run at all? Today only the missing
+                    // allowlist closes that gate, and it is the same gate
+                    // `Dispatch all` is disabled by, so both controls now
+                    // read one field instead of disagreeing about a string.
+                    dispatchGateBlocked: !allowlist.hasAllow,
                     // Only true absence of the file offers to create one — a
                     // file the operator wrote with an empty or missing
                     // `permissions.allow` is not ours to complete.

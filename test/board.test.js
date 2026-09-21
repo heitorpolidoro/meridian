@@ -242,3 +242,51 @@ test('done and nope carry no button', () => {
     assert.equal(dispatchButton({ id: 'T-3', status: 'done' }, { queue: [], runningTaskId: null }), null);
     assert.equal(dispatchButton({ id: 'T-4', status: 'nope' }, { queue: [], runningTaskId: null }), null);
 });
+
+// The header's `Dispatch all` has always been disabled on a repository with
+// no allowlist. The card button ignored the same gate: it rendered enabled,
+// the confirmation promised a real run, the POST succeeded and the task then
+// sat queued forever showing "waiting". Both controls now read one field.
+test('a closed gate disables dispatch and puts the reason in the title', () => {
+    const out = dispatchButton({ id: 'T-1', status: 'ready_todo' }, {
+        queue: [], runningTaskId: null,
+        dispatchGateBlocked: true,
+        dispatchBlockedReason: 'this repository has no dispatch allowlist'
+    });
+    assert.equal(out.action, 'dispatch');
+    assert.equal(out.disabled, true);
+    assert.equal(out.title, 'this repository has no dispatch allowlist');
+});
+
+// The gate is a boolean of its own precisely so an in-flight run — which
+// dispatchBlockedReason also reports — cannot disable the button. Queueing
+// work behind a running task is what the queue is for.
+test('a run in flight does not disable dispatch', () => {
+    const out = dispatchButton({ id: 'T-2', status: 'ready_todo' }, {
+        queue: [], runningTaskId: 'T-1',
+        dispatchGateBlocked: false,
+        dispatchBlockedReason: 'a run is in flight (T-1)'
+    });
+    assert.equal(out.action, 'dispatch');
+    assert.equal(out.disabled, undefined);
+});
+
+// Both of these reduce activity, so a closed gate must not take them away:
+// an operator who cannot start a run must still be able to stop one and to
+// empty the queue.
+test('stop and unqueue stay enabled through a closed gate', () => {
+    const ctx = { dispatchGateBlocked: true, dispatchBlockedReason: 'no allowlist' };
+    const stop = dispatchButton({ id: 'T-1' }, { ...ctx, queue: [], runningTaskId: 'T-1' });
+    const unqueue = dispatchButton({ id: 'T-2' }, { ...ctx, queue: ['T-2'], runningTaskId: 'T-1' });
+    assert.equal(stop.action, 'stop');
+    assert.equal(stop.disabled, undefined);
+    assert.equal(unqueue.action, 'unqueue');
+    assert.equal(unqueue.disabled, undefined);
+});
+
+// An absent field is an open gate: every existing caller passes no such key,
+// and a missing one must not silently disable every card on the board.
+test('an absent gate field leaves dispatch enabled', () => {
+    const out = dispatchButton({ id: 'T-1', status: 'ready_todo' }, { queue: [], runningTaskId: null });
+    assert.equal(out.disabled, undefined);
+});

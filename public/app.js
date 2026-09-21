@@ -125,13 +125,28 @@ function parentBadge(task) {
 // ever disagrees the useful button is the one that can stop a process.
 const NO_DISPATCH = ['done', 'nope'];
 
-function dispatchButton(task, { queue, runningTaskId }) {
+function dispatchButton(task, { queue, runningTaskId, dispatchGateBlocked, dispatchBlockedReason }) {
     if (!task || NO_DISPATCH.includes(task.status)) return null;
+    // Running outranks queued. A task cannot honestly be both, and if the
+    // state ever disagrees the useful button is the one that stops a process.
     if (task.id === runningTaskId) {
         return { action: 'stop', label: 'Stop', title: 'Signal the running session (SIGTERM)' };
     }
     if ((queue || []).includes(task.id)) {
         return { action: 'unqueue', label: 'Remove from queue', title: 'Drop this task from the queue' };
+    }
+    // The same gate the header's `Dispatch all` is disabled by, read from a
+    // field of its own rather than from dispatchBlockedReason. That string
+    // is overloaded: it also carries "a run is in flight", and an in-flight
+    // run must NOT disable this button — queueing more work behind a running
+    // one is the feature. Only a repository that can host no run at all,
+    // which today means no allowlist, closes this gate. Stop and Remove
+    // above stay enabled through it: both reduce activity.
+    if (dispatchGateBlocked) {
+        return {
+            action: 'dispatch', label: 'Dispatch', disabled: true,
+            title: dispatchBlockedReason || 'This repository cannot host a dispatch right now'
+        };
     }
     return { action: 'dispatch', label: 'Dispatch', title: 'Queue this task; runs at once if the repo is free' };
 }
@@ -142,12 +157,13 @@ function dispatchButton(task, { queue, runningTaskId }) {
 // so this falls back to the view currently open.
 function dispatchContextFor(projectPath) {
     const proj = currentProjectsData.find(p => p.path === projectPath);
-    if (!proj) return { queue: [], runningTaskId: null, dispatchBlockedReason: null };
+    if (!proj) return { queue: [], runningTaskId: null, dispatchBlockedReason: null, dispatchGateBlocked: false };
     const runningTask = (proj.tasks || []).find(t => t.running === true);
     return {
         queue: proj.queue || [],
         runningTaskId: runningTask ? runningTask.id : null,
-        dispatchBlockedReason: proj.dispatchBlockedReason || null
+        dispatchBlockedReason: proj.dispatchBlockedReason || null,
+        dispatchGateBlocked: proj.dispatchGateBlocked === true
     };
 }
 
@@ -1575,7 +1591,7 @@ function renderTaskCardHtml(task, allTasks) {
     if (btn) {
         dispatchBtnHtml = `<button type="button" class="card-dispatch-btn card-dispatch-btn--${btn.action}"
             data-dispatch-action="${btn.action}" data-task-id="${escapeHtml(task.id)}"
-            data-task-title="${escapeHtml(task.title || '')}"
+            data-task-title="${escapeHtml(task.title || '')}" ${btn.disabled ? 'disabled' : ''}
             data-project="${escapeHtml(dispatchProjectPath || '')}" title="${escapeHtml(btn.title)}">${btn.label}</button>`;
     }
     // A queued task can sit idle — auth is missing, or another session holds
