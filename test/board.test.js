@@ -290,3 +290,49 @@ test('an absent gate field leaves dispatch enabled', () => {
     const out = dispatchButton({ id: 'T-1', status: 'ready_todo' }, { queue: [], runningTaskId: null });
     assert.equal(out.disabled, undefined);
 });
+
+// --- why a queued task is not moving ---
+// A refusal scoped to the environment (no allowlist, CLI logged out, a
+// session already holding the repo) requeues the task rather than dropping
+// it, so the card must say why it is stuck rather than just sitting there.
+
+const { queueStallReason } = require('../lib/board');
+
+test('no lastRun and no project reason: nothing is known to be stuck', () => {
+    assert.equal(queueStallReason({ id: 'T-1' }, {}), null);
+});
+
+test('the project-wide dispatchBlockedReason explains a stalled queue', () => {
+    const reason = queueStallReason({ id: 'T-1' }, {
+        dispatchBlockedReason: 'this repository has no dispatch allowlist'
+    });
+    assert.equal(reason, 'this repository has no dispatch allowlist');
+});
+
+// lastRun pins a reason to the exact task it happened to, which is more
+// specific than the project-wide reason, so it wins when both exist.
+test('a failed lastRun for this task wins over the project-wide reason', () => {
+    const reason = queueStallReason({ id: 'T-1' }, {
+        dispatchBlockedReason: 'this repository has no dispatch allowlist',
+        lastRun: { taskId: 'T-1', ok: false, reason: 'CLI not authenticated — run `claude auth login`' }
+    });
+    assert.equal(reason, 'CLI not authenticated — run `claude auth login`');
+});
+
+// lastRun for a different task says nothing about this one.
+test('a lastRun for a different task is ignored', () => {
+    const reason = queueStallReason({ id: 'T-2' }, {
+        dispatchBlockedReason: 'this repository has no dispatch allowlist',
+        lastRun: { taskId: 'T-1', ok: false, reason: 'something else entirely' }
+    });
+    assert.equal(reason, 'this repository has no dispatch allowlist');
+});
+
+// A successful lastRun is not a stall — it says nothing about why a later
+// queued task might be waiting.
+test('a successful lastRun for this task is not treated as a stall reason', () => {
+    const reason = queueStallReason({ id: 'T-1' }, {
+        lastRun: { taskId: 'T-1', ok: true, reason: null }
+    });
+    assert.equal(reason, null);
+});

@@ -151,19 +151,28 @@ function dispatchButton(task, { queue, runningTaskId, dispatchGateBlocked, dispa
     return { action: 'dispatch', label: 'Dispatch', title: 'Queue this task; runs at once if the repo is free' };
 }
 
+// Mirrors lib/board.js#queueStallReason — that file is the source of truth.
+function queueStallReason(task, { lastRun, dispatchBlockedReason } = {}) {
+    if (lastRun && task && lastRun.taskId === task.id && lastRun.ok === false && lastRun.reason) {
+        return lastRun.reason;
+    }
+    return dispatchBlockedReason || null;
+}
+
 // The dispatch state (queue, running task, blocked reason) for the project
 // that owns `task`. A task in the global view carries its own projectPath
 // (refreshProjectView tags it); a task in a single project's board does not,
 // so this falls back to the view currently open.
 function dispatchContextFor(projectPath) {
     const proj = currentProjectsData.find(p => p.path === projectPath);
-    if (!proj) return { queue: [], runningTaskId: null, dispatchBlockedReason: null, dispatchGateBlocked: false };
+    if (!proj) return { queue: [], runningTaskId: null, dispatchBlockedReason: null, dispatchGateBlocked: false, lastRun: null };
     const runningTask = (proj.tasks || []).find(t => t.running === true);
     return {
         queue: proj.queue || [],
         runningTaskId: runningTask ? runningTask.id : null,
         dispatchBlockedReason: proj.dispatchBlockedReason || null,
-        dispatchGateBlocked: proj.dispatchGateBlocked === true
+        dispatchGateBlocked: proj.dispatchGateBlocked === true,
+        lastRun: proj.lastRun || null
     };
 }
 
@@ -1604,9 +1613,16 @@ function renderTaskCardHtml(task, allTasks) {
     // instead of just looking stuck.
     if (btn && btn.action === 'unqueue') {
         const position = dispatchCtx.queue.indexOf(task.id) + 1;
-        const waiting = dispatchCtx.dispatchBlockedReason
-            ? ` — waiting: ${dispatchCtx.dispatchBlockedReason}` : '';
-        queueBadgeHtml = `<span class="task-queue-badge" title="${escapeHtml(`Queued at position ${position}, waiting to run${waiting}`)}">Queued #${position}</span>`;
+        const stallReason = queueStallReason(task, dispatchCtx);
+        // A queued task that cannot move must say so on the card itself, not
+        // only in a tooltip nobody hovers over — that silence is exactly
+        // what left the operator staring at a task that queued and then did
+        // nothing, with no way to tell why.
+        const label = stallReason ? `Queued #${position} — not moving: ${stallReason}` : `Queued #${position}`;
+        const title = stallReason
+            ? `Queued at position ${position}, not moving: ${stallReason}`
+            : `Queued at position ${position}, waiting to run`;
+        queueBadgeHtml = `<span class="task-queue-badge" title="${escapeHtml(title)}">${escapeHtml(label)}</span>`;
     }
 
     return `
