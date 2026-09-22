@@ -855,11 +855,16 @@ body:not([data-view="dashboard"]) #error-container {
     align-items: center;
 }
 
-.card-search-input {
+/* Scoped under the wrapper on purpose. The global `input[type="text"]` rule
+   above has specificity (0,1,1) and beats a bare class (0,1,0), so
+   `.card-search-input` alone silently lost its padding and width to it — the
+   left padding never applied, which is why the icon sat on the placeholder.
+   The same trap already cost this file once, on a select's width. */
+.card-search-wrapper .card-search-input {
     background: #121215;
     border: 1px solid var(--card-border);
     border-radius: 6px;
-    padding: 0.35rem 3.5rem 0.35rem 1.9rem;
+    padding: 0.35rem 3.5rem 0.35rem 2.1rem;
     font-size: 0.85rem;
     color: var(--text-primary);
     width: 240px;
@@ -867,21 +872,28 @@ body:not([data-view="dashboard"]) #error-container {
     outline: none;
 }
 
-.card-search-input:focus {
+.card-search-wrapper .card-search-input:focus {
     width: 320px;
     border-color: var(--accent);
     box-shadow: 0 0 0 1px var(--accent);
     background: #18181b;
 }
 
-.card-search-input::placeholder {
+.card-search-wrapper .card-search-input::placeholder {
     color: #71717a;
 }
 
+/* An inline SVG rather than the 🔍 emoji: emoji fonts carry their own advance
+   width, wider than the declared font-size, so the glyph overran the input's
+   left padding and sat on top of the placeholder. An SVG is exactly the size
+   it is told to be, and it takes the theme's colour. */
 .card-search-wrapper .search-icon {
     position: absolute;
-    left: 0.6rem;
-    font-size: 0.8rem;
+    width: 14px;
+    height: 14px;
+    left: 0.65rem;
+    top: 50%;
+    transform: translateY(-50%);
     color: var(--text-secondary);
     pointer-events: none;
     opacity: 0.7;
