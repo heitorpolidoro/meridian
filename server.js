@@ -296,7 +296,30 @@ async function getStatusData(options = {}) {
                 return data; // Exit early if we can't parse global projects
             }
 
-            const sessions = await liveSessionsList();
+            // Whether ANY task on any board we are about to render carries
+            // `running: true` — cheap disk reads only (getTasks), no
+            // subprocess. Staleness is only ever a question for a running
+            // task (see isRunningStale), so when this comes back false the
+            // expensive `claude agents --json` probe below is skipped
+            // entirely: the overwhelmingly common case, and the one this
+            // function used to pay for on every call regardless. Errors are
+            // ignored here; the main loop below reads each project's tasks
+            // again and reports them exactly as it always has.
+            let anyRunning = false;
+            for (const projEntry of parsed.projects || []) {
+                const projPath = projEntry.path;
+                if (options.project && path.resolve(projEntry.path) !== path.resolve(options.project)) continue;
+                if (!fs.existsSync(projPath)) continue;
+                try {
+                    const td = getTasks(projPath);
+                    if ((td.tasks || []).some(t => t && t.running === true)) {
+                        anyRunning = true;
+                        break;
+                    }
+                } catch (err) { /* reported by the main loop below */ }
+            }
+
+            const sessions = anyRunning ? await liveSessionsListCached() : [];
             let matchedProject = false;
             for (const projEntry of parsed.projects || []) {
                 const projPath = projEntry.path;
@@ -490,6 +513,43 @@ async function liveSessionsList() {
     } catch (err) {
         return [];
     }
+}
+
+// How long a `claude agents --json` answer is trusted before the next
+// caller pays for a fresh probe. Overridable only for tests, which need a
+// window short enough to wait out without slowing the suite down; production
+// always gets the real five seconds.
+const SESSION_CACHE_MS = Number(process.env.MERIDIAN_SESSION_CACHE_MS) || 5000;
+
+// One cache, not one per project: a single `claude agents --json` call
+// already answers for every project at once (each session in that list
+// carries its own cwd), so caching it globally is not a shortcut — it is
+// the same answer the per-project caller would each get anyway, fetched
+// once. Measured on this machine: the probe itself takes ~240ms against a
+// ~5ms getStatusData without it, and it is not a rare call — every
+// `fs.watch` event during a live run triggers broadcastUpdate, which calls
+// getStatusData. Caching for a few seconds turns "once per file the agent
+// touches" into "at most once per few seconds".
+//
+// A stale cache is safe here specifically because of which direction it can
+// be wrong in. The cached list can only be OLDER than reality, never
+// fabricated, so the one thing it can cause is a session that started very
+// recently not showing up for a few seconds — which shows the board a task
+// as stale a moment longer than it should, i.e. a Clear button appears a
+// little late. It can never do the opposite: manufacture a session that
+// isn't there and hide a Clear button that should show. And it can never
+// let the button actually clear a flag a live run owns, because that path
+// (the PUT handler below) does not call this cache at all — it probes
+// fresh, every time, which is the one place being wrong would cost
+// something.
+let sessionCache = { at: 0, promise: null };
+
+async function liveSessionsListCached() {
+    const now = Date.now();
+    if (!sessionCache.promise || (now - sessionCache.at) >= SESSION_CACHE_MS) {
+        sessionCache = { at: now, promise: liveSessionsList() };
+    }
+    return sessionCache.promise;
 }
 
 // Everything that can be holding this repository, as one answer.
