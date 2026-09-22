@@ -10,7 +10,10 @@ const path = require('node:path');
 // section of the report), and every fs.watch event during a live run calls
 // getStatusData via broadcastUpdate, so it must not run unconditionally.
 
-const PORT_BASE = 3950;
+// 4100, not 3950: that range collided with test/cli.test.js's old
+// random-port draws (see test/port-windows.test.js) — moved out of the way
+// rather than fixing the collision from this side twice.
+const PORT_BASE = 4100;
 let nextPort = PORT_BASE;
 
 function workspaceWith(tasks) {

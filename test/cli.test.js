@@ -7,6 +7,15 @@ const { execFileSync } = require('node:child_process');
 
 const CLI = path.join(__dirname, '..', 'cli.js');
 
+// Deterministic, not drawn at random — this file used to pick ports with
+// `Math.random()` across two separate ranges, which drifted into whatever
+// ports newer files claimed with their own deterministic PORT_BASE (see
+// test/port-windows.test.js, which now checks every file's window for
+// exactly this). One base and one counter, shared by every test below, so
+// this file cannot collide with itself either.
+const PORT_BASE = 4000;
+let nextPort = PORT_BASE;
+
 // Never the checkout's own pid file: it is shared by every project on this
 // machine, and an earlier run of this very suite killed the operator's live
 // board through it. Each test gets its own.
@@ -48,7 +57,7 @@ async function upOn(port) {
 test('start is idempotent: a second start does not kill the first server', async () => {
     const ws = fixture();
     const PF = pidFile();
-    const port = 3910 + Math.floor(Math.random() * 40);
+    const port = nextPort++;
     let pid = null;
     {
         try {
@@ -74,7 +83,7 @@ test('start is idempotent: a second start does not kill the first server', async
 test('restart replaces a running server with a new one', async () => {
     const ws = fixture();
     const PF = pidFile();
-    const port = 3950 + Math.floor(Math.random() * 40);
+    const port = nextPort++;
     let first = null, second = null;
     {
         try {
@@ -97,7 +106,7 @@ test('add registers a project the same way the API does', async () => {
     const proj = path.join(ws, 'Audio Transcriber');
     fs.mkdirSync(proj, { recursive: true });
 
-    const out = runCli(['add', proj], ws, 3999, pidFile());
+    const out = runCli(['add', proj], ws, nextPort++, pidFile());
     assert.match(out, /Added project/);
 
     const registry = JSON.parse(fs.readFileSync(path.join(ws, '.meridian', 'projects.json'), 'utf8'));
@@ -113,6 +122,6 @@ test('add refuses a project that is already registered', async () => {
     const ws = fixture();
     const proj = path.join(ws, 'dup');
     fs.mkdirSync(proj, { recursive: true });
-    runCli(['add', proj], ws, 3999, pidFile());
-    assert.throws(() => runCli(['add', proj], ws, 3999, pidFile()), /already added|Command failed/);
+    runCli(['add', proj], ws, nextPort++, pidFile());
+    assert.throws(() => runCli(['add', proj], ws, nextPort++, pidFile()), /already added|Command failed/);
 });
