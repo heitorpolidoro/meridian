@@ -17,6 +17,7 @@ const {
 } = require('./lib/dispatch-lock');
 const { dispatchCommand, DISPATCH_TIMEOUT_MS } = require('./lib/dispatch-command');
 const { dispatchEligibility, NO_ALLOWLIST_REASON, selectAutoCandidate } = require('./lib/dispatch-eligibility');
+const { isRunningStale } = require('./lib/stale-running');
 const { dispatchOutcome } = require('./lib/dispatch-outcome');
 const { runLogPath, appendRunLog, listRunLogs } = require('./lib/run-log');
 const { detectRunner, allowlistFor } = require('./lib/allowlist-template');
@@ -275,8 +276,14 @@ function projectAllowlist(projectPath) {
     }
 }
 
-// Helper to fetch aggregated data from decentralized storage
-function getStatusData(options = {}) {
+// Helper to fetch aggregated data from decentralized storage.
+//
+// Async because deciding whether any task's `running: true` is stale
+// (lib/stale-running.js) needs the live `claude agents --json` list, fetched
+// once here rather than once per project — every caller (the REST endpoint
+// and both SSE payloads) already tolerates the async CLI probes this file
+// makes elsewhere.
+async function getStatusData(options = {}) {
     let data = { projects: [], errors: [] };
     try {
         if (fs.existsSync(PROJECTS_JSON_PATH)) {
@@ -288,7 +295,8 @@ function getStatusData(options = {}) {
                 data.errors.push({ file: '.meridian/projects.json', message: 'Malformed JSON: ' + err.message });
                 return data; // Exit early if we can't parse global projects
             }
-            
+
+            const sessions = await liveSessionsList();
             let matchedProject = false;
             for (const projEntry of parsed.projects || []) {
                 const projPath = projEntry.path;
@@ -316,7 +324,17 @@ function getStatusData(options = {}) {
                 } catch (err) {
                     data.errors.push({ file: `${info.name} (tasks.json)`, message: err.message });
                 }
-                
+
+                // Tag each task with whether its `running: true` is stale
+                // before any status-filtered view (workableTasks,
+                // limitPerStatus) is built below — both return the very same
+                // task objects, filtered or sliced, never copies, so tagging
+                // once here reaches every view.
+                const projectLock = readDispatchLock(projPath);
+                for (const task of tasksData.tasks || []) {
+                    task.staleRunning = isRunningStale(task, { lock: projectLock, sessions, projectPath: projPath });
+                }
+
                 const agentsMdPath = path.join(projPath, 'AGENTS.md');
                 const hasAgentsMd = fs.existsSync(agentsMdPath);
                 
@@ -411,9 +429,9 @@ function getStatusData(options = {}) {
 }
 
 // REST API for initial load
-app.get('/api/status', (req, res) => {
+app.get('/api/status', async (req, res) => {
     const limit = req.query.limit ? parseInt(req.query.limit, 10) : undefined;
-    res.json(getStatusData({
+    res.json(await getStatusData({
         project: req.query.project,
         workable: req.query.workable === '1' || undefined,
         limit: Number.isInteger(limit) && limit > 0 ? limit : undefined
@@ -456,6 +474,22 @@ function runTooling(argv, timeoutMs = 20000, onChunk = null) {
 async function liveSessionFor(projectPath) {
     const probe = await runTooling(['claude', 'agents', '--json'], 10000);
     return backgroundSessionFor(probe.stdout, projectPath);
+}
+
+// The full `claude agents --json` list, every kind included, or `[]` when
+// the probe failed or answered with something unparsable. Used only for
+// stale-`running` detection (lib/stale-running.js), which needs to see
+// interactive sessions too — unlike the background-only lock above, a human
+// working a task by hand from their own terminal must not be mistaken for a
+// stale flag with nothing behind it.
+async function liveSessionsList() {
+    const probe = await runTooling(['claude', 'agents', '--json'], 10000);
+    try {
+        const list = JSON.parse(probe.stdout);
+        return Array.isArray(list) ? list : [];
+    } catch (err) {
+        return [];
+    }
 }
 
 // Everything that can be holding this repository, as one answer.
@@ -1607,7 +1641,7 @@ app.post('/api/projects/tasks', (req, res) => {
 // justification, priority, spec_path, spec_iterations, code_review_iterations,
 // qa_iterations, blockedBy, expected_results, last_review_findings, running.
 // Timestamps (updated_at, moved_at, completed_at) are server-owned.
-app.put('/api/projects/tasks/:taskId', (req, res) => {
+app.put('/api/projects/tasks/:taskId', async (req, res) => {
     try {
         const { projectPath } = req.body;
         const taskId = req.params.taskId;
@@ -1638,6 +1672,28 @@ app.put('/api/projects/tasks/:taskId', (req, res) => {
         const task = tasksData.tasks[taskIndex];
         const prevStatus = task.status;
         const prevRunning = task.running === true;
+
+        // The board's "clear stale flag" button sends `clearStale: true`
+        // rather than a bare `running: false`, so every other writer of this
+        // endpoint — the plugin's stop hook, meridian:work finishing a stage
+        // — keeps clearing `running` exactly as before, unaffected by this
+        // check. Only this one intent re-checks staleness right now, at the
+        // moment of the request: the render that showed the button and the
+        // click that followed it can straddle a run actually starting, and
+        // trusting what the client saw on render would let that click clear
+        // a flag that is true again for a good reason.
+        if (req.body.clearStale === true) {
+            if (req.body.running !== false) {
+                return res.status(400).json({ error: 'clearStale requires running: false' });
+            }
+            const lock = readDispatchLock(projectPath);
+            const sessions = await liveSessionsList();
+            if (!isRunningStale(task, { lock, sessions, projectPath })) {
+                return res.status(409).json({
+                    error: `${taskId} is no longer stale — a session is now working it`
+                });
+            }
+        }
 
         if (req.body.parent !== undefined && req.body.parent !== null) {
             const invalidParent = validateParentField(req.body.parent, tasksData.tasks, taskId);
@@ -1960,15 +2016,15 @@ app.post('/api/fix-with-ai', (req, res) => {
 // SSE Setup
 let clients = [];
 
-app.get('/api/stream', (req, res) => {
+app.get('/api/stream', async (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders();
 
     clients.push(res);
-    
-    res.write(`data: ${JSON.stringify({ type: 'init', data: getStatusData() })}\n\n`);
+
+    res.write(`data: ${JSON.stringify({ type: 'init', data: await getStatusData() })}\n\n`);
 
     req.on('close', () => {
         clients = clients.filter(client => client !== res);
@@ -1978,8 +2034,8 @@ app.get('/api/stream', (req, res) => {
 let debounceTimer = null;
 function broadcastUpdate() {
     if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => {
-        const data = getStatusData();
+    debounceTimer = setTimeout(async () => {
+        const data = await getStatusData();
         const payload = `data: ${JSON.stringify({ type: 'update', data })}\n\n`;
         clients.forEach(client => client.write(payload));
     }, 100);

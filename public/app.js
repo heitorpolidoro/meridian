@@ -1201,6 +1201,39 @@ document.addEventListener('click', (event) => {
     if (badge) badge.remove();
 }, true);
 
+// Clearing a stale `running` flag is a real write, unlike dismissing a
+// refusal badge above — it goes through the same PUT every other writer of
+// `running` uses, with `clearStale: true` so the server re-checks staleness
+// at the moment of this click rather than trusting the render that showed
+// the button (see the guard in server.js's PUT handler). Capture phase for
+// the same reason as the other card buttons: this sits inside a `.task-card`
+// that opens the task modal on click.
+document.addEventListener('click', async (event) => {
+    const clearBtn = event.target.closest('[data-clear-stale]');
+    if (!clearBtn) return;
+    event.stopPropagation();
+    const taskId = clearBtn.dataset.clearStale;
+    const projectPath = clearBtn.dataset.project;
+    if (!taskId || !projectPath) return;
+
+    try {
+        const res = await fetch(`/api/projects/tasks/${taskId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectPath, running: false, clearStale: true })
+        });
+        if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            showFlashMessage(data.error || 'Could not clear the running flag', 'error');
+        }
+        // On success the file write triggers the usual SSE update, which
+        // redraws the card without `staleRunning` and drops this badge —
+        // no optimistic DOM edit needed here.
+    } catch (err) {
+        showFlashMessage('Network error clearing the running flag', 'error');
+    }
+}, true);
+
 document.addEventListener('click', async (event) => {
     const btn = event.target.closest('[data-dispatch-action]');
     if (!btn) return;
@@ -1801,6 +1834,23 @@ function renderTaskCardHtml(task, allTasks) {
                 + `<button type="button" class="task-refusal-clear" data-clear-refusal="${escapeHtml(dismissKey)}" `
                 + `title="Dismiss this refusal reason" aria-label="Dismiss">×</button></span>`;
         }
+    }
+    // `staleRunning` (computed server-side, see lib/stale-running.js and its
+    // use in server.js#getStatusData) says the flag is `true` with nothing
+    // behind it — the run that set it died without the plugin's stop hook
+    // clearing it, and it now permanently blocks dispatch on its own
+    // (dispatchEligibility refuses any `running: true` task). Independent of
+    // the dispatch-button branches above: a task can carry this on any
+    // status, whether or not it also happens to be queued right now. Reuses
+    // the same queue-badge surface the stuck-queue case above uses, rather
+    // than a third kind of banner.
+    if (task.staleRunning) {
+        const label = 'Marked as running, but nothing is working it — this blocks dispatch';
+        queueBadgeHtml += `<span class="task-queue-badge task-queue-badge--refused" title="${escapeHtml(label)}">`
+            + `${escapeHtml(label)} `
+            + `<button type="button" class="task-refusal-clear" data-clear-stale="${escapeHtml(task.id)}" `
+            + `data-project="${escapeHtml(dispatchProjectPath || '')}" `
+            + `title="Clear the stale running flag" aria-label="Clear the stale running flag">Clear</button></span>`;
     }
 
     return `
