@@ -145,10 +145,21 @@ PYEOF
     -d "$payload" >/dev/null 2>&1 || true
 }
 
-put_running() { # $1 = task id, $2 = cwd as JSON string, $3 = true|false
+# $4, the session id, is what lets the board tell an orphaned flag from a
+# live one later: Meridian asks whether THIS session is still in
+# `claude agents --json` instead of guessing from whatever else is running in
+# the directory (see lib/stale-running.js). Optional on purpose — a harness
+# that reports no session id still sets the flag, and the board falls back to
+# its heuristic. Restricted to id-shaped characters so it cannot break out of
+# the JSON string it is spliced into.
+put_running() { # $1 = task id, $2 = cwd as JSON string, $3 = true|false, $4 = session id (optional)
+  local extra=""
+  local sid
+  sid=$(printf '%s' "$4" | tr -cd 'A-Za-z0-9._-')
+  [ -n "$sid" ] && extra=",\"running_session\":\"$sid\""
   curl -sS -m 2 -X PUT "$BASE/api/projects/tasks/$1" \
     -H 'Content-Type: application/json' \
-    -d "{\"projectPath\":$2,\"running\":$3}" >/dev/null 2>&1 || true
+    -d "{\"projectPath\":$2,\"running\":$3$extra}" >/dev/null 2>&1 || true
 }
 
 marker_id() {
@@ -162,7 +173,7 @@ case "$MODE" in
     ID="$(marker_id)"; [ -n "$ID" ] || exit 0
     CWD="$(cwd_json)"; [ -n "$CWD" ] || exit 0
     if [ "$MODE" = "pre" ]; then
-      put_running "$ID" "$CWD" true
+      put_running "$ID" "$CWD" true "$(session_id)"
       printf '%s\t%s\n' "$ID" "$CWD" >> "$LEDGER"
     else
       if is_antigravity; then

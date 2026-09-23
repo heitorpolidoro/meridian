@@ -52,6 +52,7 @@ truncate the file, and never write it from an empty in-memory list.
 | `qa_iterations` | integer, QA revision rounds consumed | agent |
 | `last_review_findings` | array of strings — **only** the current round's blocking findings; cleared on pass | agent |
 | `running` | boolean — `true` while an agent is actively working the task | agent |
+| `running_session` | string — the id of the session that set `running: true`, so the board can tell an orphaned flag from a live one. Written and cleared with `running` by the plugin's hook; never set it by hand | hook |
 | `resume_context` | string — a brief note left at interruption to ease resuming; **cleared by the server on any status change** | agent, and the plugin's stop hook |
 | `created_at` | ISO-8601 UTC string | **server only** |
 | `updated_at` | ISO-8601 UTC string | **server only** |

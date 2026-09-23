@@ -137,6 +137,14 @@ function validateTaskFields(body) {
     if (body.questions !== undefined && !Array.isArray(body.questions)) {
         return `Invalid questions: expected an array, got ${body.questions === null ? 'null' : typeof body.questions}. Omit the field to leave it unchanged.`;
     }
+    // The session id that owns a `running: true` flag. Only a string is
+    // usable — it is matched against sessionId in `claude agents --json` —
+    // and a wrong type here would silently degrade the task to the guessing
+    // heuristic instead of failing loudly.
+    if (body.running_session !== undefined && body.running_session !== null
+        && typeof body.running_session !== 'string') {
+        return `Invalid running_session: expected a string, got ${typeof body.running_session}.`;
+    }
     return null;
 }
 
@@ -505,13 +513,18 @@ async function liveSessionFor(projectPath) {
 // interactive sessions too — unlike the background-only lock above, a human
 // working a task by hand from their own terminal must not be mistaken for a
 // stale flag with nothing behind it.
+// Returns the live session list, or null when the probe itself failed (no
+// CLI, a banner instead of JSON, a timeout). The two are not the same
+// answer: isRunningStale treats an empty list as "that session is gone" and
+// null as "we cannot see", and a task whose recorded session is alive must
+// not be declared stale just because the probe tripped.
 async function liveSessionsList() {
     const probe = await runTooling(['claude', 'agents', '--json'], 10000);
     try {
         const list = JSON.parse(probe.stdout);
-        return Array.isArray(list) ? list : [];
+        return Array.isArray(list) ? list : null;
     } catch (err) {
-        return [];
+        return null;
     }
 }
 
@@ -1699,7 +1712,8 @@ app.post('/api/projects/tasks', (req, res) => {
 
 // REST API to update a task. Accepts the full task schema: status, title,
 // justification, priority, spec_path, spec_iterations, code_review_iterations,
-// qa_iterations, blockedBy, expected_results, last_review_findings, running.
+// qa_iterations, blockedBy, expected_results, last_review_findings, running,
+// running_session.
 // Timestamps (updated_at, moved_at, completed_at) are server-owned.
 app.put('/api/projects/tasks/:taskId', async (req, res) => {
     try {
@@ -1790,6 +1804,17 @@ app.put('/api/projects/tasks/:taskId', async (req, res) => {
             task.parent = req.body.parent;
         }
         if (req.body.running !== undefined) task.running = Boolean(req.body.running);
+        // Who owns the flag. Recorded with the flag and dropped with it: a
+        // running_session outliving `running: false` would be read by the
+        // next setter that forgets to send one, pinning the task to a session
+        // that has nothing to do with it. Clearing here rather than trusting
+        // every caller to send null keeps that impossible.
+        if (task.running !== true) {
+            delete task.running_session;
+        } else if (req.body.running_session !== undefined) {
+            if (req.body.running_session) task.running_session = req.body.running_session;
+            else delete task.running_session;
+        }
 
         stampTaskUpdate(task, prevStatus);
         // The stamp clears resume_context on a status change; a note provided

@@ -95,3 +95,54 @@ test('no projectPath given: never matches a session, so only the lock can save i
     const sessions = [{ pid: 1, kind: 'interactive', cwd: PROJECT, status: 'busy' }];
     assert.equal(isRunningStale(task, { lock: null, sessions, projectPath: undefined }), true);
 });
+
+// --- the recorded session: the evidence that does not need a guess ---
+
+test('a recorded session still in the live list is not stale, even when idle', () => {
+    // The whole point. An operator's session between turns reads `idle`, and
+    // the heuristic below would call this stale; the recorded id knows better.
+    const task = { id: 'T-1', running: true, running_session: 'sess-abc' };
+    const sessions = [{ pid: 1, kind: 'interactive', cwd: PROJECT, status: 'idle', sessionId: 'sess-abc' }];
+    assert.equal(isRunningStale(task, { lock: null, sessions, projectPath: PROJECT }), false);
+});
+
+test('a recorded session gone from the live list is stale', () => {
+    const task = { id: 'T-1', running: true, running_session: 'sess-abc' };
+    const sessions = [{ pid: 2, kind: 'interactive', cwd: PROJECT, status: 'busy', sessionId: 'sess-other' }];
+    assert.equal(isRunningStale(task, { lock: null, sessions, projectPath: PROJECT }), true,
+        'nothing left that could ever clear the flag');
+});
+
+test('a recorded session is matched by id alone, not by directory', () => {
+    // A session id is unique; where it is running is irrelevant to whether it
+    // exists. A worktree or a subdirectory must not read as a dead session.
+    const task = { id: 'T-1', running: true, running_session: 'sess-abc' };
+    const sessions = [{ pid: 1, cwd: '/tmp/some-other-project', status: 'busy', sessionId: 'sess-abc' }];
+    assert.equal(isRunningStale(task, { lock: null, sessions, projectPath: PROJECT }), false);
+});
+
+test('a recorded session with a failed probe (null) is never stale', () => {
+    // A probe that cannot see a session is not evidence the session ended.
+    const task = { id: 'T-1', running: true, running_session: 'sess-abc' };
+    assert.equal(isRunningStale(task, { lock: null, sessions: null, projectPath: PROJECT }), false);
+    assert.equal(isRunningStale(task, { lock: null, sessions: undefined, projectPath: PROJECT }), false);
+});
+
+test('an empty live list is a real answer: the recorded session is gone', () => {
+    const task = { id: 'T-1', running: true, running_session: 'sess-abc' };
+    assert.equal(isRunningStale(task, { lock: null, sessions: [], projectPath: PROJECT }), true);
+});
+
+test('the dispatch lock still outranks the recorded session', () => {
+    const task = { id: 'T-1', running: true, running_session: 'sess-gone' };
+    const lock = { pid: 1234, taskId: 'T-1' };
+    assert.equal(isRunningStale(task, { lock, sessions: [], projectPath: PROJECT }), false);
+});
+
+test('an empty or non-string running_session falls back to the heuristic', () => {
+    const busy = [{ pid: 1, kind: 'interactive', cwd: PROJECT, status: 'busy' }];
+    assert.equal(isRunningStale({ id: 'T-1', running: true, running_session: '' },
+        { lock: null, sessions: busy, projectPath: PROJECT }), false, 'heuristic: busy session blocks');
+    assert.equal(isRunningStale({ id: 'T-1', running: true, running_session: 42 },
+        { lock: null, sessions: [], projectPath: PROJECT }), true, 'heuristic: nothing live');
+});

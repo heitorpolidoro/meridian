@@ -160,3 +160,53 @@ test('an ordinary running: false write (no clearStale) is unaffected by the guar
         assert.equal(body.task.running, false);
     });
 });
+
+// --- running_session: recorded with the flag, honoured by the verdict ---
+//
+// The `claude agents --json` probe is unreachable in this suite (see
+// NODE_ONLY_BIN above), which now reads as "the probe failed", NOT as "no
+// sessions exist". That distinction is the point of these tests: a task that
+// names its owning session must not be declared stale on evidence the server
+// could not gather.
+
+test('a PUT recording running_session stores it, and running: false drops it', async () => {
+    const { ws, dir } = workspaceWith(TASKS);
+    await withServer(ws, async (base) => {
+        const set = await put(base, dir, 'TST-2', { running: true, running_session: 'sess-xyz' });
+        assert.equal(set.status, 200);
+        assert.equal((await set.json()).task.running_session, 'sess-xyz');
+
+        // It must survive a write that does not mention it.
+        const touch = await put(base, dir, 'TST-2', { priority: 'high' });
+        assert.equal((await touch.json()).task.running_session, 'sess-xyz');
+
+        // Clearing the flag clears its owner; an orphan id would be read by
+        // the next setter that forgets to send one.
+        const clear = await put(base, dir, 'TST-2', { running: false });
+        assert.equal((await clear.json()).task.running_session, undefined);
+    });
+});
+
+test('a non-string running_session is refused rather than silently ignored', async () => {
+    const { ws, dir } = workspaceWith(TASKS);
+    await withServer(ws, async (base) => {
+        const res = await put(base, dir, 'TST-2', { running: true, running_session: 42 });
+        assert.equal(res.status, 400);
+        assert.match((await res.json()).error, /running_session/);
+    });
+});
+
+test('a task naming a session is not stale while the probe cannot see the session list', async () => {
+    const tasks = [{ ...TASKS[0], running_session: 'sess-abc' }, TASKS[1]];
+    const { ws, dir } = workspaceWith(tasks);
+    await withServer(ws, async (base) => {
+        const proj = await statusFor(base, dir);
+        assert.equal(proj.tasks.find(t => t.id === 'TST-1').staleRunning, false,
+            'a failed probe is not evidence the session ended');
+
+        // And the guard on the clear button agrees, so the flag cannot be
+        // cleared out from under a session the server merely failed to see.
+        const res = await put(base, dir, 'TST-1', { running: false, clearStale: true });
+        assert.equal(res.status, 409);
+    });
+});
