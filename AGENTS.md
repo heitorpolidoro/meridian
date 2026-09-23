@@ -1,104 +1,161 @@
 # Project Context & Purpose
 
-Meridian is a **workspace status dashboard** for a developer (referred to internally as "the CTO") who manages multiple independent software projects at once. It solves the problem of losing visibility into the state of many concurrent projects — what's in progress, what's blocked, which projects are missing basic documentation (like an `AGENTS.md`), and what an AI orchestrator agent should work on next.
+Meridian is a **board and dispatch server** for a workspace holding several
+independent projects at once. It answers two questions its operator would
+otherwise lose track of: what state is each project in, and what should be
+worked on next.
 
 It has two audiences:
-1. **The human user**, who gets a live, auto-refreshing web dashboard listing every tracked project, its declared tech stack, description, and task backlog.
-2. **AI agents**, specifically an orchestrator persona named **Odin** ("Chief of Staff"), who reads the same underlying data files (`.meridian/projects.json`, per-project `.meridian/project-info.json`, and per-project `.meridian/tasks.jsonl`) to coordinate work, delegate to specialist subagents, and produce executive briefings across all managed projects.
 
-Meridian itself does not implement project work — it is meta-tooling: a registry, dashboard, and light automation layer sitting above a workspace of unrelated projects.
+1. **A human**, who gets a live web dashboard — one card per tracked project,
+   with its stack, description, task board, and health warnings — plus a
+   settings screen for the agent CLIs it drives.
+2. **AI agents**, which read and write the same files through the server's
+   REST API. The plugin in `plugin/` ships the skills, agents and hooks that
+   let an agent drive a task from backlog to done.
+
+Meridian implements none of the projects' own work. It is meta-tooling: a
+registry, a board, and the machinery for handing a task to an agent.
 
 # High-level Architecture
 
-Meridian is a small single-process Node.js application with three cooperating parts:
+A single-process Node.js application. No database — the filesystem is the
+data layer, and state is derived from it rather than stored a second time.
 
-- **Backend (`server.js`)** — An Express app that:
-  - Aggregates status data by reading a global project registry plus each tracked project's local metadata and task files (no database; the filesystem is the data layer).
-  - Serves a REST API for managing the project registry (add/edit projects, list candidate directories).
-  - Pushes live updates to the browser over **Server-Sent Events** (`/api/stream`), triggered by `fs.watch` watchers on `projects.json` and every tracked project's `.meridian/` directory.
-  - Implements a "Fix with AI" feature: on request, it spawns an external AI CLI (`claude` or `agy`) as a child process inside the target project's directory, feeding it a canned prompt (from `prompts/`) to auto-generate a missing `AGENTS.md`, infer the tech `stack`, or write a `description`. Progress/log output is streamed back to the browser via the same SSE channel.
-  - Performs a one-time startup migration from an older centralized `projects.json` schema (which embedded `name`/`stack`/`purpose` per entry) to the current **decentralized** schema, where the global file only stores project `path`s and each project owns its own metadata in `.meridian/project-info.json`.
+- **Backend (`server.js`, `lib/`)** — An Express 5 app that:
+  - Aggregates the board by reading a global registry plus each tracked
+    project's own metadata and tasks. `server.js` wires HTTP to the pure
+    modules in `lib/`, where the decisions live.
+  - Serves a REST API for the registry, the tasks, the dispatch queue and the
+    CLI tooling state.
+  - Pushes live updates over **Server-Sent Events** (`/api/stream`), driven by
+    `fs.watch` on the registry and on every tracked project's `.meridian/`.
+  - **Dispatches tasks to an agent**: spawns `claude -p` inside the target
+    project, one run per repository at a time, reading the verdict from the
+    CLI's structured result rather than its exit code. Each run leaves a log
+    under the project's `.meridian/runs/`.
+  - Reports and repairs the state of the agent CLIs themselves — whether each
+    is installed, authenticated, and running the plugin this repository ships.
+  - Migrates older on-disk formats forward on startup.
 
-- **Frontend (`public/`)** — Static, dependency-free HTML/CSS/vanilla JS (`index.html`, `app.js`, `styles.css`). It connects to the SSE stream on load, renders a card per project (name, description, stack badges, task list, warning badges for missing metadata), and provides modals for adding/editing a project and for launching "Fix with AI" runs.
+- **Frontend (`public/`)** — Static, dependency-free HTML/CSS/vanilla JS. No
+  build step, no framework, no bundler, and **no module system**: shared logic
+  that must exist on both sides is written once in `lib/` and copied inline
+  into `app.js`, with a comment on both copies saying so.
 
-- **CLI (`cli.js`, `meridian_sync`)**:
-  - `cli.js` is the `meridian` command-line entrypoint. `meridian start` launches `server.js` as a detached background process (logs to `meridian-out.log` / `meridian-err.log`); `meridian add <path>` registers a new project directory in the global registry without going through the UI.
-  - `meridian_sync` is a standalone bash script (independent of the Node app) that copies the Odin agent persona definition (`agents/Odin.md`) into the parent workspace's shared agent directory (`../.agents/orchestrator/AGENT.md`), so other tooling in the workspace can load Odin as the active orchestrator agent.
+- **Plugin (`plugin/plugins/meridian/`)** — What the agent actually runs:
+  skills (`/meridian:work`, `:next`, `:status`, `:new`), specialist agent
+  definitions, reference docs, and the hooks that keep a task's `running` flag
+  honest. Installed into Claude Code from this directory as a local
+  marketplace, and into Antigravity by copy. See **Repository Conventions**
+  below — a change here is inert until its version is raised.
 
-- **Data layer** — Entirely file-based, no database:
-  - `<RUNNING_DIR>/.meridian/projects.json` — global registry, one entry per tracked project (`{ path }`).
-  - `<project>/.meridian/project-info.json` — per-project metadata: `name`, `description`, `stack` (array of technologies).
-  - `<project>/.meridian/tasks.jsonl` — per-project task backlog, one compact JSON object per line (see Domain Concepts).
-  - `<project>/.meridian/tasks/<id>.json` — the `expected_results` of one task, kept out of the line so the board payload stays small.
-  - `<project>/AGENTS.md` — per-project knowledge base for AI agents; its mere presence/absence is tracked and surfaced as a dashboard warning.
+- **CLI (`cli.js`)** — `meridian start` / `restart` / `stop` run the server as
+  a detached background process (logs to `meridian-out.log` and
+  `meridian-err.log`); `meridian add <path>` registers a project directory
+  without the UI.
 
-- **Agent layer (`agents/`, `prompts/`)** — Not executable code, but consumed by AI coding tools:
-  - `agents/Odin.md` defines the Odin orchestrator persona (responsibilities, task schema, delegation protocol, briefing format) used by external agent-runner tooling (e.g. Claude Code, AGY) elsewhere in the workspace.
-  - `prompts/*.txt` are prompt templates used by the backend's "Fix with AI" feature (`agents.txt`, `stack.txt`, `description.txt`), each instructing an AI CLI to generate/repair one specific piece of a target project's metadata.
+- **Data layer** — Entirely file-based:
+  - `<RUNNING_DIR>/.meridian/projects.json` — the global registry, one `path`
+    per tracked project.
+  - `<project>/.meridian/project-info.json` — `name`, `key`, `description`,
+    `stack`.
+  - `<project>/.meridian/tasks.jsonl` — the backlog, one compact JSON object
+    per line.
+  - `<project>/.meridian/tasks/<id>.json` — one task's `expected_results`,
+    kept off the line so the board payload stays small.
+  - `<project>/.meridian/runs/` — per-run dispatch logs, and the lock naming
+    the run in flight.
+  - `<project>/.meridian/events.jsonl` — the append-only history the stats
+    view is computed from.
+  - `<project>/AGENTS.md` — the project's own agent knowledge base; its
+    presence is a tracked health signal.
 
 # Key Technologies & Stack
 
-- **Node.js** (CommonJS modules, `type: "commonjs"` in `package.json`) — runtime for both the server and CLI.
-- **Express 5** — HTTP server, static file serving, JSON body parsing, REST routes.
-- **Server-Sent Events (native, via raw `res.write`)** — real-time push of dashboard updates and AI-fix progress/logs to the browser; no WebSocket library used.
-- **Node `fs.watch`** — filesystem change detection driving the SSE push model.
-- **Node `child_process.spawn`** — shells out to external AI CLIs (`claude`, `agy`) for the "Fix with AI" automation.
-- **Vanilla JavaScript, HTML, CSS** — the entire frontend, no build step, no framework, no bundler.
-- **Bash** — `meridian_sync` utility script.
-- **Google Fonts (Inter)** — only external runtime dependency in the UI.
+- **Node.js** (CommonJS, `type: "commonjs"`) — server, CLI and scripts.
+- **Express 5** — HTTP, static serving, JSON bodies, REST routes.
+- **Server-Sent Events** (native `res.write`, no library) — live board updates
+  and streamed command output.
+- **Node `fs.watch`** — change detection driving the push model.
+- **Node `child_process.spawn`** — every external CLI call: dispatch runs,
+  tooling probes, plugin installs.
+- **`node:test`** — the whole suite, run with `npm test`. No test framework
+  and no assertion library beyond `node:assert/strict`.
+- **Vanilla JavaScript, HTML, CSS** — the entire frontend.
+- **Bash** — the plugin's hooks and the repository's own git hook.
 
 # Directory Structure
 
 ```
 meridian/
-├── server.js              # Express app: REST API, SSE stream, filesystem aggregation, AI-fix orchestration
-├── cli.js                 # `meridian` CLI entrypoint (start / add commands)
-├── meridian_sync           # Bash script: syncs agents/Odin.md into the workspace's shared agent directory
-├── package.json / package-lock.json
-├── public/                 # Static frontend served by Express
-│   ├── index.html          # Dashboard markup + Add/Edit Project and Fix-with-AI modals
-│   ├── app.js               # SSE client, project card rendering, modal/form logic, fix-with-AI flow
-│   └── styles.css           # Dashboard styling
-├── agents/
-│   └── Odin.md              # Chief-of-Staff orchestrator agent persona/protocol definition
-├── prompts/                 # Prompt templates used by the "Fix with AI" backend feature
-│   ├── agents.txt            # Prompt to generate a missing AGENTS.md
-│   ├── stack.txt              # Prompt to infer/rewrite the `stack` field in project-info.json
-│   └── description.txt        # Prompt to infer/rewrite the `description` field in project-info.json
-├── .meridian/
-│   └── project-info.json    # Meridian's own metadata entry (name/description/stack), same schema it expects of tracked projects
-├── meridian-out.log / meridian-err.log   # stdout/stderr logs from `meridian start` (detached server process)
-└── test-spawn.js            # Standalone scratch script for experimenting with child_process spawning
-```
-
-Data owned by *tracked* projects (not part of this repo, but read/written by it at runtime):
-```
-<tracked-project>/.meridian/project-info.json   # name, description, stack[]
-<tracked-project>/.meridian/tasks.jsonl          # task backlog, one JSON object per line
-<tracked-project>/.meridian/tasks/<id>.json      # per-task expected_results
-<tracked-project>/AGENTS.md                       # presence is tracked as a health signal
+├── server.js               # Express app: REST API, SSE, aggregation, dispatch orchestration
+├── cli.js                  # `meridian` entrypoint: start / restart / stop / add
+├── lib/                    # The decisions, as pure testable modules
+│   ├── tasks.js            #   read/write tasks.jsonl and the detail files
+│   ├── board.js            #   board shaping and the workable-task view
+│   ├── projects.js         #   the global registry
+│   ├── events.js           #   the append-only event log
+│   ├── stats.js            #   metrics derived from events
+│   ├── dispatch-*.js       #   queue, eligibility, command, lock, sessions, outcome
+│   ├── stale-running.js    #   whether a `running: true` flag is orphaned
+│   ├── run-log.js          #   per-run log files
+│   ├── tooling.js          #   CLI probes, states and the command each one implies
+│   ├── plugin-sync.js      #   is the installed plugin still this repository's
+│   ├── allowlist-template.js, gitignore.js, routes.js
+│   └── command-highlight.js, inline-markdown.js   # also copied inline into public/app.js
+├── public/                 # Frontend, served statically
+│   ├── index.html          #   dashboard, project view, settings, modals
+│   ├── app.js              #   SSE client, rendering, dispatch controls, settings
+│   ├── styles.css
+│   └── icons/, favicon.svg
+├── plugin/plugins/meridian/   # The plugin agents run (see Repository Conventions)
+│   ├── .claude-plugin/plugin.json   #   its manifest — the version that gates updates
+│   ├── skills/             #   /meridian:work, :next, :status, :new
+│   ├── agents/             #   pm, spec-generator, spec-reviewer, developer, code-reviewer, qa
+│   ├── references/         #   schema.md is the single source of truth for the task schema
+│   ├── hooks/, hooks.json  #   the running-flag and permission hooks
+│   └── scripts/            #   running-flag.sh, allow-meridian.sh
+├── .claude-plugin/marketplace.json   # makes this repo a local plugin marketplace
+├── .githooks/pre-commit    # refuses a plugin change that forgets its version bump
+├── scripts/                # one-shot migrations and maintenance, each guarded by require.main
+├── prompts/                # prompt templates for the "Fix with AI" metadata repair
+├── test/                   # node:test suite, one file per module or endpoint group
+├── docs/                   # specs, plans and operational notes
+└── .meridian/              # Meridian's own board, tracked like any other project
 ```
 
 # Domain Concepts
 
-- **Project (registry entry)** — A workspace subdirectory that has been registered with Meridian. The global registry only stores its filesystem `path`; all descriptive metadata lives inside the project itself.
-- **Decentralized architecture** — The current data model where each project owns its own `.meridian/project-info.json`, as opposed to the legacy model where the global `projects.json` embedded every project's `name`, `stack`, and `purpose` directly. `server.js` auto-migrates old-format entries on startup.
-- **`project-info.json`** — Per-project metadata file: `name`, `description`, `stack` (array of technology strings).
-- **`tasks.jsonl`** — Per-project task backlog: one compact JSON object per line, no wrapping array and no `tasks` key. Each task's `expected_results` lives beside it in `.meridian/tasks/<id>.json`, so the board can be served without them; `GET /api/projects/tasks/:taskId` serves a task with the field hydrated. The canonical field list, the nine statuses and the timestamp rules are defined in `plugin/plugins/meridian/references/schema.md`, which is the single source of truth.
-- **Health signals / "missing" badges** — The dashboard flags a project as missing `AGENTS.md`, missing `stack`, or missing `description`, computed by `getStatusData()` in `server.js` on every aggregation pass.
-- **Fix with AI** — A dashboard action that shells out to an AI coding CLI (`claude` or `agy`) inside a specific tracked project's directory, using one of the `prompts/*.txt` templates, to auto-remediate a missing-metadata health signal. Output streams back to the UI live over SSE.
-- **Odin / Chief of Staff** — An AI orchestrator persona (defined in `agents/Odin.md`, synced elsewhere via `meridian_sync`) that consumes Meridian's data files to track tasks, delegate to specialist subagents, identify blocked work, and produce executive "CTO briefings" summarizing the state of all managed projects. Odin does not modify production code directly — it only delegates and records.
-- **CTO** — The human operator of the workspace; the audience for Odin's briefings and the user of the Meridian dashboard.
-- **Subagent** — A specialist AI agent (e.g. a "react-expert") that Odin delegates individual tasks to; dispatched by the Meridian skills against a single task at a time.
-- **`RUNNING_DIR`** — The directory Meridian treats as the workspace root when locating the global `.meridian/projects.json`; defaults to the current working directory but is overridable via the `MERIDIAN_RUNNING_DIR` environment variable.
-
-
-
-
-
-
-
-
+- **Project (registry entry)** — A workspace subdirectory registered with
+  Meridian. The registry stores only its `path`; every descriptive field lives
+  inside the project.
+- **Decentralized metadata** — Each project owns its `project-info.json`. The
+  legacy shape, where the global registry embedded each project's name and
+  stack, is migrated away on startup.
+- **`tasks.jsonl`** — One compact JSON object per line; no wrapping array and
+  no `tasks` key. The canonical field list, the nine statuses and the
+  timestamp rules live in `plugin/plugins/meridian/references/schema.md`,
+  which is the single source of truth.
+- **Dispatch** — Handing a task to an agent from the board. The server spawns
+  `claude -p` in the project directory with a permission allowlist, holds a
+  one-run-per-repository lock, and records the outcome. A refusal is kept and
+  shown rather than discarded, so a run that never started says why.
+- **Derived over stored** — The recurring rule behind the dispatch design. A
+  lock is a pid that either answers or does not; a session list is whatever
+  the CLI reports right now. Stored flags go stale and need a janitor, which
+  is the lesson the `running` flag taught twice.
+- **`running` / `running_session`** — `running` marks a task an agent is
+  working; `running_session` records which session set it, so an orphaned flag
+  can be told from a live one without guessing.
+- **Health signals** — Missing `AGENTS.md`, `stack` or `description`, computed
+  on every aggregation pass and shown as badges.
+- **Fix with AI** — A dashboard action that runs an agent CLI inside a project
+  with a template from `prompts/` to repair one of those missing fields,
+  streaming its output back over SSE.
+- **`RUNNING_DIR`** — The directory treated as the workspace root when
+  locating the global registry. Defaults to the working directory, overridable
+  with `MERIDIAN_RUNNING_DIR`.
 
 # Repository Conventions
 
