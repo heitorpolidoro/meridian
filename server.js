@@ -20,7 +20,7 @@ const { dispatchEligibility, NO_ALLOWLIST_REASON, selectAutoCandidate } = requir
 const { isRunningStale } = require('./lib/stale-running');
 const { dispatchOutcome, clearOutcomeFor } = require('./lib/dispatch-outcome');
 const { runLogPath, appendRunLog, listRunLogs } = require('./lib/run-log');
-const { detectRunner, allowlistFor } = require('./lib/allowlist-template');
+const { detectRunner, allowlistFor, allowlistDrift } = require('./lib/allowlist-template');
 
 const app = express();
 const PORT = process.env.PORT || 3333;
@@ -273,15 +273,28 @@ function hasNonEmptyAllow(parsed) {
 // both of which the endpoint below is free to complete.
 function projectAllowlist(projectPath) {
     const settingsPath = path.join(projectPath, '.claude', 'settings.json');
-    if (!fs.existsSync(settingsPath)) return { hasFile: false, hasAllow: false };
+    if (!fs.existsSync(settingsPath)) return { hasFile: false, hasAllow: false, settings: null };
     try {
         const parsed = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
-        return { hasFile: true, hasAllow: hasNonEmptyAllow(parsed) };
+        return { hasFile: true, hasAllow: hasNonEmptyAllow(parsed), settings: parsed };
     } catch (err) {
         // Malformed JSON is a file the operator wrote and got wrong, not one
-        // Meridian may overwrite or pretend does not exist.
-        return { hasFile: true, hasAllow: false };
+        // Meridian may overwrite or pretend does not exist. `settings: null`
+        // keeps drift silent on it too: nothing is missing from a file nobody
+        // can read, and the operator has a JSON error to fix first.
+        return { hasFile: true, hasAllow: false, settings: null };
     }
+}
+
+// What an existing allowlist is missing, or null when there is nothing to
+// compare — no readable file, or no allowlist in it yet, in which case the
+// card offers to create one instead. Computed per aggregation pass; the reads
+// are two small files and the template's own detection.
+function allowlistDriftFor(projectPath, allowlist) {
+    if (!allowlist.hasAllow || !allowlist.settings) return null;
+    const drift = allowlistDrift(allowlist.settings, allowlistFor(detectRunner(projectPath)));
+    const total = drift.missingAllow.length + drift.missingDeny.length;
+    return total ? { ...drift, total } : null;
 }
 
 // Helper to fetch aggregated data from decentralized storage.
@@ -442,6 +455,12 @@ async function getStatusData(options = {}) {
                     // `allow` list closes this off — that is the one case
                     // the endpoint below refuses with 409.
                     canCreateAllowlist: !allowlist.hasAllow,
+                    // Present only when an existing allowlist is missing
+                    // something the template would put there today — the
+                    // deny list in particular, which is read from this
+                    // repository at generation time and so falls behind
+                    // silently in every project generated before it grew.
+                    allowlistDrift: allowlistDriftFor(projPath, allowlist),
                     lastRun: lastRun.get(projPath) || null
                 });
             }
@@ -881,7 +900,11 @@ app.post('/api/projects/allowlist', (req, res) => {
         // Meridian may rewrite out from under them.
         return res.status(409).json({ error: '.claude/settings.json is not valid JSON' });
     }
-    if (hasNonEmptyAllow(existing)) {
+    if (hasNonEmptyAllow(existing) && req.body.fix !== true) {
+        // A blind create must still refuse: completing an allowlist the
+        // operator wrote, without their having asked for exactly that, is
+        // not Meridian's call. `fix: true` IS them asking — the board only
+        // sends it from a button that named every entry it would add.
         return res.status(409).json({ error: '.claude/settings.json already has a dispatch allowlist' });
     }
 

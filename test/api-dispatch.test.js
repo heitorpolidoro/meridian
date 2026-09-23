@@ -545,3 +545,129 @@ test('GET /app.js carries a global Dispatch all/Stop queue that acts on every re
         assert.match(body, /failed/);
     });
 });
+
+// --- Fix allowlist: the drift a project cannot notice on its own ---
+//
+// The deny list is read from THIS repository's settings at generation time,
+// never copied, so a project generated before a deny entry existed keeps the
+// older list forever. These cover the board seeing that, and the one intent
+// that is allowed to close it.
+
+const { allowlistFor, detectRunner } = require('../lib/allowlist-template');
+
+// A settings.json that is a real allowlist but predates part of the template.
+function settingsMissing(dir, { dropAllow = 0, dropDeny = 0 } = {}) {
+    const want = allowlistFor(detectRunner(dir)).permissions;
+    fs.mkdirSync(path.join(dir, '.claude'), { recursive: true });
+    const settings = {
+        permissions: {
+            allow: want.allow.slice(dropAllow),
+            deny: want.deny.slice(dropDeny)
+        }
+    };
+    // Keep it a real allowlist even when everything generated was dropped.
+    if (!settings.permissions.allow.length) settings.permissions.allow = ['Bash(echo operator-owned)'];
+    fs.writeFileSync(path.join(dir, '.claude', 'settings.json'),
+        JSON.stringify(settings, null, 2) + '\n');
+    return path.join(dir, '.claude', 'settings.json');
+}
+
+const projectOf = async (base, dir) =>
+    (await (await fetch(`${base}/api/status?project=${encodeURIComponent(dir)}`)).json()).projects[0];
+
+test('status reports no allowlistDrift for a complete allowlist', async () => {
+    const { ws, dir } = workspaceWith(TASKS);
+    settingsMissing(dir);
+    await withServer(ws, async base => {
+        const proj = await projectOf(base, dir);
+        assert.equal(proj.allowlistDrift, null);
+        assert.equal(proj.canCreateAllowlist, false);
+    });
+});
+
+test('status reports what an incomplete allowlist is missing', async () => {
+    const { ws, dir } = workspaceWith(TASKS);
+    settingsMissing(dir, { dropDeny: 2 });
+    await withServer(ws, async base => {
+        const proj = await projectOf(base, dir);
+        assert.ok(proj.allowlistDrift, 'the board must be able to offer the fix');
+        assert.equal(proj.allowlistDrift.total, 2);
+        assert.equal(proj.allowlistDrift.missingDeny.length, 2);
+        assert.deepEqual(proj.allowlistDrift.missingAllow, []);
+    });
+});
+
+test('an operator addition is never reported as drift', async () => {
+    const { ws, dir } = workspaceWith(TASKS);
+    const settingsPath = settingsMissing(dir);
+    const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+    settings.permissions.allow.push('Bash(docker compose up:*)');
+    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+    await withServer(ws, async base => {
+        assert.equal((await projectOf(base, dir)).allowlistDrift, null);
+    });
+});
+
+test('fix: true adds the missing entries and keeps everything else', async () => {
+    const { ws, dir } = workspaceWith(TASKS);
+    const settingsPath = settingsMissing(dir, { dropDeny: 2 });
+    const before = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+    before.permissions.allow.push('Bash(docker compose up:*)');
+    before.enabledPlugins = { 'something@somewhere': true };
+    fs.writeFileSync(settingsPath, JSON.stringify(before, null, 2) + '\n');
+
+    await withServer(ws, async base => {
+        const res = await post(base, '/api/projects/allowlist', { projectPath: dir, fix: true });
+        assert.equal(res.status, 200);
+
+        const after = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        const want = allowlistFor(detectRunner(dir)).permissions;
+        for (const entry of want.deny) assert.ok(after.permissions.deny.includes(entry), `deny ${entry}`);
+        assert.ok(after.permissions.allow.includes('Bash(docker compose up:*)'),
+            "the operator's own entry survives");
+        assert.deepEqual(after.enabledPlugins, { 'something@somewhere': true },
+            'unrelated keys in the file are untouched');
+        assert.equal(new Set(after.permissions.deny).size, after.permissions.deny.length,
+            'no duplicates');
+
+        assert.equal((await projectOf(base, dir)).allowlistDrift, null, 'the button goes away');
+    });
+});
+
+test('fix: true on a complete allowlist changes nothing', async () => {
+    const { ws, dir } = workspaceWith(TASKS);
+    const settingsPath = settingsMissing(dir);
+    const original = fs.readFileSync(settingsPath, 'utf8');
+    await withServer(ws, async base => {
+        assert.equal((await post(base, '/api/projects/allowlist', { projectPath: dir, fix: true })).status, 200);
+        assert.equal(JSON.stringify(JSON.parse(fs.readFileSync(settingsPath, 'utf8'))),
+            JSON.stringify(JSON.parse(original)), 'idempotent');
+    });
+});
+
+test('without fix: true an existing allowlist is still refused', async () => {
+    // The blind create keeps its 409: completing a file the operator wrote,
+    // without their having asked for exactly that, is not Meridian's call.
+    const { ws, dir } = workspaceWith(TASKS);
+    const settingsPath = settingsMissing(dir, { dropDeny: 2 });
+    const original = fs.readFileSync(settingsPath, 'utf8');
+    await withServer(ws, async base => {
+        const res = await post(base, '/api/projects/allowlist', { projectPath: dir });
+        assert.equal(res.status, 409);
+        assert.equal(fs.readFileSync(settingsPath, 'utf8'), original);
+    });
+});
+
+test('fix: true still refuses a malformed settings.json', async () => {
+    const { ws, dir } = workspaceWith(TASKS);
+    fs.mkdirSync(path.join(dir, '.claude'), { recursive: true });
+    const settingsPath = path.join(dir, '.claude', 'settings.json');
+    fs.writeFileSync(settingsPath, '{ not json');
+    await withServer(ws, async base => {
+        const res = await post(base, '/api/projects/allowlist', { projectPath: dir, fix: true });
+        assert.equal(res.status, 409);
+        assert.equal(fs.readFileSync(settingsPath, 'utf8'), '{ not json');
+        assert.equal((await projectOf(base, dir)).allowlistDrift, null,
+            'nothing is missing from a file nobody can read');
+    });
+});

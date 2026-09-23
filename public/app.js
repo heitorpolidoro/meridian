@@ -394,13 +394,18 @@ function renderProjects(data) {
                 : `<button type="button" class="secondary-btn dispatch-row-btn" ${proj.dispatchBlockedReason ? 'disabled' : ''}
                         title="${escapeHtml(proj.dispatchBlockedReason || 'Arm automatic dispatch for this project')}"
                         onclick="confirmDispatchAll('${escapedPath}', '${proj.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'); event.stopPropagation();">Dispatch all</button>`;
-            // Offered only when the repository has no `.claude/settings.json`
-            // at all — never over a file the operator wrote themselves, even
-            // one whose `permissions.allow` is empty.
+            // One control, two jobs. Create is offered only when the
+            // repository has no allowlist at all — never over a file the
+            // operator wrote. Fix is offered when they HAVE one and it is
+            // missing something the template would write today; it only ever
+            // adds, and it names every entry before it does.
             const allowlistBtnHtml = proj.canCreateAllowlist
                 ? `<button type="button" class="secondary-btn allowlist-btn" title="Write a starting .claude/settings.json for this repository"
                         onclick="createAllowlist('${escapedPath}'); event.stopPropagation();">Create allowlist</button>`
-                : '';
+                : (proj.allowlistDrift
+                    ? `<button type="button" class="secondary-btn allowlist-btn" title="${allowlistFixTitle(proj.allowlistDrift)}"
+                        onclick="fixAllowlist('${escapedPath}'); event.stopPropagation();">Fix allowlist (${proj.allowlistDrift.total})</button>`
+                    : '');
 
             return `
             <div class="project-card" onclick="showProjectView('${proj.path.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}')">
@@ -1397,6 +1402,56 @@ btnEdit.addEventListener('click', () => {
 // false once the file exists). This writes the file and stops there — it
 // never stages or commits it, and never claims to the operator that it has
 // been committed; that step is theirs.
+// Both halves of the confirmation: the tooltip and the dialog name every
+// entry, because this edits a file in the operator's own repository.
+function allowlistEntryLines(drift) {
+    const lines = [];
+    for (const e of drift.missingAllow || []) lines.push(`  allow: ${e}`);
+    for (const e of drift.missingDeny || []) lines.push(`  deny:  ${e}`);
+    return lines;
+}
+
+function allowlistFixTitle(drift) {
+    return `Add ${drift.total} missing ${drift.total === 1 ? 'entry' : 'entries'} to .claude/settings.json`
+        .replace(/"/g, '&quot;');
+}
+
+// Adds what the template would write today and nothing else. Entries the
+// operator added are untouched, and a deny entry they removed comes back —
+// the deny list is a shared safety rail, not a per-project preference. The
+// dialog says so rather than leaving it to be discovered.
+async function fixAllowlist(projectPath) {
+    const proj = currentProjectsData.find(p => p.path === projectPath);
+    const drift = proj && proj.allowlistDrift;
+    if (!drift) {
+        showFlashMessage('Nothing is missing from this allowlist', 'success');
+        return;
+    }
+    const ok = confirm(
+        `Add ${drift.total} missing ${drift.total === 1 ? 'entry' : 'entries'} to ${projectPath}/.claude/settings.json?\n\n`
+        + allowlistEntryLines(drift).join('\n')
+        + '\n\nNothing is removed or reordered. A deny entry you deleted will come back.'
+    );
+    if (!ok) return;
+
+    try {
+        const res = await fetch('/api/projects/allowlist', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ projectPath, fix: true })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            showFlashMessage(data.error || 'Could not fix the allowlist', 'error');
+            return;
+        }
+        showFlashMessage(`Added ${drift.total} ${drift.total === 1 ? 'entry' : 'entries'} to .claude/settings.json`, 'success');
+    } catch (err) {
+        showFlashMessage('Could not reach the server', 'error');
+    }
+    // The SSE broadcast the write triggers re-renders the button away.
+}
+
 async function createAllowlist(projectPath) {
     try {
         const res = await fetch('/api/projects/allowlist', {
@@ -1479,12 +1534,19 @@ function updateDispatchHeaderControls(proj) {
         return;
     }
 
-    // Offered only when the repository has no `.claude/settings.json` at
-    // all — never over a file the operator wrote themselves, even one whose
-    // `permissions.allow` is empty or missing.
+    // Same control, same two jobs as the dashboard card — see there.
     if (allowlistBtn) {
-        allowlistBtn.classList.toggle('hidden', !proj.canCreateAllowlist);
-        allowlistBtn.onclick = () => createAllowlist(proj.path);
+        const drift = proj.canCreateAllowlist ? null : proj.allowlistDrift;
+        allowlistBtn.classList.toggle('hidden', !proj.canCreateAllowlist && !drift);
+        if (proj.canCreateAllowlist) {
+            allowlistBtn.textContent = 'Create allowlist';
+            allowlistBtn.title = 'Write a starting .claude/settings.json for this repository';
+            allowlistBtn.onclick = () => createAllowlist(proj.path);
+        } else if (drift) {
+            allowlistBtn.textContent = `Fix allowlist (${drift.total})`;
+            allowlistBtn.title = allowlistFixTitle(drift);
+            allowlistBtn.onclick = () => fixAllowlist(proj.path);
+        }
     }
 
     if (proj.autoDispatch) {
