@@ -35,6 +35,9 @@ let doneWindowDays = (() => {
     return v === '' ? null : (v === null ? 7 : Number(v));
 })();
 let cardSearchQuery = '';
+// The all-tickets view's project filter: a projectPath, or '' for all. Reset
+// on entry like cardSearchQuery, deliberately — see showGlobalTicketsView.
+let cardProjectFilter = '';
 let currentKanbanTasks = [];
 
 // Mirrors lib/board.js#isRecentlyCompleted. The frontend has no module
@@ -1042,6 +1045,11 @@ window.showGlobalTicketsView = function(pushState = true) {
         cardSearchQuery = '';
         const searchInput = document.getElementById('card-search-input');
         if (searchInput) searchInput.value = '';
+        // Arriving at the view shows every project. The done-window above it
+        // persists because it is a reading preference; a remembered project
+        // filter would instead have the operator return a day later to a
+        // board with most of its cards apparently gone.
+        cardProjectFilter = '';
     }
     currentProjectViewPath = '__GLOBAL__';
     activateView('global');
@@ -1941,6 +1949,63 @@ window.railKeydown = function(event, statusId) {
     expandRail(statusId);
 };
 
+// lib/project-filter.js is the source of truth — change both. The frontend
+// has no module system, so shared logic is written there, tested there, and
+// copied here.
+function projectOptions(tasks) {
+    const byPath = new Map();
+    for (const task of tasks || []) {
+        if (!task || !task.projectPath) continue;
+        const entry = byPath.get(task.projectPath);
+        if (entry) {
+            entry.count++;
+        } else {
+            byPath.set(task.projectPath, {
+                path: task.projectPath,
+                name: task.projectName || task.projectPath,
+                count: 1
+            });
+        }
+    }
+    return [...byPath.values()].sort((a, b) =>
+        a.name.localeCompare(b.name) || a.path.localeCompare(b.path));
+}
+
+function filterByProject(tasks, projectPath) {
+    if (!projectPath) return tasks || [];
+    return (tasks || []).filter(t => t && t.projectPath === projectPath);
+}
+
+// Fills the selector from the cards actually on the board and keeps the
+// current selection selected. A selection whose project has left the board
+// is kept as an option rather than dropped: silently reverting it to "All
+// projects" would show every card back without the operator asking.
+function renderProjectFilter(tasks) {
+    const control = document.getElementById('project-filter-control');
+    const select = document.getElementById('project-filter');
+    if (!control || !select) return;
+
+    if (currentProjectViewPath !== '__GLOBAL__') {
+        control.classList.add('hidden');
+        return;
+    }
+    control.classList.remove('hidden');
+
+    const options = projectOptions(tasks);
+    if (cardProjectFilter && !options.some(o => o.path === cardProjectFilter)) {
+        options.push({ path: cardProjectFilter, name: cardProjectFilter, count: 0 });
+    }
+    select.innerHTML = '<option value="">All projects</option>' + options.map(o =>
+        `<option value="${escapeHtml(o.path)}">${escapeHtml(o.name)} (${o.count})</option>`
+    ).join('');
+    select.value = cardProjectFilter;
+
+    select.onchange = (e) => {
+        cardProjectFilter = e.target.value;
+        renderKanbanBoard(currentKanbanTasks);
+    };
+}
+
 function renderKanbanBoard(tasks) {
     const board = document.getElementById('kanban-board');
     const isGlobal = currentProjectViewPath === '__GLOBAL__';
@@ -1991,10 +2056,16 @@ function renderKanbanBoard(tasks) {
         };
     }
 
+    // Project first, then search refines within it: the search count below
+    // then reads as "matches in what is shown", which is what the operator
+    // is looking at.
+    renderProjectFilter(tasks);
+    const scopedTasks = filterByProject(tasks, cardProjectFilter);
+
     const q = cardSearchQuery.trim().toLowerCase();
-    let displayTasks = tasks;
+    let displayTasks = scopedTasks;
     if (q) {
-        displayTasks = tasks.filter(t => {
+        displayTasks = scopedTasks.filter(t => {
             const titleMatch = Boolean(t.title && t.title.toLowerCase().includes(q));
             const idMatch = Boolean(t.id && t.id.toLowerCase().includes(q));
             const bodyMatch = Boolean(t.justification && t.justification.toLowerCase().includes(q));
@@ -2005,7 +2076,7 @@ function renderKanbanBoard(tasks) {
 
         if (searchCount) {
             searchCount.textContent = `${displayTasks.length}`;
-            searchCount.title = `${displayTasks.length} matching cards out of ${tasks.length}`;
+            searchCount.title = `${displayTasks.length} matching cards out of ${scopedTasks.length}`;
             searchCount.classList.remove('hidden');
         }
         if (searchClear) searchClear.classList.remove('hidden');
@@ -2017,7 +2088,7 @@ function renderKanbanBoard(tasks) {
     renderRunningTickets(displayTasks);
 
     // Rails are decided on the total per status — never on the done/nope windowed count.
-    const tasksForCollapse = q ? displayTasks : tasks;
+    const tasksForCollapse = q ? displayTasks : scopedTasks;
     const collapsed = collapsedColumns(
         KANBAN_STATUSES.map(s => ({ id: s.id, count: tasksForCollapse.filter(t => t.status === s.id).length })),
         expandedRails
