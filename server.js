@@ -450,7 +450,7 @@ async function getStatusData(options = {}) {
                 data.errors.push({ file: 'System', message: `Project not registered with Meridian: ${options.project}` });
             }
         } else {
-             data.errors.push({ file: '.meridian/projects.json', message: 'File not found. Please create it or let Odin initialize it.' });
+             data.errors.push({ file: '.meridian/projects.json', message: 'File not found. Register a project with `meridian add <path>` to create it.' });
         }
     } catch (err) {
         console.error('Error fetching status data:', err.message);
