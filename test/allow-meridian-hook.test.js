@@ -27,7 +27,7 @@ const read = (file_path, extra = {}) =>
     ask({ tool_name: 'Read', tool_input: { file_path }, ...extra });
 
 const allowsClaude = res => Boolean(res && res.hookSpecificOutput
-    && res.hookSpecificOutput.hookEventName === 'PermissionRequest'
+    && res.hookSpecificOutput.hookEventName === 'PreToolUse'
     && res.hookSpecificOutput.permissionDecision === 'allow');
 
 test('a plain curl to the Meridian server is approved, wrapped or not', () => {
@@ -103,4 +103,54 @@ test('an unrecognised tool is left to the normal permission flow', () => {
     assert.equal(ask({ tool_name: 'WebFetch', tool_input: { url: 'http://localhost:3333' } }), null);
     assert.equal(ask({ tool_name: 'Bash', tool_input: {} }), null);
     assert.equal(ask({}), null);
+});
+
+// --- the JSON the hook actually receives ---
+//
+// A command reaches the hook exactly as it was written in the JSON, so a
+// newline is the two characters \n and never a real one. Getting that wrong
+// is not academic: an earlier version joined every newline into a space,
+// which turned a two-command payload into one approved line.
+
+test('a backslash line continuation is joined, not treated as two commands', () => {
+    // Every documented write to the API is a multi-line curl.
+    assert.ok(allowsClaude(bash('curl -sS -X PUT "$BASE/api/projects/tasks/T-1" \\\n  -H "Content-Type: application/json" \\\n  -d @-')));
+});
+
+test('a bare newline is two commands and is refused', () => {
+    assert.equal(bash('curl -sS http://localhost:3333/api/status\nrm -rf ~'), null);
+    assert.equal(bash('curl -sS http://localhost:3333/api/status\ncat ~/.ssh/id_rsa'), null);
+});
+
+test('a discard redirect is allowed; any other redirect is not', () => {
+    assert.ok(allowsClaude(bash('curl -sS -f "$BASE/api/status" >/dev/null')));
+    assert.ok(allowsClaude(bash('curl -sS -f "$BASE/api/status" > /dev/null')));
+    assert.equal(bash('curl -sS "$BASE/api/status" > /tmp/stolen.json'), null);
+    assert.equal(bash('curl -sS "$BASE/api/status" >> /tmp/stolen.json'), null);
+});
+
+test('the hook echoes back the event it was called for', () => {
+    // It is registered as PreToolUse because PermissionRequest never fires
+    // under `claude -p` — measured, not assumed. Echoing the name keeps the
+    // script correct wherever it is registered.
+    const res = ask({
+        hook_event_name: 'PermissionRequest', tool_name: 'Bash',
+        tool_input: { command: 'curl -sS http://localhost:3333/api/status' }
+    });
+    assert.equal(res.hookSpecificOutput.hookEventName, 'PermissionRequest');
+    assert.equal(res.hookSpecificOutput.permissionDecision, 'allow');
+});
+
+test('a leading BASE= assignment is forgiven, and nothing else is', () => {
+    // Every documented block opens with the assignment, because blocks share
+    // no shell state. An assignment composes nothing; a second command does.
+    const withBase = cmd => 'BASE="${MERIDIAN_URL:-http://localhost:3333}"\\n' + cmd;
+    assert.ok(allowsClaude(bash(withBase('curl -sS -o /dev/null -w "%{http_code}" "$BASE/api/status"'))));
+
+    assert.equal(bash(withBase('curl -sS "$BASE/api/status"\\nrm -rf ~')), null,
+        'only ONE line is forgiven');
+    assert.equal(bash('BASE="$(cat /etc/passwd)"\\ncurl -sS http://localhost:3333/api/status'), null,
+        'an assignment that substitutes is not a plain assignment');
+    assert.equal(bash('rm -rf /tmp/x\\ncurl -sS http://localhost:3333/api/status'), null,
+        'a first line that is not an assignment is a command');
 });

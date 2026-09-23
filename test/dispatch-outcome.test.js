@@ -168,3 +168,59 @@ test('an unrecognised failure is surfaced verbatim, trimmed to the end', () => {
     assert.match(out.reason, /line 199/, 'keeps the end, where the error is');
     assert.ok(out.reason.length < 1000, 'but does not dump the whole run');
 });
+
+// --- clearOutcomeFor: what a starting run erases, and what it must not ---
+
+const { clearOutcomeFor } = require('../lib/dispatch-outcome');
+
+test('a starting run erases the last outcome for that same task', () => {
+    // The symptom: a card showed the previous run's failure while a new run
+    // for that same task was visibly in flight.
+    const entry = { taskId: 'CL-31', ok: false, reason: 'a command is outside the allowlist' };
+    assert.equal(clearOutcomeFor(entry, 'CL-31'), null);
+});
+
+test("it leaves another task's outcome alone", () => {
+    const entry = { taskId: 'CL-9', ok: false, reason: 'blocked' };
+    assert.deepEqual(clearOutcomeFor(entry, 'CL-31'), entry);
+});
+
+test('refusals for other tasks survive the task they belong to being kept', () => {
+    // One pass refuses several candidates before picking one. Those refusals
+    // are the only reason the OTHER cards can show, and are still true.
+    const entry = {
+        taskId: 'CL-31', ok: false, reason: 'gone',
+        refusals: [{ taskId: 'CL-9', reason: 'is blocked' }, { taskId: 'CL-12', reason: 'is running' }]
+    };
+    assert.deepEqual(clearOutcomeFor(entry, 'CL-31'), {
+        refusals: [{ taskId: 'CL-9', reason: 'is blocked' }, { taskId: 'CL-12', reason: 'is running' }]
+    });
+});
+
+test("the starting task's own refusal is dropped from the list too", () => {
+    const entry = {
+        taskId: 'CL-9', ok: false, reason: 'is blocked',
+        refusals: [{ taskId: 'CL-9', reason: 'is blocked' }, { taskId: 'CL-31', reason: 'was refused' }]
+    };
+    assert.deepEqual(clearOutcomeFor(entry, 'CL-31'), {
+        taskId: 'CL-9', ok: false, reason: 'is blocked',
+        refusals: [{ taskId: 'CL-9', reason: 'is blocked' }]
+    });
+});
+
+test('an entry that is entirely about the starting task leaves nothing', () => {
+    const entry = { taskId: 'CL-31', ok: false, reason: 'x', refusals: [{ taskId: 'CL-31', reason: 'y' }] };
+    assert.equal(clearOutcomeFor(entry, 'CL-31'), null);
+});
+
+test('nothing recorded, or no task named, is handled', () => {
+    assert.equal(clearOutcomeFor(null, 'CL-31'), null);
+    assert.equal(clearOutcomeFor(undefined, 'CL-31'), null);
+    const entry = { taskId: 'CL-31', ok: false, reason: 'x' };
+    assert.deepEqual(clearOutcomeFor(entry, null), entry);
+});
+
+test('a successful last run for the same task is erased too', () => {
+    // Not only failures: a stale "done" beside a live run is the same lie.
+    assert.equal(clearOutcomeFor({ taskId: 'CL-31', ok: true, reason: null }, 'CL-31'), null);
+});

@@ -1,8 +1,8 @@
 {
   "hooks": {
-    "PermissionRequest": [
+    "PreToolUse": [
       {
-        "matcher": "",
+        "matcher": "Bash|Read",
         "hooks": [
           {
             "type": "command",
@@ -10,9 +10,7 @@
             "timeout": 5
           }
         ]
-      }
-    ],
-    "PreToolUse": [
+      },
       {
         "matcher": "Task",
         "hooks": [

@@ -13,7 +13,7 @@ first line:**
 
 ```bash
 BASE="${MERIDIAN_URL:-http://localhost:3333}"
-curl -sS -f "$BASE/api/status" >/dev/null && echo up || echo down
+curl -sS -o /dev/null -w "%{http_code}\n" "$BASE/api/status"
 ```
 
 Shell state does not survive between Bash tool invocations — only the working
@@ -69,7 +69,7 @@ address**:
 
 ```bash
 BASE="${MERIDIAN_URL:-http://localhost:3333}"
-curl -sS -f "$BASE/api/status" >/dev/null && echo up || echo down
+curl -sS -o /dev/null -w "%{http_code}\n" "$BASE/api/status"
 ```
 
 **If it answers**, continue to step 3.
@@ -128,8 +128,7 @@ Then start it, from the project directory, and wait for it to answer:
 ```bash
 BASE="${MERIDIAN_URL:-http://localhost:3333}"
 node "$CHECKOUT/cli.js" start
-for i in $(seq 1 20); do curl -sS -f "$BASE/api/status" >/dev/null && break; sleep 0.5; done
-curl -sS -f "$BASE/api/status" >/dev/null && echo up || echo "still down"
+curl -sS -o /dev/null -w "%{http_code}\n" "$BASE/api/status"
 ```
 
 **If it still cannot start**, say so and fall back to reading

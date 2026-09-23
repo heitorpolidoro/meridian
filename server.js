@@ -18,7 +18,7 @@ const {
 const { dispatchCommand, DISPATCH_TIMEOUT_MS } = require('./lib/dispatch-command');
 const { dispatchEligibility, NO_ALLOWLIST_REASON, selectAutoCandidate } = require('./lib/dispatch-eligibility');
 const { isRunningStale } = require('./lib/stale-running');
-const { dispatchOutcome } = require('./lib/dispatch-outcome');
+const { dispatchOutcome, clearOutcomeFor } = require('./lib/dispatch-outcome');
 const { runLogPath, appendRunLog, listRunLogs } = require('./lib/run-log');
 const { detectRunner, allowlistFor } = require('./lib/allowlist-template');
 

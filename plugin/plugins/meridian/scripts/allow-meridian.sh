@@ -12,11 +12,20 @@
 # live in the plugin directory, outside the project, so reading them is
 # denied too — the skill could not read its own instructions.
 #
+# It runs as PreToolUse, NOT PermissionRequest. That was measured, not
+# assumed: an instrumented copy of this script recorded zero invocations
+# under `claude -p`. A headless run never REQUESTS permission — with no one
+# to ask, the CLI refuses straight from the allowlist — so a
+# PermissionRequest hook is dead exactly where dispatch lives. PreToolUse
+# fires on every tool call in both modes.
+#
 # Both harnesses are answered, because the reply formats differ and a hook
 # that speaks the wrong dialect is silently ignored:
-#   Claude Code : {"hookSpecificOutput":{"hookEventName":"PermissionRequest",
+#   Claude Code : {"hookSpecificOutput":{"hookEventName":"<the event>",
 #                  "permissionDecision":"allow"}}
 #   Antigravity : {"decision":"allow"}
+# The event name is echoed back from the input rather than hard-coded, so
+# the same script is correct wherever it is registered.
 # Anything not matched prints nothing and exits 0, which leaves the normal
 # permission flow exactly as it was. Saying "ask" is not this hook's job.
 #
@@ -34,7 +43,10 @@ approve() {
     if is_antigravity; then
         printf '{"decision":"allow","reason":"Meridian API or reference access"}\n'
     else
-        printf '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","permissionDecision":"allow"}}\n'
+        local event
+        event="$(field hook_event_name)"
+        [ -n "$event" ] || event="PreToolUse"
+        printf '{"hookSpecificOutput":{"hookEventName":"%s","permissionDecision":"allow","permissionDecisionReason":"Meridian API or reference access"}}\n' "$event"
     fi
     exit 0
 }
@@ -73,15 +85,59 @@ case "$TOOL" in
         CMD="$(field command)"
         [ -n "$CMD" ] || exit 0
 
-        # Any shell composition disqualifies the command outright — chaining,
-        # piping, substitution, redirection, newlines. What remains can only
-        # be the single call it appears to be.
-        case "$CMD" in
-            *'&&'*|*'||'*|*';'*|*'|'*|*'&'*|*'$('*|*'`'*|*'>'*|*'<'*|*$'\n'*) exit 0 ;;
+        # Two spellings are normalised away first, because neither composes
+        # anything and both appear in every documented example: a backslash
+        # line continuation, which is one command written over several lines,
+        # and a discard redirect, which writes nowhere. Everything left is
+        # judged as-is.
+        # The command arrives as it was written in the JSON, so a newline is
+        # the two characters \n, never a real one, and a backslash line
+        # continuation is \\ followed by \n. Continuations are joined, because
+        # one command written over several lines composes nothing. A bare \n
+        # separates two commands: joining those would turn
+        #   curl <api>
+        #   rm -rf ~
+        # into one approved line, which an earlier version of this did.
+        PROBE="$(printf '%s' "$CMD" | sed 's/\\\\\\n/ /g')"
+        case "$PROBE" in *'\n'*)
+            # One exception to "a newline means two commands": a leading
+            # variable assignment. Every documented block opens with
+            #   BASE="${MERIDIAN_URL:-http://localhost:3333}"
+            # because blocks share no shell state, and an assignment composes
+            # nothing. It is dropped only when it is the FIRST line, assigns a
+            # plain value, and carries no substitution of its own — and what
+            # follows still has to pass every check below on its own.
+            HEAD="${PROBE%%\\n*}"
+            REST="${PROBE#*\\n}"
+            case "$HEAD" in
+                [A-Za-z_]*=*)
+                    case "$HEAD" in
+                        *'$('*|*'`'*|*'&'*|*';'*|*'|'*) exit 0 ;;
+                    esac
+                    PROBE="$REST"
+                    ;;
+                *) exit 0 ;;
+            esac
+            # Only one assignment line is forgiven; anything still multi-line
+            # is two commands.
+            case "$PROBE" in *'\n'*) exit 0 ;; esac
+            ;;
+        esac
+
+        # A discard redirect writes nowhere and appears in every documented
+        # example; it is removed before the composition check below so that
+        # check can stay absolute about every other redirect.
+        PROBE="$(printf '%s' "$PROBE" | sed 's|> *\/dev\/null||g')"
+
+        # Any real shell composition disqualifies the command outright —
+        # chaining, piping, substitution, any other redirection. What remains
+        # can only be the single call it appears to be.
+        case "$PROBE" in
+            *'&&'*|*'||'*|*';'*|*'|'*|*'&'*|*'$('*|*'`'*|*'>'*|*'<'*) exit 0 ;;
         esac
 
         # The command itself, after the RTK wrapper the machine may prepend.
-        BARE="${CMD#rtk }"
+        BARE="${PROBE#rtk }"
         case "$BARE" in curl\ *) ;; *) exit 0 ;; esac
 
         # And it must address the Meridian server. MERIDIAN_URL is honoured so
