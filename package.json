@@ -4,6 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks || true",
     "test": "node --test test/*.test.js",
     "plugin:reload": "claude plugin update meridian@meridian && agy plugin install plugin/plugins/meridian && node scripts/render-agy-hooks.js && node scripts/prune-plugin-cache.js"
   },

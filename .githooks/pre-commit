@@ -1,0 +1,79 @@
+#!/bin/bash
+# Refuses a commit that changes the plugin without raising its version.
+#
+# `claude plugin update` compares the version the manifest declares, not file
+# content. A plugin edit committed without a bump reports success, copies
+# nothing, and never reaches the copy the agent executes — silently, and it
+# accumulates: twelve days of edits once sat unshipped this way. AGENTS.md
+# states the rule; this is what makes it hold.
+#
+# An amend has to be recognised, or every reword of an already-bumped commit
+# would demand a second bump. git tells prepare-commit-msg about an amend but
+# not pre-commit — and prepare-commit-msg is worse here on two counts: it is
+# told nothing when the message comes from `-m`, and `--no-verify` does not
+# bypass it, leaving a wrong refusal with no way out. So this runs as
+# pre-commit and asks the parent process, which is the `git commit` that
+# spawned it, whether it was given --amend. The author date is NOT the signal
+# to use: an amend reuses it, but so does any commit made within a second of
+# the last one, and the test suite collides on that every run.
+#
+# A hook is a guard, not a gate — `--no-verify` walks past it, and a fresh
+# clone has no hooks until `npm install` points core.hooksPath here. It
+# catches the honest mistake, which is the whole failure mode.
+
+PLUGIN_DIR='plugin/plugins/meridian'
+MANIFEST="$PLUGIN_DIR/.claude-plugin/plugin.json"
+
+# A merge composes commits that were each checked on their way in.
+git rev-parse --verify --quiet MERGE_HEAD >/dev/null && exit 0
+
+# Nothing from the plugin in this commit: the rule does not apply.
+git diff --cached --name-only --diff-filter=ACMR -- "$PLUGIN_DIR" | grep -q . || exit 0
+
+# The commit being written replaces HEAD on an amend, so its parent is the
+# baseline; otherwise HEAD is. `git commit --amend` keeps the original author
+# date and exports it here, so an author date equal to HEAD's own means this
+# is an amend. Two commits a second apart could collide, in which case the
+# hook checks one commit further back and lets an unbumped change through —
+# a miss, not a wrong refusal, which is the right way round for a guard.
+# Unreadable parent (no ps, an unusual harness) reads as "not an amend": the
+# strict answer, and `--no-verify` is there for the rare wrong refusal.
+BASE="HEAD"
+case " $(ps -o args= -p $PPID 2>/dev/null | head -1) " in
+    *' --amend '*|*' --amend') BASE="HEAD^" ;;
+esac
+git rev-parse --verify --quiet "$BASE" >/dev/null || exit 0   # root commit
+
+version_at() {  # $1 = a git revision, or ":" for the staged index
+    git show "$1:$MANIFEST" 2>/dev/null \
+        | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' \
+        | head -1 | sed 's/.*"\([^"]*\)"$/\1/'
+}
+
+STAGED="$(version_at '')"
+BASELINE="$(version_at "$BASE")"
+
+# No readable version on either side (a manifest being created or removed) is
+# not a drift this hook can reason about. Let it through rather than guess.
+[ -n "$STAGED" ] && [ -n "$BASELINE" ] || exit 0
+[ "$STAGED" != "$BASELINE" ] && exit 0
+
+cat >&2 <<MSG
+
+  Commit refused: the plugin changed but its version did not.
+
+    $MANIFEST still declares $BASELINE
+
+  \`claude plugin update\` compares that version, not file content. Left as
+  it is, this edit will never reach the installed plugin, and the CLI will
+  report it already up to date.
+
+  Raise it — patch for a fix, minor for a new skill, agent or schema change —
+  stage the manifest, and commit again. See "Repository Conventions" in
+  AGENTS.md.
+
+  Files from the plugin in this commit:
+$(git diff --cached --name-only --diff-filter=ACMR -- "$PLUGIN_DIR" | sed 's/^/    /')
+
+MSG
+exit 1
