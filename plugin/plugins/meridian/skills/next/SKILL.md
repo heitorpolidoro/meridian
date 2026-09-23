@@ -27,8 +27,13 @@ trying these two paths in order and using the first that exists:
 Both are given because only one of them is directly observed: the base
 directory line appears on every invocation, while the expansion of
 `${CLAUDE_PLUGIN_ROOT}` inside skill prose is unverified either way. Test which
-one exists — `test -f <candidate>` — before reading it, and use that resolved
-absolute path everywhere this file asks for one.
+one exists by READING it — `Read` the first candidate, and if that read fails,
+read the second — then use the path that worked everywhere this file asks for
+one. Do not probe with a shell command. A headless dispatch runs under a
+permission allowlist that matches a command by its prefix, so `test -f`, and
+above all the loop an agent naturally writes to try both candidates at once, is
+refused before it runs; a failed `Read` is the same test and needs no
+permission. The plugin's permission hook allows reading these files.
 
 Never read a bare `references/<file>.md`. Relative to this skill's own folder
 that path does not exist, and the read fails.
@@ -157,7 +162,7 @@ Then suggest the next move rather than stopping flat:
   tasks. `pm` creates tasks and stops; it never runs them. If the operator asks
   you to dispatch it, put the **resolved absolute path** of `schema.md` in the
   prompt — resolve it with the two-path procedure of section 0 and confirm it
-  with `test -f` first. That path is the only one `pm` is given, and an agent
+  by reading that file first. That path is the only one `pm` is given, and an agent
   gets no base directory of its own to recover a bad one from.
 
 If the only tasks left are `blocked`, list them with their `justification` and

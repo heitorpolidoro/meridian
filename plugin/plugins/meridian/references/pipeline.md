@@ -125,13 +125,13 @@ alone — that directory is the skill's own folder, two levels below the plugin'
 `references/`, so the result would be `skills/<skill>/references/schema.md`,
 which does not exist.
 
-Verify the resolved path exists before it goes into a prompt:
+Verify the resolved path before it goes into a prompt by `Read`ing that file.
+Never probe with a shell command: under a dispatch allowlist `test -f` is
+refused before it runs, while reading these files is allowed by the plugin's
+permission hook, and a failed read answers the same question.
 
-```bash
-test -f "<resolved absolute path>" && echo ok || echo BAD
-```
-
-On `BAD`, do not dispatch — an agent handed a broken path cannot recover.
+If it cannot be read, do not dispatch — an agent handed a broken path cannot
+recover.
 
 **Every dispatch prompt opens with a marker line:**
 

@@ -28,8 +28,13 @@ trying these two paths in order and using the first that exists:
 Both are given because only one of them is directly observed: the base
 directory line appears on every invocation, while the expansion of
 `${CLAUDE_PLUGIN_ROOT}` inside skill prose is unverified either way. Test which
-one exists — `test -f <candidate>` — before reading it, and use that resolved
-absolute path everywhere this file asks for one.
+one exists by READING it — `Read` the first candidate, and if that read fails,
+read the second — then use the path that worked everywhere this file asks for
+one. Do not probe with a shell command. A headless dispatch runs under a
+permission allowlist that matches a command by its prefix, so `test -f`, and
+above all the loop an agent naturally writes to try both candidates at once, is
+refused before it runs; a failed `Read` is the same test and needs no
+permission. The plugin's permission hook allows reading these files.
 
 Never read a bare `references/<file>.md`. Relative to this skill's own folder
 that path does not exist, and the read fails.
@@ -236,14 +241,11 @@ put the **resolved absolute path** in every dispatch prompt — `meridian:pm`
 included. The base directory the harness names is this skill's own folder, two
 levels below the plugin's `references/`, so a path built from it directly lands
 on `skills/work/references/schema.md`, which does not exist. Confirm the path
-you are about to hand over first:
+you are about to hand over by `Read`ing that exact file first — not with a
+shell probe, which the allowlist refuses (see section 0).
 
-```bash
-test -f "<resolved absolute path>" && echo ok || echo BAD
-```
-
-If it prints `BAD`, do not dispatch. Resolve the other candidate from section 0
-and test again; if neither exists, say so and stop.
+If the read fails, do not dispatch. Resolve the other candidate from section 0,
+read that one, and if neither can be read, say so and stop.
 
 ## 10. Report
 
