@@ -2468,6 +2468,14 @@ body:not([data-view="dashboard"]) #error-container {
     border-radius: 4px;
     word-break: break-all;
 }
+/* Only visible once a run has finished: it gates the refresh that would
+   otherwise wipe the output box above it. */
+.tooling-done {
+    margin-top: 0.6rem;
+    display: flex;
+    justify-content: flex-end;
+}
+
 .tooling-output {
     margin: 0.7rem 0 0;
     padding: 0.6rem;

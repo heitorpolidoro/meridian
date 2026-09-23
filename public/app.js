@@ -1179,6 +1179,9 @@ function renderTooling(tools) {
             </div>
             ${t.action === 'login' ? '<p class="tooling-note">Running it opens your browser to sign in. Meridian never sees the credential — the CLI stores its own.</p>' : ''}
             <pre class="tooling-output hidden" id="tooling-out-${escapeHtml(t.cli)}"></pre>
+            <div class="tooling-done hidden" id="tooling-done-${escapeHtml(t.cli)}">
+                <button type="button" class="secondary-btn" data-done="${escapeHtml(t.cli)}">Done — refresh</button>
+            </div>
         </div>`;
     }).join('');
 }
@@ -1319,10 +1322,20 @@ document.addEventListener('click', async (event) => {
         return;
     }
 
+    // Reading the output is what the operator came for; this is them saying
+    // they are finished. loadTooling() re-renders the list from the state the
+    // command left behind, which also clears the output box.
+    const doneBtn = event.target.closest('[data-done]');
+    if (doneBtn) {
+        loadTooling();
+        return;
+    }
+
     const runBtn = event.target.closest('[data-run]');
     if (!runBtn) return;
     const cli = runBtn.dataset.run;
     const out = document.getElementById(`tooling-out-${cli}`);
+    const done = document.getElementById(`tooling-done-${cli}`);
     const isLogin = runBtn.dataset.action === 'login';
     runBtn.disabled = true;
     runBtn.classList.add('is-running');
@@ -1338,10 +1351,15 @@ document.addEventListener('click', async (event) => {
         if (out && !isLogin) out.textContent = data.output || data.error || '(no output)';
         if (out && isLogin && data.error) out.textContent += `\n${data.error}`;
         showFlashMessage(data.ok ? 'Done' : (data.error || 'Command failed'), data.ok ? 'success' : 'error');
-        // The state the screen shows was read before this ran, so re-read it.
-        loadTooling();
+        // The screen's state was read before this ran and is now stale — but
+        // re-reading it here would re-render the whole list and destroy the
+        // output box this run just filled, which is the one thing worth
+        // looking at (especially when it failed). So the refresh waits behind
+        // a button the operator presses when they are done reading.
+        if (done) done.classList.remove('hidden');
     } catch (err) {
         if (out) out.textContent = String(err);
+        if (done) done.classList.remove('hidden');
         showFlashMessage('Network error', 'error');
     } finally {
         runBtn.disabled = false;
