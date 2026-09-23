@@ -100,6 +100,35 @@ Data owned by *tracked* projects (not part of this repo, but read/written by it 
 
 
 
+# Repository Conventions
+
+## Bump the plugin version in the same commit that changes the plugin
+
+Any commit that touches `plugin/plugins/meridian/**` MUST also raise
+`version` in `plugin/plugins/meridian/.claude-plugin/plugin.json`.
+
+This is not bookkeeping. `claude plugin update` compares the declared
+version, not file content: when the version has not moved it reports the
+plugin already current and copies nothing, so the edit never reaches the
+installed copy the agent actually executes. `npm run plugin:reload` runs that
+same command and is equally inert. The settings screen compares content and
+will correctly report the drift, but the action it offers cannot clear it —
+the only way out is a version that moved.
+
+Left unbumped this fails silently and accumulates: twelve days of plugin
+edits once sat unshipped while the board read "Outdated" and every update
+reported success.
+
+- Patch (`0.2.0` → `0.2.1`) for a fix to an existing skill, agent, hook or
+  reference.
+- Minor (`0.2.0` → `0.3.0`) for a new skill or agent, or any change to the
+  task schema in `references/schema.md`.
+- After bumping, `npm run plugin:reload` actually installs it. Claude Code
+  applies a new hook only on restart, so a session open at that moment keeps
+  running the old one.
+
+Commits that leave the plugin directory untouched do not bump anything.
+
 <!-- MERIDIAN_INSTRUCTIONS_START -->
 # Meridian Instructions
 
