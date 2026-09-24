@@ -101,13 +101,15 @@ test('no projectPath given: never matches a session, so only the lock can save i
 test('a recorded session still in the live list is not stale, even when idle', () => {
     // The whole point. An operator's session between turns reads `idle`, and
     // the heuristic below would call this stale; the recorded id knows better.
-    const task = { id: 'T-1', running: true, running_session: 'sess-abc' };
+    const task = { id: 'T-1', running: true, running_session: 'sess-abc', running_agent: 'claude' };
     const sessions = [{ pid: 1, kind: 'interactive', cwd: PROJECT, status: 'idle', sessionId: 'sess-abc' }];
     assert.equal(isRunningStale(task, { lock: null, sessions, projectPath: PROJECT }), false);
 });
 
 test('a recorded session gone from the live list is stale', () => {
-    const task = { id: 'T-1', running: true, running_session: 'sess-abc' };
+    // The owner is part of what makes this answerable: see the harness tests
+    // at the end of this file.
+    const task = { id: 'T-1', running: true, running_session: 'sess-abc', running_agent: 'claude' };
     const sessions = [{ pid: 2, kind: 'interactive', cwd: PROJECT, status: 'busy', sessionId: 'sess-other' }];
     assert.equal(isRunningStale(task, { lock: null, sessions, projectPath: PROJECT }), true,
         'nothing left that could ever clear the flag');
@@ -116,25 +118,25 @@ test('a recorded session gone from the live list is stale', () => {
 test('a recorded session is matched by id alone, not by directory', () => {
     // A session id is unique; where it is running is irrelevant to whether it
     // exists. A worktree or a subdirectory must not read as a dead session.
-    const task = { id: 'T-1', running: true, running_session: 'sess-abc' };
+    const task = { id: 'T-1', running: true, running_session: 'sess-abc', running_agent: 'claude' };
     const sessions = [{ pid: 1, cwd: '/tmp/some-other-project', status: 'busy', sessionId: 'sess-abc' }];
     assert.equal(isRunningStale(task, { lock: null, sessions, projectPath: PROJECT }), false);
 });
 
 test('a recorded session with a failed probe (null) is never stale', () => {
     // A probe that cannot see a session is not evidence the session ended.
-    const task = { id: 'T-1', running: true, running_session: 'sess-abc' };
+    const task = { id: 'T-1', running: true, running_session: 'sess-abc', running_agent: 'claude' };
     assert.equal(isRunningStale(task, { lock: null, sessions: null, projectPath: PROJECT }), false);
     assert.equal(isRunningStale(task, { lock: null, sessions: undefined, projectPath: PROJECT }), false);
 });
 
 test('an empty live list is a real answer: the recorded session is gone', () => {
-    const task = { id: 'T-1', running: true, running_session: 'sess-abc' };
+    const task = { id: 'T-1', running: true, running_session: 'sess-abc', running_agent: 'claude' };
     assert.equal(isRunningStale(task, { lock: null, sessions: [], projectPath: PROJECT }), true);
 });
 
 test('the dispatch lock still outranks the recorded session', () => {
-    const task = { id: 'T-1', running: true, running_session: 'sess-gone' };
+    const task = { id: 'T-1', running: true, running_session: 'sess-gone', running_agent: 'claude' };
     const lock = { pid: 1234, taskId: 'T-1' };
     assert.equal(isRunningStale(task, { lock, sessions: [], projectPath: PROJECT }), false);
 });
@@ -145,4 +147,59 @@ test('an empty or non-string running_session falls back to the heuristic', () =>
         { lock: null, sessions: busy, projectPath: PROJECT }), false, 'heuristic: busy session blocks');
     assert.equal(isRunningStale({ id: 'T-1', running: true, running_session: 42 },
         { lock: null, sessions: [], projectPath: PROJECT }), true, 'heuristic: nothing live');
+});
+
+// --- other AI tools: a flag this cannot see is never called stale ---
+
+test('a flag owned by a harness with no session list is never stale', () => {
+    // `sessions` is `claude agents --json` and only ever that. An
+    // Antigravity conversation id cannot appear in it, and `agy` offers no
+    // list of its own, so checking one against the other answers "gone" for
+    // work that is running. A real task Antigravity was working carried the
+    // stale badge and its Clear button because of exactly this.
+    const task = { id: 'A-75', running: true, running_session: 'fe6cd5de', running_agent: 'agy' };
+    assert.equal(isRunningStale(task, { lock: null, sessions: [], projectPath: PROJECT }), false);
+    assert.equal(isRunningStale(task, {
+        lock: null, projectPath: PROJECT,
+        sessions: [{ pid: 1, cwd: PROJECT, status: 'busy', sessionId: 'something-else' }]
+    }), false, 'not even a busy Claude session in the same directory makes it judgeable');
+});
+
+test('an unknown harness name is treated the same as agy', () => {
+    // Whatever arrives here that is not `claude` is something this cannot
+    // enumerate. The safe answer is the same one.
+    const task = { id: 'A-1', running: true, running_session: 's', running_agent: 'some-future-cli' };
+    assert.equal(isRunningStale(task, { lock: null, sessions: [], projectPath: PROJECT }), false);
+});
+
+test('claude keeps the precise verdict', () => {
+    const live = [{ pid: 1, cwd: PROJECT, status: 'idle', sessionId: 'sess-abc' }];
+    assert.equal(isRunningStale(
+        { id: 'A-1', running: true, running_session: 'sess-abc', running_agent: 'claude' },
+        { lock: null, sessions: live, projectPath: PROJECT }), false);
+    assert.equal(isRunningStale(
+        { id: 'A-2', running: true, running_session: 'sess-gone', running_agent: 'claude' },
+        { lock: null, sessions: live, projectPath: PROJECT }), true);
+});
+
+test('a session id with no owner recorded is unverifiable, so not stale', () => {
+    // Written before running_agent existed: which list to look in is
+    // unknown, and unverifiable reads the same as unenumerable.
+    const task = { id: 'A-1', running: true, running_session: 'sess-gone' };
+    assert.equal(isRunningStale(task, { lock: null, sessions: [], projectPath: PROJECT }), false);
+});
+
+test('no session id at all still falls back to the heuristic', () => {
+    // An owner alone changes nothing: without an id there is nothing to look
+    // up, and the directory heuristic is all that is left.
+    const busy = [{ pid: 1, cwd: PROJECT, status: 'busy' }];
+    assert.equal(isRunningStale({ id: 'A-1', running: true, running_agent: 'claude' },
+        { lock: null, sessions: busy, projectPath: PROJECT }), false);
+    assert.equal(isRunningStale({ id: 'A-1', running: true, running_agent: 'claude' },
+        { lock: null, sessions: [], projectPath: PROJECT }), true);
+});
+
+test('the dispatch lock still outranks an unenumerable owner', () => {
+    const task = { id: 'A-1', running: true, running_session: 'x', running_agent: 'agy' };
+    assert.equal(isRunningStale(task, { lock: { pid: 1, taskId: 'A-1' }, sessions: [], projectPath: PROJECT }), false);
 });

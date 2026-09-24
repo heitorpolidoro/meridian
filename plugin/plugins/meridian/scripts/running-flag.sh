@@ -152,11 +152,21 @@ PYEOF
 # that reports no session id still sets the flag, and the board falls back to
 # its heuristic. Restricted to id-shaped characters so it cannot break out of
 # the JSON string it is spliced into.
+#
+# The harness is sent with it, and is not decoration. That list is Claude
+# Code's alone: an Antigravity conversation id can never appear in it, so
+# checking one against it answers "gone" for work that is very much alive —
+# which is exactly what happened to a task Antigravity was working. Naming
+# the owner is what lets the board decline to judge what it cannot see.
 put_running() { # $1 = task id, $2 = cwd as JSON string, $3 = true|false, $4 = session id (optional)
   local extra=""
   local sid
   sid=$(printf '%s' "$4" | tr -cd 'A-Za-z0-9._-')
-  [ -n "$sid" ] && extra=",\"running_session\":\"$sid\""
+  if [ -n "$sid" ]; then
+    local agent="claude"
+    is_antigravity && agent="agy"
+    extra=",\"running_session\":\"$sid\",\"running_agent\":\"$agent\""
+  fi
   curl -sS -m 2 -X PUT "$BASE/api/projects/tasks/$1" \
     -H 'Content-Type: application/json' \
     -d "{\"projectPath\":$2,\"running\":$3$extra}" >/dev/null 2>&1 || true

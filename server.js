@@ -145,6 +145,13 @@ function validateTaskFields(body) {
         && typeof body.running_session !== 'string') {
         return `Invalid running_session: expected a string, got ${typeof body.running_session}.`;
     }
+    // Which harness owns the flag. It decides whether staleness can be
+    // judged at all (see lib/stale-running.js), so a wrong type here would
+    // quietly turn a verifiable flag into an unverifiable one.
+    if (body.running_agent !== undefined && body.running_agent !== null
+        && typeof body.running_agent !== 'string') {
+        return `Invalid running_agent: expected a string, got ${typeof body.running_agent}.`;
+    }
     return null;
 }
 
@@ -1736,7 +1743,7 @@ app.post('/api/projects/tasks', (req, res) => {
 // REST API to update a task. Accepts the full task schema: status, title,
 // justification, priority, spec_path, spec_iterations, code_review_iterations,
 // qa_iterations, blockedBy, expected_results, last_review_findings, running,
-// running_session.
+// running_session, running_agent.
 // Timestamps (updated_at, moved_at, completed_at) are server-owned.
 app.put('/api/projects/tasks/:taskId', async (req, res) => {
     try {
@@ -1834,9 +1841,19 @@ app.put('/api/projects/tasks/:taskId', async (req, res) => {
         // every caller to send null keeps that impossible.
         if (task.running !== true) {
             delete task.running_session;
-        } else if (req.body.running_session !== undefined) {
-            if (req.body.running_session) task.running_session = req.body.running_session;
-            else delete task.running_session;
+            delete task.running_agent;
+        } else {
+            if (req.body.running_session !== undefined) {
+                if (req.body.running_session) task.running_session = req.body.running_session;
+                else delete task.running_session;
+            }
+            // Travels with the session id and dies with it: an owner left
+            // behind would name a harness for a session that is gone.
+            if (req.body.running_agent !== undefined) {
+                if (req.body.running_agent) task.running_agent = req.body.running_agent;
+                else delete task.running_agent;
+            }
+            if (!task.running_session) delete task.running_agent;
         }
 
         stampTaskUpdate(task, prevStatus);

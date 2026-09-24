@@ -210,3 +210,43 @@ test('a task naming a session is not stale while the probe cannot see the sessio
         assert.equal(res.status, 409);
     });
 });
+
+test('running_agent is stored with the session and dropped with it', async () => {
+    const { ws, dir } = workspaceWith(TASKS);
+    await withServer(ws, async (base) => {
+        const set = await put(base, dir, 'TST-2', {
+            running: true, running_session: 'conv-1', running_agent: 'agy'
+        });
+        const body = await set.json();
+        assert.equal(body.task.running_agent, 'agy');
+
+        // Owned by a harness the server cannot enumerate, so no verdict.
+        const proj = await statusFor(base, dir);
+        assert.equal(proj.tasks.find(t => t.id === 'TST-2').staleRunning, false);
+
+        const cleared = await put(base, dir, 'TST-2', { running: false });
+        const after = (await cleared.json()).task;
+        assert.equal(after.running_agent, undefined);
+        assert.equal(after.running_session, undefined);
+    });
+});
+
+test('an owner cannot outlive the session id it belongs to', async () => {
+    const { ws, dir } = workspaceWith(TASKS);
+    await withServer(ws, async (base) => {
+        await put(base, dir, 'TST-2', { running: true, running_session: 'conv-1', running_agent: 'agy' });
+        const res = await put(base, dir, 'TST-2', { running: true, running_session: '' });
+        const task = (await res.json()).task;
+        assert.equal(task.running_session, undefined);
+        assert.equal(task.running_agent, undefined, 'naming a harness for a session that is gone says nothing');
+    });
+});
+
+test('a non-string running_agent is refused', async () => {
+    const { ws, dir } = workspaceWith(TASKS);
+    await withServer(ws, async (base) => {
+        const res = await put(base, dir, 'TST-2', { running: true, running_agent: 7 });
+        assert.equal(res.status, 400);
+        assert.match((await res.json()).error, /running_agent/);
+    });
+});
