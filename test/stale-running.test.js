@@ -203,3 +203,56 @@ test('the dispatch lock still outranks an unenumerable owner', () => {
     const task = { id: 'A-1', running: true, running_session: 'x', running_agent: 'agy' };
     assert.equal(isRunningStale(task, { lock: { pid: 1, taskId: 'A-1' }, sessions: [], projectPath: PROJECT }), false);
 });
+
+// --- unverifiable: the honest middle ground for another AI tool ---
+
+const { unverifiableRunning, QUIET_MS } = require('../lib/stale-running');
+const AGO = ms => new Date(Date.now() - ms).toISOString();
+
+test('an agy flag quiet for over two hours is reported as unverifiable', () => {
+    const task = { id: 'A-75', running: true, running_agent: 'agy', updated_at: AGO(3 * 60 * 60 * 1000) };
+    const res = unverifiableRunning(task);
+    assert.equal(res.agent, 'agy');
+    assert.ok(res.quietFor >= QUIET_MS);
+});
+
+test('a fresh agy flag is left alone', () => {
+    // Silence is right for the first hours: the work is probably in flight.
+    const task = { id: 'A-75', running: true, running_agent: 'agy', updated_at: AGO(90 * 60 * 1000) };
+    assert.equal(unverifiableRunning(task), null);
+});
+
+test('any write resets the quiet clock', () => {
+    const task = { id: 'A-75', running: true, running_agent: 'agy', updated_at: AGO(30 * 1000) };
+    assert.equal(unverifiableRunning(task), null);
+});
+
+test('claude is never unverifiable — it gets a real verdict instead', () => {
+    const task = { id: 'A-1', running: true, running_agent: 'claude', updated_at: AGO(10 * 60 * 60 * 1000) };
+    assert.equal(unverifiableRunning(task), null);
+});
+
+test('a flag with no owner recorded is not reported either', () => {
+    // Which harness it belongs to is unknown, so naming one would be a guess.
+    assert.equal(unverifiableRunning({ id: 'A-1', running: true, updated_at: AGO(10 * 60 * 60 * 1000) }), null);
+});
+
+test('a task that is not running is never unverifiable', () => {
+    assert.equal(unverifiableRunning({ id: 'A-1', running: false, running_agent: 'agy', updated_at: AGO(99e6) }), null);
+});
+
+test('an unreadable timestamp yields nothing, not a made-up age', () => {
+    // A fabricated age would put a Clear button under live work.
+    for (const updated_at of [undefined, null, '', 'not a date']) {
+        assert.equal(unverifiableRunning({ id: 'A-1', running: true, running_agent: 'agy', updated_at }), null,
+            `updated_at ${JSON.stringify(updated_at)}`);
+    }
+});
+
+test('the threshold is exactly two hours', () => {
+    assert.equal(QUIET_MS, 2 * 60 * 60 * 1000);
+    const at = ms => unverifiableRunning(
+        { id: 'A-1', running: true, running_agent: 'agy', updated_at: AGO(ms) });
+    assert.equal(at(QUIET_MS - 1000), null);
+    assert.ok(at(QUIET_MS + 1000));
+});

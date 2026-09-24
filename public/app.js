@@ -1932,6 +1932,21 @@ function renderTaskCardHtml(task, allTasks) {
     // status, whether or not it also happens to be queued right now. Reuses
     // the same queue-badge surface the stuck-queue case above uses, rather
     // than a third kind of banner.
+    // The honest middle ground for a harness Meridian cannot enumerate. It
+    // does NOT say the work is dead — it says the flag has not moved for two
+    // hours and cannot be checked, and hands the call to the person who can
+    // look. Same surface as the stale badge, deliberately different wording.
+    if (!task.staleRunning && task.unverifiableRunning) {
+        const hours = Math.floor(task.unverifiableRunning.quietFor / 3600000);
+        const agent = task.unverifiableRunning.agent;
+        const label = `Marked as running by ${agent} ${hours}h ago — Meridian cannot check ${agent} sessions`;
+        queueBadgeHtml += `<span class="task-queue-badge task-queue-badge--refused" title="${escapeHtml(label + '. Clear it only if you know the session is gone; this blocks dispatch until then.')}">`
+            + `${escapeHtml(label)} `
+            + `<button type="button" class="task-refusal-clear" data-clear-stale="${escapeHtml(task.id)}" `
+            + `data-project="${escapeHtml(dispatchProjectPath || '')}" `
+            + `title="Clear it anyway" aria-label="Clear the running flag anyway">Clear anyway</button></span>`;
+    }
+
     if (task.staleRunning) {
         const label = 'Marked as running, but nothing is working it — this blocks dispatch';
         queueBadgeHtml += `<span class="task-queue-badge task-queue-badge--refused" title="${escapeHtml(label)}">`

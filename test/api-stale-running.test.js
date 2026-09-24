@@ -250,3 +250,43 @@ test('a non-string running_agent is refused', async () => {
         assert.match((await res.json()).error, /running_agent/);
     });
 });
+
+// --- the Clear button for a harness Meridian cannot check ---
+
+test('an agy flag quiet for hours is offered, and can be cleared', async () => {
+    const quiet = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+    const { ws, dir } = workspaceWith([
+        { id: 'TST-1', title: 'agy work', status: 'in_progress', running: true,
+          running_session: 'conv-1', running_agent: 'agy',
+          created_at: '2026-01-01T00:00:00Z', updated_at: quiet },
+        TASKS[1]
+    ]);
+    await withServer(ws, async (base) => {
+        const t1 = (await statusFor(base, dir)).tasks.find(t => t.id === 'TST-1');
+        assert.equal(t1.staleRunning, false, 'never claims the session is dead');
+        assert.ok(t1.unverifiableRunning, 'but does offer the choice');
+        assert.equal(t1.unverifiableRunning.agent, 'agy');
+
+        // The same button the stale case uses, through the same guard.
+        const res = await put(base, dir, 'TST-1', { running: false, clearStale: true });
+        assert.equal(res.status, 200);
+        assert.equal((await res.json()).task.running, false);
+    });
+});
+
+test('a fresh agy flag is neither offered nor clearable', async () => {
+    const { ws, dir } = workspaceWith([
+        { id: 'TST-1', title: 'agy work', status: 'in_progress', running: true,
+          running_session: 'conv-1', running_agent: 'agy',
+          created_at: '2026-01-01T00:00:00Z', updated_at: new Date().toISOString() },
+        TASKS[1]
+    ]);
+    await withServer(ws, async (base) => {
+        const t1 = (await statusFor(base, dir)).tasks.find(t => t.id === 'TST-1');
+        assert.equal(t1.unverifiableRunning, null);
+
+        // The guard refuses: work that recent is probably in flight.
+        const res = await put(base, dir, 'TST-1', { running: false, clearStale: true });
+        assert.equal(res.status, 409);
+    });
+});

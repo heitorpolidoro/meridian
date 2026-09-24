@@ -17,7 +17,7 @@ const {
 } = require('./lib/dispatch-lock');
 const { dispatchCommand, DISPATCH_TIMEOUT_MS } = require('./lib/dispatch-command');
 const { dispatchEligibility, NO_ALLOWLIST_REASON, selectAutoCandidate } = require('./lib/dispatch-eligibility');
-const { isRunningStale } = require('./lib/stale-running');
+const { isRunningStale, unverifiableRunning } = require('./lib/stale-running');
 const { dispatchOutcome, clearOutcomeFor } = require('./lib/dispatch-outcome');
 const { runLogPath, appendRunLog, listRunLogs } = require('./lib/run-log');
 const { detectRunner, allowlistFor, allowlistDrift } = require('./lib/allowlist-template');
@@ -384,6 +384,10 @@ async function getStatusData(options = {}) {
                 const projectLock = readDispatchLock(projPath);
                 for (const task of tasksData.tasks || []) {
                     task.staleRunning = isRunningStale(task, { lock: projectLock, sessions, projectPath: projPath });
+                    // Not a verdict: a flag owned by a harness with no
+                    // session list, quiet long enough that the operator
+                    // should be offered the choice Meridian cannot make.
+                    task.unverifiableRunning = unverifiableRunning(task);
                 }
 
                 const agentsMdPath = path.join(projPath, 'AGENTS.md');
@@ -1792,7 +1796,15 @@ app.put('/api/projects/tasks/:taskId', async (req, res) => {
             }
             const lock = readDispatchLock(projectPath);
             const sessions = await liveSessionsList();
-            if (!isRunningStale(task, { lock, sessions, projectPath })) {
+            // Two ways a flag may be cleared: proven dead, or owned by a
+            // harness this cannot check and quiet long enough that the
+            // operator was offered the call. Both are re-checked here rather
+            // than trusted from the render that drew the button — the click
+            // and that render can straddle a run starting, or a quiet
+            // conversation waking up.
+            const stale = isRunningStale(task, { lock, sessions, projectPath });
+            const unverifiable = unverifiableRunning(task);
+            if (!stale && !unverifiable) {
                 return res.status(409).json({
                     error: `${taskId} is no longer stale — a session is now working it`
                 });
