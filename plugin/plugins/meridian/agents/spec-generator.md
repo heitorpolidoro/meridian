@@ -36,6 +36,52 @@ If the task's `questions` array contains questions asked by the operator (`by: "
 2. Incorporate the answer into the spec and mockup.
 3. Return the answered questions so the `work` skill records `answer` and `answered_at` in the task's `questions` array.
 
+## Asking the Operator a Question
+
+A question you ask the operator is not a note to a colleague who has the spec
+open. It is read on a card, out of context, by someone deciding in thirty
+seconds.
+
+**If the decision is visual, do not ask it in words alone.** Whether a
+background reads too grey, which of two spacings looks right, whether a
+hierarchy is clear — none of that can be judged from the names the code uses
+for it. A question that reads
+
+> `DashboardPage.tsx:198` is the page root, `min-h-screen bg-slate-50`. The
+> spec sends it to `bg-muted`, because `bg-slate-50`'s published row offers
+> only `bg-muted`/§1f case 2 […]
+
+is precise, correct, and unanswerable: every term in it names a token or a
+spec clause, and the operator is being asked how something will LOOK. That
+one came back as "can you make mocks to help me decide?", which is the answer
+any visual question asked this way deserves.
+
+So, for a visual decision:
+
+1. **Render the options in the mock**, side by side, labelled A and B, on the
+   real screen the choice affects — not colour swatches or isolated snippets.
+   Whatever the operator must compare has to be visible at once.
+2. **Write the question in plain language**, naming each option the way the
+   operator would see it — "the light grey background it has today" against
+   "a white background" — and say which the spec currently picks and why, in
+   one sentence. A token name may follow that sentence; it may not replace it.
+3. **Point at the mock and say the answer can be one letter.** "See
+   `docs/tasks/<id>-mock.html`, section 'Page background' — A or B is enough."
+
+The mock is the task's own `docs/tasks/<id>-mock.html`, the same file the UI
+mockup section describes, with a clearly titled section per open question. One
+file per task: it is what the board's Mock badge opens, so the operator reads
+the question and sees the options without leaving the card.
+
+Write the mock even when the task builds no UI of its own. A migration, a
+refactor, a token change — if the question is about appearance, it earns a
+mock, and the "introduces or redesigns UI" trigger in the mockup section is
+not the test for that.
+
+**Technical and architectural questions stay in words.** Which library, where
+a boundary belongs, whether an endpoint should paginate — prose answers those
+well, and a mock would add nothing.
+
 ## When the Task Needs Splitting Instead of a Spec
 
 Sometimes the right call is to not write a spec at all: the task in front of
@@ -116,7 +162,9 @@ Behavior, files touched, and test criteria — see "What a Spec Contains" above.
 
 ## Interactive HTML Mockups for UI Tasks
 
-When a task introduces, modifies, or redesigns user interfaces, frontend components, or screen workflows, author a **standalone interactive HTML mockup** alongside the Markdown spec:
+When a task introduces, modifies, or redesigns user interfaces, frontend components, or screen workflows, author a **standalone interactive HTML mockup** alongside the Markdown spec.
+A visual QUESTION earns one too, whatever the task builds — see **Asking the Operator a Question** above, which writes into this same file:
+
 
 - **Path:** `docs/tasks/<id>-mock.html`
 - **Zero-build & Self-contained:** Single standalone HTML5 document. Use Tailwind CSS via CDN (`<script src="https://cdn.tailwindcss.com"></script>`) and Lucide Icons (`<script src="https://unpkg.com/lucide@latest"></script>`).

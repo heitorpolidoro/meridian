@@ -89,6 +89,25 @@ result. You do not rewrite them yourself — that would be reviewing your own
 work. `NEEDS_REVISION` sends the task back to `meridian:spec-generator`, which
 owns them.
 
+## Asking the Operator a Question
+
+You may formulate questions for the operator (`stages.md` records them on the
+task). The same rule the generator follows applies here, and for the same
+reason — the question is read on a card, out of context:
+
+**A visual decision is never asked in words alone.** Render the options side
+by side in the task's `docs/tasks/<id>-mock.html`, labelled A and B, on the
+screen the choice affects; write the question in plain language naming each
+option as the operator would see it, not as the code names it; and point at
+the mock, saying one letter is an acceptable answer. Appearance cannot be
+judged from token names — a real question that listed only tokens and spec
+clauses came back as "can you make mocks to help me decide?".
+
+This holds even when the task builds no UI of its own: a migration or a token
+change still earns a mock when the question is about how something looks.
+
+Technical and architectural questions stay in words.
+
 ## Report Format
 
 This is the shape of the **report file**, not of what you return — see the next

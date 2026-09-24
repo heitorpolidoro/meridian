@@ -49,6 +49,9 @@ Enter at step 1 from `backlog`, at step 2 from `spec_review`.
 3. **On `APPROVED`:** move the task to `spec_approval` and clear
    `last_review_findings` to `[]` in the same update. If either the generator or reviewer
    formulated questions for the operator, ensure they are recorded in the `questions` array.
+   A question about how something LOOKS should arrive with the options rendered
+   in the task's mock — both agents are instructed to do that, and a question
+   that names only tokens or spec clauses is one the operator cannot answer.
    The task now awaits human approval:
    - The operator opens the card in the centered modal on the Kanban board, reads the spec,
      answers any open questions, and clicks **Aprovar Spec** (moving it to `ready_todo`) or
